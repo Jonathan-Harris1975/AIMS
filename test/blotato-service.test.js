@@ -531,7 +531,7 @@ test("Blotato lane registry exposes the five weekday short formats", async () =>
   assert.equal(response.status, 200);
   assert.deepEqual(
     response.body.lanes.map((lane) => lane.slug),
-    ["news-insight", "model-verdict", "ai-at-work", "reality-check", "ai-playbook"]
+    ["news-insight", "model-verdict", "ai-at-work", "reality-check", "weekend-brief", "weekend-lesson", "weekend-debate", "weekend-spotlight", "ai-playbook"]
   );
   assert.equal(response.body.lanes[0].weekday, "Monday");
   assert.equal(response.body.lanes[4].weekday, "Friday");
