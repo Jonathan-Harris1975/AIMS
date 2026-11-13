@@ -267,6 +267,12 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}],
+    // These are generated on Friday but published in their own Saturday/Sunday
+    // morning/evening slots, with distinct durable IDs and paid-render dates.
+    ["blotato-saturday-am", "/blotato/weekend/saturday/am/prepare", {}],
+    ["blotato-saturday-pm", "/blotato/weekend/saturday/pm/prepare", {}],
+    ["blotato-sunday-am", "/blotato/weekend/sunday/am/prepare", {}],
+    ["blotato-sunday-pm", "/blotato/weekend/sunday/pm/prepare", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
@@ -356,7 +362,9 @@ function assertContentOperationWindows() {
   if (!thursdayPaths.includes("/zernio/daily/thursday")) throw new Error("thursday-am missing Zernio Thursday lane/podcast promo trigger");
 
   const fridayAmPaths = OPERATION_WINDOWS["friday-am"].map((task) => task[1]);
-  for (const required of ["/zernio/daily/saturday", "/zernio/daily/sunday", "/blotato/shorts/ai-playbook/schedule"]) {
+  for (const required of ["/zernio/daily/saturday", "/zernio/daily/sunday", "/blotato/shorts/ai-playbook/schedule",
+    "/blotato/weekend/saturday/am/prepare", "/blotato/weekend/saturday/pm/prepare",
+    "/blotato/weekend/sunday/am/prepare", "/blotato/weekend/sunday/pm/prepare"]) {
     if (!fridayAmPaths.includes(required)) throw new Error(`friday-am missing required scheduled-content task ${required}`);
   }
 
