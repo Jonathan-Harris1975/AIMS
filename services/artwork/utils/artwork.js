@@ -125,7 +125,9 @@ cinematic depth and modern magazine-quality framing.",
       "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI \
 connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
       `Creative direction: ${policyPrompt}`,
-      "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
+      "Stage a single concrete choice or consequence from the actual source, using recognisable everyday objects, human gesture and physical context instead of metaphorical circuits, generic lab racks, abstract AI boxes or screens.",
+    "Use a text-resistant scene: all monitors are turned away or absent, no whiteboards, no product labels or device stickers, and no writing surfaces facing the camera.",
+    "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
   }
 
@@ -238,7 +240,7 @@ function buildQaRepairPrompt(prompt, qa = {}) {
     prompt,
     "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
     `Previous defects: ${defects.join(" | ") || qa.summary || "image failed visual QA"}.`,
-    "Create a materially different composition that fixes every listed defect. Do not preserve the failed layout.",
+    "Create a materially different source-specific physical action with one decisive focal subject. Replace generic server rooms, monitors, whiteboards, labelled devices, tiny writing and abstract network metaphors with clean unmarked real-world objects and a believable human consequence. Do not preserve the failed layout.",
   ].join(" ");
 }
 
