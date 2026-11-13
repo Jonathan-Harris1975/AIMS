@@ -125,7 +125,9 @@ function upsertJob(type, sessionId, patch = {}) {
     updatedAt: timestamp,
     ...existing,
     ...patch,
-    error: sanitiseJobError(patch.error ?? existing?.error),
+    // Explicitly clearing an error on retry must not resurrect the last
+    // failed attempt's error through nullish coalescing.
+    error: sanitiseJobError(Object.hasOwn(patch, "error") ? patch.error : existing?.error),
   };
 
   jobs.set(key, next);
