@@ -1525,8 +1525,10 @@ them into one real physical action, decision or consequence.",
     ],
     friday: [
       "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show the AI system constraint described by the post. For context-window, token-budget or prompt-trimming stories, depict a person choosing which blank physical task objects to retain, not a PC-card or server-rack repair.",
-      "Use physical hardware only when the source is actually about hardware. For software-only subjects, show one clear, human-scale task selection or checking action with text-free objects; no fabricated machinery.",
+      "Show the AI system constraint described by the post. For context-window, token-budget or prompt-trimming stories, " +
+        "depict a person selecting blank physical task objects, not a PC-card or server-rack repair.",
+      "Use hardware only when the source really concerns hardware. For software-only subjects, show one clear " +
+        "human-scale selection or checking action using text-free objects; no fabricated machinery.",
       "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
       "If infrastructure appears, frame one specific human intervention and one specific device rather than a wall of server racks.",
       "Every concept must be represented by real objects, position, light and action. Never ask the image model to label components.",
@@ -1535,7 +1537,8 @@ them into one real physical action, decision or consequence.",
     saturday: [
       "SATURDAY — EDITORIAL DEBATE.",
       "Create one continuous magazine-opinion scene, never a split panel or before-and-after graphic.",
-      "Stage an observable ethical tension: one adult actively enables a real AI-assisted decision and another visibly pauses or blocks the SAME decision. Never depict both cooperating at the same keyboard.",
+      "Stage an ethical tension: one adult actively enables a real AI-assisted decision while another visibly " +
+        "pauses or blocks that SAME decision. Never depict both cooperating at the same keyboard.",
       "Keep screens out of frame or dark. Show the trade-off through body language, physical controls, distance, responsibility and the real-world stakes rather than labels, \
 charts, warning icons or holograms.",
       "Human emotion, responsibility and real-world stakes should dominate over abstract technology; avoid humanoid robots and cyborg imagery unless the post genuinely concerns embodied robotics.",
