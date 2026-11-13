@@ -64,7 +64,7 @@ test("Blotato charges the physical Friday render date and enforces six paid rese
   assert.equal(resolveBlotatoTargetDate("2026-11-14", friday), "2026-11-14");
   assert.equal(resolveBlotatoTargetDate("2026-11-15", friday), "2026-11-15");
   assert.throws(() => resolveBlotatoTargetDate("2026-11-16", friday), /next Saturday/);
-  assert.throws(() => resolveBlotatoTargetDate("2026-11-14", new Date("2026-11-14T10:00:00Z")), /Friday UK time/);
+  assert.throws(() => resolveBlotatoTargetDate("2026-11-15", new Date("2026-11-14T10:00:00Z")), /Friday UK time/);
   const initialFriday = process.env.BLOTATO_FRIDAY_PAID_RENDER_CAP;
   const initialDaily = process.env.BLOTATO_DAILY_PAID_RENDER_CAP;
   process.env.BLOTATO_FRIDAY_PAID_RENDER_CAP = "6";
