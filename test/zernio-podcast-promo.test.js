@@ -62,7 +62,43 @@ test("Thursday promotion retains the original brand voice and podcast-only audio
   assert.match(prompt.system, /not a podcast performance/i);
   assert.match(prompt.system, /Never synthesise or replace the show voice/i);
   assert.match(prompt.system, /Do not write voiceover/i);
-  assert.match(prompt.system, /Do not claim the episode is arriving tomorrow/i);
-  assert.match(prompt.user, /approved previous-episode transcript excerpt/i);
+  assert.match(prompt.system, /recommend it truthfully as available/i);
+  assert.match(prompt.user, /approved transcript excerpt/i);
   assert.match(prompt.user, /permissions failures/);
+});
+
+
+test("verified upcoming Friday metadata uses the previous week's transcript only for style", async () => {
+  const entries = {
+    "episode-41.json": JSON.stringify({
+      sessionId: "episode-41", title: "Previous Week: Permissions",
+      description: "An analysis of agent permissions.",
+      pubDate: "2026-07-24T13:00:00Z", productionComplete: true,
+      episodeNumber: 41, episodePageUrl: "https://example.com/episode-41",
+    }),
+    "episode-42.json": JSON.stringify({
+      sessionId: "episode-42", title: "Upcoming Friday: Model Pricing",
+      description: "A specific look at inference pricing and deployment costs.",
+      createdAt: "2026-07-29T12:00:00Z", updatedAt: "2026-07-29T14:00:00Z",
+      pubDate: "2026-07-31T13:00:00Z", episodeNumber: 42,
+      productionComplete: false,
+    }),
+    "episode-41.txt": "Turing's Torch examines scoped agent permissions and evidence. ".repeat(30),
+  };
+  const episode = await fetchPodcastPromoEpisode({
+    publishDate: "2026-07-30", feedUrl: "https://example.com/feed.xml",
+    listKeysImpl: async () => ["episode-41.json", "episode-42.json"],
+    getObjectAsTextImpl: async (_bucket, key) => entries[key],
+    fetchImpl: async () => { throw new Error("A verified preview should not need RSS."); },
+  });
+  assert.equal(episode.mode, "preview");
+  assert.equal(episode.title, "Upcoming Friday: Model Pricing");
+  assert.equal(episode.previousTranscriptTitle, "Previous Week: Permissions");
+  assert.match(episode.transcriptExcerpt, /agent permissions/);
+  const prompt = buildPodcastPromoPrompt({ publishDate: "2026-07-30", episode });
+  assert.match(prompt.user, /lands Friday/);
+  assert.match(prompt.system, /NOT facts for the upcoming episode/i);
+  assert.match(prompt.user, /Upcoming Friday: Model Pricing/);
+  assert.match(prompt.user, /Previous Week: Permissions/);
+  assert.match(prompt.user, /STYLE CONTEXT ONLY/i);
 });
