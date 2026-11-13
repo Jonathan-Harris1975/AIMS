@@ -147,7 +147,7 @@ export async function buildAndScheduleNewsletterPromo(options = {}) {
     sourceIntentHash: buildIntentHash({ audienceIntent: "ai-edge-subscription", angle: sourceDate }),
   });
   scheduledDateTime = slot.scheduledDateTime || scheduledDateTime;
-  if (slot.duplicatePrevented) return { ok: true, scheduled: false, duplicatePrevented: true, lane: "newsletter-promo", weekday, publishDate, sourceDate };
+  if (slot.duplicatePrevented) return { ok: true, scheduled: false, confirmed: slot.reason !== "same-slot-already-running", duplicatePrevented: true, lane: "newsletter-promo", weekday, publishDate, sourceDate };
   try {
     const context = await loadNewsletterPromoContext({ sourceDate, weekday });
     const post = buildNewsletterPromoPost({ context, weekday });
@@ -171,7 +171,7 @@ export async function buildAndScheduleNewsletterPromo(options = {}) {
       await releaseScheduleSlot(slot);
     }
     return { ok: true, lane: "newsletter-promo", weekday, publishDate, sourceDate, issueId: context.sessionId, post,
-      scheduled: scheduling.scheduled, dryRun: scheduling.dryRun, duplicatePrevented: Boolean(scheduling.duplicatePrevented),
+      scheduled: scheduling.scheduled, confirmed: !scheduling.dryRun && Boolean(scheduling.scheduled || scheduling.duplicatePrevented), dryRun: scheduling.dryRun, duplicatePrevented: Boolean(scheduling.duplicatePrevented),
       zernioResponse: scheduling.zernioResponse, warnings: scheduling.warnings || [] };
   } catch (error) {
     await releaseScheduleSlot(slot);
