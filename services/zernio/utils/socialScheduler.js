@@ -3211,7 +3211,11 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
       ok: true, lane: "podcast-thursday-promo", publishDate, scheduledDateTime,
       scheduled: scheduling.scheduled, dryRun: scheduling.dryRun,
       duplicatePrevented: Boolean(scheduling.duplicatePrevented), post,
-      episode: { title: episode.title, pubDate: episode.pubDate, source: episode.source, mode: episode.mode, transcriptReferenced: Boolean(episode.transcriptExcerpt), previousTranscriptTitle: episode.previousTranscriptTitle || null },
+      episode: {
+        title: episode.title, pubDate: episode.pubDate, source: episode.source, mode: episode.mode,
+        transcriptReferenced: Boolean(episode.transcriptExcerpt),
+        previousTranscriptTitle: episode.previousTranscriptTitle || null,
+      },
       audioGenerated: false,
       audioPolicy: "All Turing's Torch audio remains in the podcast production pipeline.",
       warnings: [podcastArtworkWarning, ...(scheduling.warnings || [])].filter(Boolean), zernioResponse: scheduling.zernioResponse, targeting: scheduling.targeting || null,
