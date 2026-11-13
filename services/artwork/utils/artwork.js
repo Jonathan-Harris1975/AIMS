@@ -125,9 +125,11 @@ cinematic depth and modern magazine-quality framing.",
       "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI \
 connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
       `Creative direction: ${policyPrompt}`,
-      "Stage a single concrete choice or consequence from the actual source, using recognisable everyday objects, human gesture and physical context instead of metaphorical circuits, generic lab racks, abstract AI boxes or screens.",
-    "Use a text-resistant scene: all monitors are turned away or absent, no whiteboards, no product labels or device stickers, and no writing surfaces facing the camera.",
-    "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
+      "Stage one source-specific physical choice or consequence with recognisable objects and human action. " +
+        "Avoid generic AI symbols, server racks, decorative circuitry and abstract screen metaphors.",
+      "Use a text-resistant scene: screens are turned away or absent. " +
+        "No whiteboards, product labels, device stickers or writing surfaces face the camera.",
+      "Inspect the whole composition: no accidental lettering, numbers, logos, pseudo-text or watermarks.",
     ].join(" ");
   }
 
@@ -234,13 +236,17 @@ function shouldUseShortPromptRetry(mode = "podcast") {
   return THRESHOLDS.podcastArtwork.shortPromptRetryEnabled;
 }
 
-function buildQaRepairPrompt(prompt, qa = {}) {
-  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])].filter(Boolean).slice(0, 8);
+export function buildQaRepairPrompt(prompt, qa = {}) {
+  // Model-aware artwork payloads truncate creative direction. Put the prior
+  // pixel-QA defects FIRST, otherwise the model sees only the failed concept.
+  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])]
+    .filter(Boolean).slice(0, 4).map((item) => String(item).slice(0, 185));
   return [
-    prompt,
-    "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
-    `Previous defects: ${defects.join(" | ") || qa.summary || "image failed visual QA"}.`,
-    "Create a materially different source-specific physical action with one decisive focal subject. Replace generic server rooms, monitors, whiteboards, labelled devices, tiny writing and abstract network metaphors with clean unmarked real-world objects and a believable human consequence. Do not preserve the failed layout.",
+    "PIXEL QA REPAIR. Stage an entirely different source-specific photograph.",
+    `Mandatory corrections: ${defects.join(" | ") || String(qa.summary || "Fix topic relevance").slice(0, 200)}.`,
+    "Avoid generic server rooms, monitors, screens, whiteboards and abstract network diagrams.",
+    "Choose one real-world action with a clear physical consequence, clean unmarked surfaces and no pseudo-text.",
+    `Editorial subject: ${String(prompt || "").slice(0, 1200)}.`,
   ].join(" ");
 }
 
