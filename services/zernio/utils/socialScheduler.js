@@ -3126,7 +3126,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const post = {
     title: generated.title,
     topic: generated.topic,
-    content: ensureHashtags(`${generated.content}\n\nListen on Spotify: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
+    content: ensureHashtags(`${generated.content}\n\n${episode.mode === "preview" ? "Follow on Spotify" : "Listen on Spotify"}: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
     imageUrl: options.imageUrl || "",
   };
   if (!normaliseSimple(generated.content).includes(normaliseSimple(episode.title))) {
@@ -3211,7 +3211,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
       ok: true, lane: "podcast-thursday-promo", publishDate, scheduledDateTime,
       scheduled: scheduling.scheduled, dryRun: scheduling.dryRun,
       duplicatePrevented: Boolean(scheduling.duplicatePrevented), post,
-      episode: { title: episode.title, pubDate: episode.pubDate, source: episode.source, transcriptReferenced: Boolean(episode.transcriptExcerpt) },
+      episode: { title: episode.title, pubDate: episode.pubDate, source: episode.source, mode: episode.mode, transcriptReferenced: Boolean(episode.transcriptExcerpt), previousTranscriptTitle: episode.previousTranscriptTitle || null },
       audioGenerated: false,
       audioPolicy: "All Turing's Torch audio remains in the podcast production pipeline.",
       warnings: [podcastArtworkWarning, ...(scheduling.warnings || [])].filter(Boolean), zernioResponse: scheduling.zernioResponse, targeting: scheduling.targeting || null,
