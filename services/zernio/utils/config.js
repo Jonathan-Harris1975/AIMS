@@ -207,6 +207,17 @@ export const MINI_SERIES_CONFIG = {
   },
 };
 
+// Dedicated source-grounded AI Edge promotions. The original daily Zernio lanes remain unchanged.
+export const NEWSLETTER_PROMO_CONFIG = {
+  key: "newsletter-promo",
+  signupUrl: trimString(process.env.ZERNIO_NEWSLETTER_SIGNUP_URL, "https://jonathan-harris.online/newsletter/"),
+  publishTimes: {
+    monday: normaliseTime(process.env.ZERNIO_NEWSLETTER_MONDAY_TIME, "16:30"),
+    wednesday: normaliseTime(process.env.ZERNIO_NEWSLETTER_WEDNESDAY_TIME, "16:30"),
+    friday: normaliseTime(process.env.ZERNIO_NEWSLETTER_FRIDAY_TIME, "15:30"),
+  },
+};
+
 export const PODCAST_PROMO_CONFIG = {
   key: "podcast-thursday-promo",
   label: "Turing's Torch Thursday Preview",
