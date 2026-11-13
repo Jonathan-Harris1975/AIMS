@@ -1525,8 +1525,7 @@ them into one real physical action, decision or consequence.",
     ],
     friday: [
       "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show one concrete operational cause-and-effect moment from the post: an operator physically isolating, swapping, reconnecting, inspecting or recovering one AI-system \
-component, sensor, edge device, accelerator or workstation path.",
+      "For software-only topics, show a person's tangible selection, checking or adjustment, not made-up server hardware or equipment.",
       "For software evaluation, monitoring, routing or reliability topics, use a real bench/workstation intervention with the display dark or turned away; show the consequence \
 through hardware state, physical routing, posture and action rather than charts.",
       "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
@@ -1557,7 +1556,7 @@ panels or labelled diagrams.",
     ],
   };
 
-  return [...(directions[laneKey] || directions.thursday), ...common].join(" ");
+  return [...common.slice(0, 2), ...(directions[laneKey] || directions.thursday), ...common.slice(2)].join(" ");
 }
 
 
