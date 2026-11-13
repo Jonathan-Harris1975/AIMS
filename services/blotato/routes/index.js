@@ -184,11 +184,14 @@ router.post(
   requestDedupe("blotato:autoshorts:schedule"),
   asyncRoute(async (req, res) => {
     const now = new Date();
-    const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(now).toLowerCase();
-    const laneByWeekday = { monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work", thursday: "reality-check", friday: "ai-playbook" };
+    const requestedPublicationDate = String(req.body?.scheduleDate || "").trim();
+    const publicationAnchor = requestedPublicationDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedPublicationDate)
+      ? new Date(`${requestedPublicationDate}T12:00:00Z`) : now;
+    const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(publicationAnchor).toLowerCase();
+    const laneByWeekday = { monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work", thursday: "reality-check", friday: "ai-playbook", saturday: "news-insight", sunday: "ai-at-work" };
     const laneSlug = laneByWeekday[weekday] || "news-insight";
     const style = getAutoShortStyleRotation(now);
-    const result = await triggerPublishNowJob(req, laneSlug, { creativeStyle: style.creativeStyle, publishMode: "autoshorts-scheduled", scheduleSlot: "am" });
+    const result = await triggerPublishNowJob(req, laneSlug, { creativeStyle: style.creativeStyle, publishMode: "autoshorts-scheduled", scheduleSlot: "am", scheduleDate: requestedPublicationDate });
     return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: "autoshorts-scheduled", style, sourceLane: laneSlug, message:
        "Blotato AM scheduled-post job accepted.", ...result });
   })
@@ -199,7 +202,7 @@ router.post(
   requestDedupe("blotato:lane:schedule"),
   asyncRoute(async (req, res) => {
     const lane = requireShortLaneConfig(req.params.lane);
-    const result = await triggerPublishNowJob(req, lane.slug, { publishMode: "evening-scheduled", scheduleSlot: "pm" });
+    const result = await triggerPublishNowJob(req, lane.slug, { publishMode: "evening-scheduled", scheduleSlot: "pm", scheduleDate: req.body?.scheduleDate });
     return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: `${lane.slug}-scheduled`, message: `Blotato ${lane.label} scheduled-post job accepted.`, ...result });
   })
 );
