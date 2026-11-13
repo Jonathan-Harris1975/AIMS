@@ -58,7 +58,19 @@ export function operationTaskSucceeded(result = {}) {
   const status = String(payload?.status || "").toLowerCase();
   if (["failed", "error", "partial", "pending", "queued", "accepted", "running"].includes(status)
       && result?.asyncStatus !== "completed") return false;
-  if (payload?.skipped !== true) return payload?.ok === true || payload?.ready === true;
+  if (payload?.skipped !== true) {
+    if (payload?.ok === true || payload?.ready === true) return true;
+    // The RSS rewrite child returns statistics rather than an 'ok' property.
+    // Require terminal polling PLUS explicit phase-3 publish-pass evidence.
+    // A 202 'running' acknowledgement alone must never pass this test.
+    if (result.name === "rss-rewrite" && result.asyncStatus === "completed") {
+      return payload?.phase3Quality?.status === "ALL_PASSED_AUTO_PUBLISH"
+        && Number(payload.phase3Quality.passed || 0) > 0
+        && Number(payload.phase3Quality.failed || 0) === 0
+        && Number(payload.rewrittenItems || 0) > 0;
+    }
+    return false;
+  }
 
   // A skip is successful only when backed by a confirmed existing artefact
   // or already-completed provider handoff. These are read-only confirmations;
