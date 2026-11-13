@@ -15,53 +15,48 @@ function firstUrl(...values) {
   return "";
 }
 
-function normaliseMetaEpisode(meta = {}) {
+function isProducedMeta(meta = {}) {
+  if (meta.episodePublicationReady === true || meta.productionComplete === true) return true;
+  return Boolean(firstUrl(meta.podcastUrl)) && Number(meta.fileSize || 0) > 0
+    && Number(meta.actualDurationSeconds || meta.duration || meta.plannedDurationSeconds || 0) > 0;
+}
+
+function episodeDate(meta = {}) {
+  return Date.parse(meta.pubDate || meta.productionCompletedAt || meta.episodePublicationReadyAt || meta.createdAt || "");
+}
+
+function normaliseProducedMeta(meta = {}) {
   return {
     title: clean(meta.title),
     description: clean(meta.episodeSummary || meta.summary || meta.shortSummary || meta.description),
-    link: "", // Upcoming/private metadata must never advertise a speculative episode route.
-    audioUrl: "",
+    link: firstUrl(meta.episodePageUrl, meta.podcastUrl),
+    audioUrl: firstUrl(meta.podcastUrl),
     imageUrl: firstUrl(meta.artUrl, meta.imageUrl),
-    pubDate: meta.pubDate || meta.createdAt || meta.updatedAt || "",
+    pubDate: meta.pubDate || meta.productionCompletedAt || meta.episodePublicationReadyAt || meta.createdAt || "",
     episodeNumber: clean(meta.episodeNumber),
+    sessionId: clean(meta.sessionId || meta.session?.sessionId),
   };
 }
 
-function candidateSort(a, b) {
-  const aEpisode = Number(a.episodeNumber || 0);
-  const bEpisode = Number(b.episodeNumber || 0);
-  if (aEpisode !== bEpisode) return bEpisode - aEpisode;
-  return (Date.parse(b.updatedAt || b.createdAt || b.pubDate || "") || 0) - (Date.parse(a.updatedAt || a.createdAt || a.pubDate || "") || 0);
-}
-
-function isProducedMeta(meta = {}) {
-  if (meta.episodePublicationReady === true || meta.productionComplete === true) return true;
-  const fileSize = Number(meta.fileSize || 0);
-  const duration = Number(meta.actualDurationSeconds || meta.duration || 0);
-  return firstUrl(meta.podcastUrl) !== "" && Number.isFinite(fileSize) && fileSize > 0 && Number.isFinite(duration) && duration > 0;
-}
-
-function chooseUpcomingMeta(candidates = []) {
-  const numbered = candidates.filter((meta) => Number.isFinite(Number(meta.episodeNumber)) && Number(meta.episodeNumber) > 0);
-  const publishedNumbers = numbered.filter(isProducedMeta).map((meta) => Number(meta.episodeNumber));
-  const latestPublished = publishedNumbers.length ? Math.max(...publishedNumbers) : 0;
-  if (latestPublished > 0) {
-    const exactNext = numbered.find((meta) => !isProducedMeta(meta) && Number(meta.episodeNumber) === latestPublished + 1);
-    if (exactNext) return exactNext;
-  }
-  return [...candidates].sort(candidateSort).find((meta) => !isProducedMeta(meta)) || [...candidates].sort(candidateSort)[0] || null;
+function transcriptSample(raw = "") {
+  const cleanText = clean(raw);
+  if (!cleanText) return "";
+  if (cleanText.length <= 2900) return cleanText;
+  const middle = Math.floor(cleanText.length / 2);
+  return [cleanText.slice(0, 1000), cleanText.slice(middle, middle + 1200), cleanText.slice(-600)].join(" … ");
 }
 
 export async function fetchLatestPodcastEpisode({
   feedUrl = process.env.ZERNIO_PODCAST_RSS_FEED_URL || process.env.PODCAST_RSS_FEED_URL || "https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml",
   fetchImpl = globalThis.fetch,
+  beforeDate = null,
 } = {}) {
   if (typeof fetchImpl !== "function") throw new Error("Podcast RSS fetch requires fetch.");
   const response = await fetchImpl(feedUrl, { headers: { accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1" } });
-  if (!response.ok) throw new Error(`Podcast RSS fetch failed with HTTP ${response.status}.`);
+  if (!response.ok) throw new Error("Podcast RSS fetch failed with HTTP " + response.status + ".");
   const feed = await parser.parseString(await response.text());
   const items = Array.isArray(feed.items) ? feed.items : [];
-  if (!items.length) throw new Error("Podcast RSS contains no episode items.");
+  const cutoff = beforeDate ? Date.parse(beforeDate + "T00:00:00Z") : Infinity;
   const episode = items.map((item) => ({
     title: clean(item.title),
     description: clean(item.contentSnippet || item.itunesSummary || item.contentEncoded || item.content || item.summary),
@@ -70,22 +65,27 @@ export async function fetchLatestPodcastEpisode({
     imageUrl: firstUrl(item.itunesImage, item.image),
     pubDate: item.isoDate || item.pubDate || "",
     episodeNumber: clean(item.episodeNumber),
-  })).sort((a,b)=>(Date.parse(b.pubDate||"")||0)-(Date.parse(a.pubDate||"")||0))[0];
-  if (!episode.title) throw new Error("Latest podcast RSS item has no title.");
-  return { ...episode, feedUrl };
+  })).filter((item) => item.title && Date.parse(item.pubDate) < cutoff)
+    .sort((a, b) => Date.parse(b.pubDate || "") - Date.parse(a.pubDate || ""))[0];
+  if (!episode) throw new Error("Podcast RSS has no published episode before the Thursday promotion.");
+  return { ...episode, feedUrl, source: "published-rss", transcriptExcerpt: "" };
 }
 
 /**
- * Thursday previews are allowed to read private/planned episode metadata, but
- * unpublished episodes must never be inserted into the public RSS merely so a
- * social post can preview them.
+ * Thursday must promote a genuinely published episode from last week (or the
+ * latest earlier episode), never label the last RSS item as tomorrow's release.
+ * The full approved transcript is stored in the transcript R2 bucket.
+ * A short excerpt guides brand voice and supported claims.
  */
 export async function fetchPodcastPromoEpisode({
   feedUrl,
+  publishDate,
   fetchImpl = globalThis.fetch,
   listKeysImpl,
   getObjectAsTextImpl,
 } = {}) {
+  const cutoff = publishDate ? Date.parse(publishDate + "T00:00:00Z") : Date.now();
+  if (!Number.isFinite(cutoff)) throw new Error("Thursday promo received an invalid publish date.");
   try {
     let listKeys = listKeysImpl;
     let getObjectAsText = getObjectAsTextImpl;
@@ -94,23 +94,34 @@ export async function fetchPodcastPromoEpisode({
       listKeys ||= r2.listKeys;
       getObjectAsText ||= r2.getObjectAsText;
     }
-
     const keys = (await listKeys("meta", ""))
       .filter((key) => typeof key === "string" && key.endsWith(".json") && !key.includes("/") && !key.endsWith("-tts.json") && !key.endsWith("-meta.json"));
-    const candidates = [];
+    const produced = [];
     for (const key of keys) {
       try {
         const meta = JSON.parse(await getObjectAsText("meta", key));
-        if (!clean(meta?.title)) continue;
-        candidates.push(meta);
-      } catch {}
+        const ts = episodeDate(meta);
+        if (clean(meta?.title) && isProducedMeta(meta) && Number.isFinite(ts) && ts < cutoff) produced.push(meta);
+      } catch {
+        // A damaged older metadata object cannot suppress a verified recent one.
+      }
     }
-    const selected = chooseUpcomingMeta(candidates);
-    if (selected) {
-      const episode = normaliseMetaEpisode(selected);
-      if (episode.title) return { ...episode, source: "private-podcast-meta", feedUrl: feedUrl || "" };
+    produced.sort((a, b) => episodeDate(b) - episodeDate(a));
+    for (const meta of produced.slice(0, 8)) {
+      const episode = normaliseProducedMeta(meta);
+      if (!episode.sessionId) continue;
+      try {
+        const transcript = await getObjectAsText("transcript", episode.sessionId + ".txt");
+        const transcriptExcerpt = transcriptSample(transcript);
+        if (transcriptExcerpt && episode.title && episode.description) {
+          return { ...episode, source: "published-transcript", transcriptExcerpt, feedUrl: feedUrl || "" };
+        }
+      } catch {
+        // Fall back to published RSS rather than claiming an unverified transcript.
+      }
     }
-  } catch {}
-
-  return fetchLatestPodcastEpisode({ feedUrl, fetchImpl });
+  } catch {
+    // Storage outage cannot turn an unproduced metadata draft into a preview.
+  }
+  return fetchLatestPodcastEpisode({ feedUrl, fetchImpl, beforeDate: publishDate });
 }
