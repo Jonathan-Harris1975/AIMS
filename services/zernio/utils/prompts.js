@@ -383,7 +383,8 @@ export function buildPodcastPromoPrompt({ publishDate, episode = {} } = {}) {
       "- mention Turing's Torch: AI Weekly naturally; finish with a restrained reason to listen",
       "- no hashtags, invented quotes, full transcript extracts or invented release claims",
       "- content must not exceed " + ZERNIO_POST_MAX_CHARACTERS + " characters",
-      "- imagePrompt: one recognisable technical editorial scene grounded in the actual published title and description: AI infrastructure, compute, cybersecurity, AI governance or developer tooling as supported by the episode",
+      "- imagePrompt: one recognisable technical editorial scene grounded in the actual published title and description: " +
+        "AI infrastructure, compute, cybersecurity, AI governance or developer tooling as supported by the episode",
       "- cinematic colour and contrast, with no typography, logos, words, numbers, people, humanoid robots, hands, lifestyle metaphors, roads or decorative glowing brains",
       "- JSON only",
     ].join("\n"),
