@@ -1994,9 +1994,10 @@ async function runPublishJobImpl({
       });
     if (!reusedVideo && !pendingRenderRecovery?.visualId && scheduleSlot && activeScheduleDate) {
       await refreshJobStoreFromState();
-      const paidRenderCap = renderChargeDate === activeScheduleDate
-        ? positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10)
-        : positiveIntEnv("BLOTATO_FRIDAY_PREBUILD_PAID_RENDER_CAP", 6, 6);
+      const fridayRender = new Date(`${renderChargeDate}T12:00:00Z`).getUTCDay() === 5;
+      const paidRenderCap = fridayRender
+        ? positiveIntEnv("BLOTATO_FRIDAY_PREBUILD_PAID_RENDER_CAP", 6, 6)
+        : positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
       const nextBudget = expectedCreditBudget(pack);
       const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 10, 10_000);
       if (nextBudget.expectedCredits > maxExpectedCredits) {
