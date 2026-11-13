@@ -1524,40 +1524,30 @@ them into one real physical action, decision or consequence.",
       "Keep AI as supporting machinery, not a floating abstract symbol.",
     ],
     friday: [
-      "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show one concrete operational cause-and-effect moment from the post: an operator physically isolating, swapping, reconnecting, inspecting or recovering one AI-system \
-component, sensor, edge device, accelerator or workstation path.",
-      "For software evaluation, monitoring, routing or reliability topics, use a real bench/workstation intervention with the display dark or turned away; show the consequence \
-through hardware state, physical routing, posture and action rather than charts.",
-      "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
-      "If infrastructure appears, frame one specific human intervention and one specific device rather than a wall of server racks.",
-      "Every concept must be represented by real objects, position, light and action. Never ask the image model to label components.",
-      "Avoid generic racks of servers, floating dashboards, coloured annotation lines, blank text boxes, pseudo-interface elements and decorative network cables.",
+      "FRIDAY — SOURCE-SPECIFIC SYSTEMS DECISION.",
+      "Show the precise constraint in the post. If it concerns prompt trimming, software evaluation or context windows, " +
+        "depict a person choosing blank physical task objects to retain or inspect, never a made-up server repair.",
+      "Include actual hardware only if the source genuinely concerns hardware.",
+      "Use one clean photographic scene showing a human-scale choice, physical consequence and clear focal subject.",
+      "Keep screens facing away, surfaces blank, no pseudo-text, signs, labels, charts or speculative circuitry.",
     ],
     saturday: [
       "SATURDAY — EDITORIAL DEBATE.",
-      "Create one continuous magazine-opinion scene, never a split panel or before-and-after graphic.",
-      "Put two credible human perspectives in the same physical environment around one real AI-enabled decision or consequence: one person ready to allow the system to act and \
-another visibly prepared to question, pause or intervene.",
-      "Keep screens out of frame or dark. Show the trade-off through body language, physical controls, distance, responsibility and the real-world stakes rather than labels, \
-charts, warning icons or holograms.",
-      "Human emotion, responsibility and real-world stakes should dominate over abstract technology; avoid humanoid robots and cyborg imagery unless the post genuinely concerns embodied robotics.",
-      "The composition should make viewers pause and form an opinion before reading the caption without visually declaring either side correct.",
-      "Avoid rage-bait, dystopian clichés and political campaign aesthetics.",
+      "Show one continuous real-world scene containing the actual trade-off, never split panels.",
+      "One adult visibly enables a source-supported AI-assisted decision while a second pauses the SAME decision.",
+      "Their opposing actions must be unambiguous; do not show both cooperating at one keyboard.",
+      "Communicate stakes through posture, objects and human responsibility, with no screens or writing.",
     ],
     sunday: [
-      "SUNDAY — PERSON SPOTLIGHT.",
-      "The named person's identity is editorial context only. Never render, approximate or imply their face or recognisable likeness from text alone.",
-      "Translate the contribution into one concrete, source-supported research mechanism, object, experiment, machine-learning process or real-world consequence rather than depicting the person.",
-      "Prefer a human-free close-up of the relevant technical mechanism. If a person is essential, show only anonymous hands or a fully rear-facing figure with the face completely hidden.",
-      "For this lane avoid all text-bearing surfaces: no books, papers, notebooks, theses, whiteboards, chalkboards, posters, signs, monitors, terminal screens, interface \
-panels or labelled diagrams.",
-      "Do not include dates, publication titles, thesis titles, names, equations, letters, numerals or pseudo-writing even when they appear in the post context.",
-      "Aim for the authority of a magazine profile story through the contribution itself, without a corporate headshot, fabricated portrait or decorative AI wallpaper.",
+      "SUNDAY — REAL CONTRIBUTION SPOTLIGHT.",
+      "Never fabricate the named person's face, likeness, identity or biographical appearance.",
+      "Show the concrete source-supported technical result or research contribution, not a generic black box.",
+      "Prefer a clean close-up of the actual physical mechanism without people or text-bearing surfaces.",
+      "No papers, notebooks, whiteboards, monitor screens, pseudo-writing, names, equations or labels.",
     ],
   };
 
-  return [...(directions[laneKey] || directions.thursday), ...common].join(" ");
+  return [...common.slice(0, 2), ...(directions[laneKey] || directions.thursday), ...common.slice(2)].join(" ");
 }
 
 
