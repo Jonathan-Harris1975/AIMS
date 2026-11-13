@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { checkPodcastPollySpeech } from "./pollyPreflight.js";
 import { resolvePodcastDurationPolicy } from "../shared/utils/podcastDurationPolicy.js";
 
 function value(env, name) {
@@ -121,3 +122,24 @@ export function getPodcastReadiness({ env = process.env, checkCommand = commandA
 }
 
 export default getPodcastReadiness;
+
+ 
+// Runtime readiness requires one real, short Polly synthesis, with a bounded
+// cache, so a revoked IAM permission blocks the podcast before LLM spending.
+export async function getPodcastRuntimeReadiness({ env = process.env, checkCommand, probe } = {}) {
+  const report = getPodcastReadiness({ env, checkCommand });
+  if (!report.ready) return report;
+  const speech = await checkPodcastPollySpeech({ env, ...(probe ? { probe, cache: false } : {}) });
+  return {
+    ...report,
+    ready: speech.ok,
+    status: speech.ok ? "ready" : "blocked",
+    checks: [...report.checks, {
+      name: "provider:aws-polly-synthesize-speech",
+      ok: speech.ok,
+      detail: speech.detail,
+      code: speech.code,
+    }],
+    ...(speech.ok ? {} : { errorCode: speech.code }),
+  };
+}
