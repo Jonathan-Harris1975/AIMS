@@ -74,9 +74,20 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
   }
   const { droppedForDiversity, droppedRecentlyCovered } = selection;
   let { lead, stories } = selection;
-  if (lead && stories.length >= 2 && !sourceItems) {
-    const enriched = await enrichArticleEvidence([lead, ...stories]);
-    [lead, ...stories] = enriched;
+  if (lead && stories.length >= 2) {
+    // Friday's Saturday/Sunday builds receive an explicit sourceItems list.
+    // Skipping article evidence in that branch caused unsupported numbers,
+    // quotes and claims to survive composition and fail the editorial council.
+    // Enrich only items without already-verified evidence, keeping bounded
+    // fetches and the original immutable source IDs and links.
+    const selected = [lead, ...stories];
+    const pending = selected.map((source, index) => ({ source, index }))
+      .filter((item) => !item.source?.evidenceVerified);
+    if (pending.length) {
+      const enriched = await enrichArticleEvidence(pending.map((item) => item.source));
+      for (const [position, item] of pending.entries()) selected[item.index] = enriched[position];
+    }
+    [lead, ...stories] = selected;
   }
   info("newsletter.editorial_selection", { sessionId, profileId: profile.id,
     excludedPreviouslyPublished: droppedRecentlyCovered.length,
