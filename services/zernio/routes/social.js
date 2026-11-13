@@ -13,6 +13,7 @@ import { buildAndScheduleDailyLane, buildAndScheduleDailyLaneAccountVariants, bu
    buildAndSchedulePodcastThursdayPromo, buildAndScheduleWeeklyMiniSeries } from "../utils/socialScheduler.js";
 import { getAsyncServiceRouteJobFresh, shouldRunAsyncServiceRoute, startAsyncServiceRouteJob } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { fetchPublishedPostsHistory, getZernioConfigSummary, inspectZernioTargeting } from "../utils/zernioClient.js";
+import { buildAndScheduleNewsletterPromo } from "../utils/newsletterPromo.js";
 import { LANE_CONFIG, ZERNIO_PROFILE_NAME_GENERAL, ZERNIO_PROFILE_NAME_EBOOKS, getZernioRequiredPlatforms, getZernioAccountId, normaliseZernioAccountId, parsePlatforms } from "../utils/config.js";
 
 const router = express.Router();
@@ -66,6 +67,7 @@ router.get("/health", (_req, res) => {
     weeklyMiniSeriesRoute: "/zernio/mini-series/weekly",
     podcastThursdayPromoRoute: "/zernio/podcast/thursday-promo",
     publishedHistoryRoute: "/zernio/posts/history",
+    newsletterPromotionRoute: "/zernio/newsletter/promo",
     time: new Date().toISOString(),
   });
 });
@@ -285,6 +287,30 @@ router.post(
 
     const result = await buildAndScheduleWeeklyMiniSeries(parsed.data);
     return res.status(result.partialFailure ? 207 : 200).json(result);
+  })
+);
+
+// Kept out of weekday editorial operations: MAST triggers this lightweight lane
+// independently, and a failure must never delay the AI Edge email sender.
+router.post(
+  "/newsletter/promo",
+  requestDedupe("zernio:newsletter:promo"),
+  asyncRoute(async (req, res) => {
+    const parsed = validateBody(zernioDailyBodySchema, req.body);
+    if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
+    const weekday = String(parsed.data.weekday || "").toLowerCase();
+    if (!["monday", "wednesday", "friday"].includes(weekday)) {
+      return res.status(400).json({ ok: false, error: "weekday must be monday, wednesday or friday" });
+    }
+    if (shouldRunAsyncServiceRoute(req)) {
+      const job = await startAsyncServiceRouteJob({
+        service: "zernio", lane: "newsletter-promo", payload: parsed.data,
+        req, runner: buildAndScheduleNewsletterPromo,
+        metadata: { route: "/zernio/newsletter/promo" },
+      });
+      return res.status(202).json(job);
+    }
+    return res.json(await buildAndScheduleNewsletterPromo(parsed.data));
   })
 );
 
