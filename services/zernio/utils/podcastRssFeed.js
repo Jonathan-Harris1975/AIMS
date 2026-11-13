@@ -86,42 +86,93 @@ export async function fetchPodcastPromoEpisode({
 } = {}) {
   const cutoff = publishDate ? Date.parse(publishDate + "T00:00:00Z") : Date.now();
   if (!Number.isFinite(cutoff)) throw new Error("Thursday promo received an invalid publish date.");
+
+  let listKeys = listKeysImpl;
+  let getObjectAsText = getObjectAsTextImpl;
+  if (!listKeys || !getObjectAsText) {
+    const r2 = await import("../../shared/utils/r2-client.js");
+    listKeys ||= r2.listKeys;
+    getObjectAsText ||= r2.getObjectAsText;
+  }
+
+  const metadata = [];
   try {
-    let listKeys = listKeysImpl;
-    let getObjectAsText = getObjectAsTextImpl;
-    if (!listKeys || !getObjectAsText) {
-      const r2 = await import("../../shared/utils/r2-client.js");
-      listKeys ||= r2.listKeys;
-      getObjectAsText ||= r2.getObjectAsText;
-    }
     const keys = (await listKeys("meta", ""))
       .filter((key) => typeof key === "string" && key.endsWith(".json") && !key.includes("/") && !key.endsWith("-tts.json") && !key.endsWith("-meta.json"));
-    const produced = [];
     for (const key of keys) {
       try {
         const meta = JSON.parse(await getObjectAsText("meta", key));
-        const ts = episodeDate(meta);
-        if (clean(meta?.title) && isProducedMeta(meta) && Number.isFinite(ts) && ts < cutoff) produced.push(meta);
+        if (clean(meta?.title)) metadata.push(meta);
       } catch {
-        // A damaged older metadata object cannot suppress a verified recent one.
-      }
-    }
-    produced.sort((a, b) => episodeDate(b) - episodeDate(a));
-    for (const meta of produced.slice(0, 8)) {
-      const episode = normaliseProducedMeta(meta);
-      if (!episode.sessionId) continue;
-      try {
-        const transcript = await getObjectAsText("transcript", episode.sessionId + ".txt");
-        const transcriptExcerpt = transcriptSample(transcript);
-        if (transcriptExcerpt && episode.title && episode.description) {
-          return { ...episode, source: "published-transcript", transcriptExcerpt, feedUrl: feedUrl || "" };
-        }
-      } catch {
-        // Fall back to published RSS rather than claiming an unverified transcript.
+        // Skip corrupt or non-episode objects without fabricating evidence.
       }
     }
   } catch {
-    // Storage outage cannot turn an unproduced metadata draft into a preview.
+    // R2 unavailable: only published public RSS is a safe fall-back.
   }
-  return fetchLatestPodcastEpisode({ feedUrl, fetchImpl, beforeDate: publishDate });
+
+  const produced = metadata.filter((meta) => isProducedMeta(meta)
+    && Number.isFinite(episodeDate(meta)) && episodeDate(meta) < cutoff)
+    .sort((a, b) => episodeDate(b) - episodeDate(a));
+  const previous = produced[0];
+  const previousNumber = Number(previous?.episodeNumber || 0);
+  let transcriptExcerpt = "";
+  let previousTranscriptTitle = "";
+  if (previous?.sessionId || previous?.session?.sessionId) {
+    try {
+      const sid = clean(previous.sessionId || previous.session.sessionId);
+      transcriptExcerpt = transcriptSample(await getObjectAsText("transcript", sid + ".txt"));
+      previousTranscriptTitle = transcriptExcerpt ? clean(previous.title) : "";
+    } catch {
+      // Transcript is additional verified style context, never a prerequisite
+      // to publishing an otherwise verified episode recommendation.
+    }
+  }
+
+  // Preserve Thursday's Friday-preview purpose where a genuine upcoming
+  // episode has been drafted. Only the next numbered, recent, unpublished
+  // episode may be previewed, and its own metadata is the factual source.
+  // Prior episode transcript influences voice only, not the upcoming claims.
+  const planned = metadata.filter((meta) => {
+    if (isProducedMeta(meta) || !previousNumber || Number(meta.episodeNumber) !== previousNumber + 1) return false;
+    if (!clean(meta.title) || !clean(meta.episodeSummary || meta.summary || meta.shortSummary || meta.description)) return false;
+    const updated = Date.parse(meta.updatedAt || meta.createdAt || "");
+    if (!Number.isFinite(updated) || updated > cutoff + 86400000 || updated < cutoff - 14 * 86400000) return false;
+    const intended = Date.parse(meta.pubDate || "");
+    if (Number.isFinite(intended) && (intended < cutoff || intended > cutoff + 7 * 86400000)) return false;
+    return true;
+  }).sort((a, b) => Date.parse(b.updatedAt || b.createdAt) - Date.parse(a.updatedAt || a.createdAt));
+
+  if (planned.length) {
+    const meta = planned[0];
+    return {
+      title: clean(meta.title),
+      description: clean(meta.episodeSummary || meta.summary || meta.shortSummary || meta.description),
+      episodeNumber: clean(meta.episodeNumber),
+      pubDate: meta.pubDate || "",
+      link: "",
+      imageUrl: firstUrl(meta.artUrl, meta.imageUrl),
+      source: "verified-upcoming-metadata",
+      mode: "preview",
+      transcriptExcerpt,
+      previousTranscriptTitle,
+    };
+  }
+
+  // Do not turn a published RSS episode into a fictional new-Friday preview.
+  if (previous) {
+    const episode = normaliseProducedMeta(previous);
+    if (episode.title && episode.description) {
+      return {
+        ...episode,
+        source: transcriptExcerpt ? "published-transcript" : "published-metadata",
+        mode: "recap",
+        transcriptExcerpt,
+        previousTranscriptTitle,
+        feedUrl: feedUrl || "",
+      };
+    }
+  }
+  return { ...(await fetchLatestPodcastEpisode({ feedUrl, fetchImpl, beforeDate: publishDate })),
+    mode: "recap", previousTranscriptTitle: "" };
 }
