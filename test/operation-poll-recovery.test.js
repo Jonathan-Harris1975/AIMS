@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { operationWindowPollStatus, evaluateOperationWindowClaim, reusableOperationTaskResults,
+import { operationWindowPollStatus, evaluateOperationWindowClaim, operationTaskSucceeded, reusableOperationTaskResults,
   NEWSLETTER_RECOVERY_REVISION } from "../services/ops/operationWindowState.js";
 
 const nowMs = Date.parse("2026-10-30T11:58:00Z");
@@ -89,4 +89,40 @@ test("a settled failure advertises a deployment recovery only when the durable c
     recoveryRevision: NEWSLETTER_RECOVERY_REVISION }).recoveryAvailable, undefined);
   assert.equal(operationWindowPollStatus({ ...receipt, finishedAt: "2026-10-30T11:57:45Z" },
     { ...options, recoveryRevision: NEWSLETTER_RECOVERY_REVISION }).recoveryAvailable, undefined);
+});
+
+test("an incomplete or ambiguous skip cannot count as finished content", () => {
+  const confirmed = { name: "blog-social", ok: true,
+    result: { ok: true, skipped: true, existing: { sessionId: "previous-complete" } } };
+  const missingSource = { name: "blog-social", ok: true,
+    result: { ok: true, skipped: true, reason: "source_not_ready" } };
+  const skippedPublish = { name: "zernio-tuesday", ok: true,
+    result: { ok: true, skipped: true, reason: "still_owned_by_another_job" } };
+  const acceptedOnly = { name: "newsletter-send", ok: true,
+    result: { ok: true, status: "accepted" } };
+  const confirmedDelivery = { name: "newsletter-send", ok: true,
+    result: { ok: true, skipped: true, status: "already_dispatched" } };
+  const intentionalDisable = { name: "newsletter-generate", ok: true,
+    skipped: true, reason: "newsletter-disabled-by-configuration" };
+
+  assert.equal(operationTaskSucceeded(confirmed), true);
+  assert.equal(operationTaskSucceeded(missingSource), false);
+  assert.equal(operationTaskSucceeded(skippedPublish), false);
+  assert.equal(operationTaskSucceeded(acceptedOnly), false);
+  assert.equal(operationTaskSucceeded(confirmedDelivery), true);
+  assert.equal(operationTaskSucceeded(intentionalDisable), true);
+  assert.equal(operationTaskSucceeded({ name: "zernio-friday", ok: true,
+    result: { ok: true, status: "partial", partialFailure: true } }), false);
+  const prior = { results: [confirmed, missingSource, skippedPublish,
+    acceptedOnly, confirmedDelivery, intentionalDisable] };
+  assert.deepEqual(reusableOperationTaskResults(prior).map((entry) => entry.name),
+    ["blog-social", "newsletter-send", "newsletter-generate"]);
+});
+
+test("operation orchestration fails uncertain successful HTTP skips rather than caching them", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../services/ops/index.js", import.meta.url), "utf8");
+  assert.match(source, /reason: "content-task-completion-unverified", retryable: true/);
+  assert.match(source, /operationDependencyReady = \(dependency\) => operationTaskSucceeded\(dependency\)/);
+  assert.match(source, /if \(taskResult\.ok && !operationTaskSucceeded\(taskResult\)\)/);
 });
