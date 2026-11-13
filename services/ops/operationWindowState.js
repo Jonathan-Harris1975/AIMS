@@ -44,6 +44,10 @@ export function operationTaskSucceeded(result = {}) {
   // must not satisfy dependencies or be cached as a completed operation task.
   if (!result?.ok || result?.result?.ok === false || result?.result?.ready === false) return false;
   if (result.skipped) return result.reason === "newsletter-disabled-by-configuration";
+  // A partially published episode is deliberately NOT safe to replay. Keep
+  // its existing provider handoff, preserve the warning for reconciliation,
+  // and do not generate a duplicate podcast when the operation resumes.
+  if (result.nonRetryablePartialPublication === true && result.warning === true) return true;
 
   const payload = result?.asyncJob?.job?.result
     ?? result?.asyncJob?.result
