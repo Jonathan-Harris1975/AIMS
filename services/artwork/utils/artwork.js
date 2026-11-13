@@ -232,13 +232,20 @@ function shouldUseShortPromptRetry(mode = "podcast") {
   return THRESHOLDS.podcastArtwork.shortPromptRetryEnabled;
 }
 
-function buildQaRepairPrompt(prompt, qa = {}) {
-  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])].filter(Boolean).slice(0, 8);
+export function buildQaRepairPrompt(prompt, qa = {}) {
+  // The model-specific image request compresses creative direction to 1,800–
+  // 2,600 characters. The previous implementation put defects at the END
+  // of a long branded prompt, so image regeneration repeatedly saw the
+  // original rejected scene and never saw the actual corrective instructions.
+  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])]
+    .filter(Boolean).slice(0, 4).map((item) => String(item).slice(0, 190));
+  const sourceDirection = String(prompt || "").slice(0, 1100);
   return [
-    prompt,
-    "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
-    `Previous defects: ${defects.join(" | ") || qa.summary || "image failed visual QA"}.`,
-    "Create a materially different composition that fixes every listed defect. Do not preserve the failed layout.",
+    "PIXEL-LEVEL QA REPAIR. Change the scene, not just the colour or cropping.",
+    `Mandatory corrections: ${defects.join(" | ") || String(qa.summary || "Fix visual relevance and safety").slice(0, 250)}.`,
+    "Use one specific physical action or result directly grounded in the brief. Every surface must be completely blank: no letters, pseudo-text, screens, whiteboards, labels or signage.",
+    "Do not reproduce the last composition, abstract server room or decorative hardware.",
+    `Original evidence-grounded subject brief: ${sourceDirection}`,
   ].join(" ");
 }
 
