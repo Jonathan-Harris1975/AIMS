@@ -718,7 +718,7 @@ function duplicateSlotWarning(reason) {
   return `A Zernio post for this exact schedule slot was already ${reason === "same-slot-already-running" ? "being processed" : "processed"}, so no new post was created.`;
 }
 
-async function claimZernioSlot({ scope, scheduledDateTime, profileName, accountId, imageUrl, dryRun, apiKey, force, sourceIntentHash }) {
+export async function claimZernioSlot({ scope, scheduledDateTime, profileName, accountId, imageUrl, dryRun, apiKey, force, sourceIntentHash }) {
   const originalScheduledDateTime = String(scheduledDateTime || "").trim();
   if (isEffectiveDryRun({ dryRun, apiKey })) {
     return {
@@ -1345,7 +1345,7 @@ function miniSeriesPublishSlots(weekStartDate, count) {
 function normalisePodcastPromoOutput(raw, episode) {
   const parsed = parseJsonObject(raw, "Thursday podcast promotion");
   return {
-    title: compactText(parsed.title || episode.title || "Turing's Torch Friday preview").slice(0, 80),
+    title: compactText(parsed.title || episode.title || "Turing's Torch published episode").slice(0, 80),
     topic: compactText(parsed.topic || episode.title || "Turing's Torch").slice(0, 120),
     content: stripHashtags(parsed.content || ""),
     imagePrompt: compactText(parsed.imagePrompt || ""),
@@ -3110,7 +3110,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   if (slotClaim.duplicatePrevented) return slotDuplicatePostResult({ publishDate, scheduledDateTime, dryRun, profileName, reason: slotClaim.reason });
 
   try {
-  const episode = await fetchPodcastPromoEpisode({ feedUrl });
+  const episode = await fetchPodcastPromoEpisode({ feedUrl, publishDate });
 
   const generated = await requestStructuredZernioJson({
     routeName: "zernioPodcastPromo",
@@ -3126,9 +3126,14 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const post = {
     title: generated.title,
     topic: generated.topic,
-    content: ensureHashtags(`${generated.content}\n\nListen on Spotify: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
+    content: ensureHashtags(`${generated.content}\n\n${episode.mode === "preview" ? "Follow on Spotify" : "Listen on Spotify"}: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
     imageUrl: options.imageUrl || "",
   };
+  if (!normaliseSimple(generated.content).includes(normaliseSimple(episode.title))) {
+    const err = new Error("Podcast advert must name the actual published episode, not a speculative upcoming title.");
+    err.statusCode = 422;
+    throw err;
+  }
   let podcastArtworkWarning = "";
 
   const gate = runZernioSocialGate({ contentType: "zernio-podcast-promo", laneKey: "podcast-thursday-promo", post });
@@ -3205,7 +3210,12 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
     return {
       ok: true, lane: "podcast-thursday-promo", publishDate, scheduledDateTime,
       scheduled: scheduling.scheduled, dryRun: scheduling.dryRun,
-      duplicatePrevented: Boolean(scheduling.duplicatePrevented), post, episode,
+      duplicatePrevented: Boolean(scheduling.duplicatePrevented), post,
+      episode: {
+        title: episode.title, pubDate: episode.pubDate, source: episode.source, mode: episode.mode,
+        transcriptReferenced: Boolean(episode.transcriptExcerpt),
+        previousTranscriptTitle: episode.previousTranscriptTitle || null,
+      },
       audioGenerated: false,
       audioPolicy: "All Turing's Torch audio remains in the podcast production pipeline.",
       warnings: [podcastArtworkWarning, ...(scheduling.warnings || [])].filter(Boolean), zernioResponse: scheduling.zernioResponse, targeting: scheduling.targeting || null,

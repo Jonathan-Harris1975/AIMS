@@ -353,41 +353,46 @@ Read more: ${featuredBook.bookUrl || ""}
 
 
 export function buildPodcastPromoPrompt({ publishDate, episode = {} } = {}) {
+  const preview = episode.mode === "preview";
   return {
-    system: `${buildZernioPersona()}
-
-You are writing the Thursday preview for Turing's Torch: AI Weekly.
-This is a static social promotion post, not a second podcast performance.
-Do not write a voiceover, spoken script, narration, dialogue, or text-to-speech instructions.
-The podcast audio identity belongs exclusively to the podcast production pipeline. Zernio must never synthesise or replace the programme voice.
-Use only supplied episode metadata. Use British English. Be sharp, sceptical, useful and concise.
-No invented guests, claims, quotes, topics, release details or conclusions. No hype, fake urgency, emojis, markdown or hashtags.
-Do not say the episode is available now. It lands Friday.
-Return valid JSON only with exactly: title, topic, content, imagePrompt.`,
-    user: `Create the Thursday social preview for Friday's Turing's Torch: AI Weekly episode.
-
-Promotion date: ${publishDate}
-Episode title: ${episode.title || ""}
-Episode description: ${episode.description || ""}
-Episode number: ${episode.episodeNumber || ""}
-Episode page/link: ${episode.link || ""}
-Episode publication date from RSS: ${episode.pubDate || ""}
-
-Requirements:
-- content target: 100 to 160 words
-- content must never exceed ${ZERNIO_POST_MAX_CHARACTERS} characters including spaces
-- open with the strongest concrete tension, consequence or question supported by the episode description
-- mention Turing's Torch: AI Weekly naturally
-- make clear the episode lands Friday
-- include the episode title once
-- finish with a restrained reason to listen, not engagement bait
-- imagePrompt: describe one premium, unmistakably technology-focused editorial scene grounded in the supplied episode title and description. Use concrete AI infrastructure, \
-compute hardware, data-centre systems, cybersecurity equipment, model evaluation environments, developer tooling or another episode-specific technical setting. The image must \
-look like podcast/editorial technology artwork at first glance, not a generic life-choice metaphor. Use cinematic lighting, bold seasonal colour contrast, depth and negative \
-space. Do not design a magazine cover or title card. No people, humanoid robots, androids, cyborgs, hands or fingers. No visible words, letters, numbers, captions, logos, \
-labels, signage, UI, pseudo-text or typographic shapes. Never use countryside, rural landscapes, moorland, fields, forests, mountains, beaches, roads, paths, crossroads, \
-arrows, direction signs, signposts, doors or forks in a road as the main metaphor. Avoid generic glowing brains, circuit-head silhouettes, decorative networks and corporate stock imagery.
-- JSON only`,
+    system: [
+      buildZernioPersona(),
+      "Write the existing Thursday social advertisement for Turing's Torch: AI Weekly.",
+      "This is not a podcast performance. Do not write voiceover, spoken script, narration, dialogue or text-to-speech instructions.",
+      "The podcast audio identity belongs solely to the production pipeline. Never synthesise or replace the show voice.",
+      "The excerpt from LAST WEEK'S approved transcript provides voice and tone only, NOT facts for the upcoming episode.",
+      "Use ONLY the featured episode's own title and verified description for factual claims. Do not invent guests, quotes, conclusions or release details.",
+      preview
+        ? "The verified next episode has been planned, not released: introduce it as a preview for Friday. Never say it is available now."
+        : "Only a previously published episode is verified: recommend it truthfully as available, never pretend it arrives on Friday.",
+      "British English. Crisp, sceptical, useful, naturally dry Gen X voice. No hype, fake urgency, emojis, markdown or hashtags.",
+      "Return valid JSON only with exactly: title, topic, content, imagePrompt.",
+    ].join("\n"),
+    user: [
+      "Thursday promotion date: " + publishDate,
+      "Mode: " + (preview ? "verified Friday preview" : "published episode recommendation"),
+      "Featured episode title: " + (episode.title || ""),
+      "Verified episode description: " + (episode.description || ""),
+      "Episode number: " + (episode.episodeNumber || ""),
+      "Episode date if verified: " + (episode.pubDate || ""),
+      "Factual evidence source: " + (episode.source || ""),
+      "Previous published episode title (for voice only): " + (episode.previousTranscriptTitle || ""),
+      "Previous week's approved transcript excerpt, STYLE CONTEXT ONLY:",
+      episode.transcriptExcerpt || "No verified previous transcript is accessible. Use established brand voice without inventing transcript evidence.",
+      "Requirements:",
+      "- 90 to 145 words, concrete opening and one useful practical implication verified by the FEATURED episode's description",
+      "- accurately name the featured episode's title once, mention Turing's Torch: AI Weekly naturally",
+      preview
+        ? "- clearly state the featured upcoming episode lands Friday, without claiming it is already available"
+        : "- clearly describe the previously published episode as already available, without referring to a new release Friday",
+      "- last week's transcript is a style reference; DO NOT borrow its subject matter or imply it is part of the featured episode unless supported independently",
+      "- finish with a restrained reason to listen rather than engagement bait",
+      "- no hashtags, invented quotes or claims, or unattributed transcript extracts",
+      "- content must not exceed " + ZERNIO_POST_MAX_CHARACTERS + " characters",
+      "- imagePrompt: one recognisable technical editorial scene grounded only in the FEATURED episode's own verified title and description",
+      "- cinematic colour and contrast, no typography, logos, words, numbers, people, humanoid robots, hands, lifestyle metaphors, roads or decorative glowing brains",
+      "- JSON only",
+    ].join("\n"),
   };
 }
 
