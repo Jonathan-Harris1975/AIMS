@@ -128,7 +128,7 @@ test("approved image upload is retried without another paid generation and last-
   assert.match(source, /uploadBuffer\("blogImages", key, image\.buffer, image\.mimeType\)/);
   assert.match(source, /type: "curated_static_fallback"/);
   assert.match(source, /persist: true/);
-  assert.match(defaults, /^SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS=1$/m);
+  assert.match(defaults, /^SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS=2$/m);
   assert.match(defaults, /^ZERNIO_ARTWORK_UPLOAD_ATTEMPTS=3$/m);
 });
 
