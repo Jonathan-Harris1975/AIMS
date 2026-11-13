@@ -59,12 +59,10 @@ function newsletterPayload(newsletter) {
 }
 
 export function sourcePayload(lead, stories) {
-  return [lead, ...stories].filter(Boolean).map(({
-    title, summary, link, sourceFeed, publishedAt, evidenceVerified, evidence,
-  }) => ({
+  return [lead, ...stories].filter(Boolean).map(({ title, summary, link, sourceFeed, publishedAt, evidenceVerified, evidence }) => ({
     title, summary, link, sourceFeed, publishedAt,
-    // Council fact-checkers must see the same source-owned evidence as the
-    // composer. A teaser alone cannot corroborate sample sizes or quotations.
+    // RSS blurbs are not full articles. Fact-checking reviewers need the
+    // source-owned extract to verify precise figures, quotes and causal claims.
     evidenceVerified: evidenceVerified === true && Boolean(evidence),
     ...(evidenceVerified === true && evidence
       ? { originalArticleEvidence: String(evidence).slice(0, 3000) } : {}),

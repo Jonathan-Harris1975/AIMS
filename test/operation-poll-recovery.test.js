@@ -3,6 +3,19 @@ import assert from "node:assert/strict";
 import { operationWindowPollStatus, evaluateOperationWindowClaim, operationTaskSucceeded, reusableOperationTaskResults, sameDayBackstopAllowance,
   NEWSLETTER_RECOVERY_REVISION } from "../services/ops/operationWindowState.js";
 
+test("RSS rewrite publishes verified source material even when its result lacks an ok flag", () => {
+  const confirmed = { name: "rss-rewrite", ok: true, asyncJob: {
+    status: "completed", result: { totalItems: 1, rewrittenItems: 4,
+      phase3Quality: { status: "ALL_PASSED_AUTO_PUBLISH", failed: 0 } },
+  } };
+  assert.equal(operationTaskSucceeded(confirmed), true);
+  assert.equal(operationTaskSucceeded({ ...confirmed, asyncJob: { ...confirmed.asyncJob, status: "running" } }), false);
+  assert.equal(operationTaskSucceeded({ ...confirmed, asyncJob: { status: "completed",
+    result: { rewrittenItems: 4, phase3Quality: { status: "HAS_QUARANTINED_ITEMS", failed: 1 } } } }), false);
+  assert.equal(operationTaskSucceeded({ ...confirmed, asyncJob: { status: "completed",
+    result: { rewrittenItems: 0, phase3Quality: { status: "ALL_PASSED_AUTO_PUBLISH", failed: 0 } } } }), false);
+});
+
 const nowMs = Date.parse("2026-10-30T11:58:00Z");
 const staleAfterMs = 30 * 60_000;
 const options = { nowMs, staleAfterMs };
@@ -168,6 +181,18 @@ test("late recovery returns no allowance when London date parts are incomplete",
   } finally {
     Intl.DateTimeFormat = DateTimeFormat;
   }
+});
+
+test("RSS terminal phase-three evidence unblocks downstream content and pending acknowledgements do not", () => {
+  const finished = { name: "rss-rewrite", ok: true, asyncStatus: "completed",
+    result: { ok: true, status: "running" }, asyncJob: { job: { result: {
+      rewrittenItems: 4, phase3Quality: { status: "ALL_PASSED_AUTO_PUBLISH", passed: 1, failed: 0 },
+    } } } };
+  assert.equal(operationTaskSucceeded(finished), true);
+  assert.equal(operationTaskSucceeded({ ...finished, asyncStatus: "running" }), false);
+  assert.equal(operationTaskSucceeded({ ...finished, asyncJob: { job: { result: {
+    rewrittenItems: 4, phase3Quality: { status: "HAS_FAILURES", passed: 0, failed: 1 },
+  } } } }), false);
 });
 
 test("late content recovery slots each reserve exactly one bounded extra attempt", () => {

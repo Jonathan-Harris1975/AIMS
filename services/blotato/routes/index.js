@@ -23,7 +23,7 @@ import { buildOrCreateNewsInsightShort, buildOrCreateShortLane } from "../utils/
 import { listShortLaneConfigs, requireShortLaneConfig } from "../utils/shortLanes.js";
 import { getPublishNowJob, triggerPublishNowJob } from "../utils/autoPublishService.js";
 import { getAutoShortStyleConfigSummary, getAutoShortStyleRotation } from "../utils/autoShortStyles.js";
-import { weekendVideoPreparation } from "../utils/weekendSchedule.js";
+import { fridayWeekendBlotatoPlan } from "../utils/weekendSchedule.js";
 
 const router = express.Router();
 
@@ -195,27 +195,6 @@ router.post(
   })
 );
 
-// Friday creates the actual weekend videos while Blotato queues delivery
-// for the target Saturday/Sunday AM and PM slots. Every target day and slot
-// has a stable session ID; rerunning Friday cannot pay for or publish twice.
-router.post(
-  "/weekend/:day/:slot/prepare",
-  requestDedupe("blotato:weekend:prepare"),
-  asyncRoute(async (req, res) => {
-    const plan = weekendVideoPreparation({ day: req.params.day, slot: req.params.slot });
-    const result = await triggerPublishNowJob(req, plan.lane, {
-      publishMode: "weekend-prepared-scheduled",
-      scheduleSlot: plan.slot,
-      scheduleDate: plan.publishDate,
-    });
-    return res.status(result.statusCode || 202).json({
-      ok: true, service: "blotato", lane: plan.lane, ...plan,
-      message: "Friday-prepared weekend Blotato video accepted for provider scheduling.",
-      ...result,
-    });
-  })
-);
-
 router.post(
   "/shorts/:lane/schedule",
   requestDedupe("blotato:lane:schedule"),
@@ -223,6 +202,30 @@ router.post(
     const lane = requireShortLaneConfig(req.params.lane);
     const result = await triggerPublishNowJob(req, lane.slug, { publishMode: "evening-scheduled", scheduleSlot: "pm" });
     return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: `${lane.slug}-scheduled`, message: `Blotato ${lane.label} scheduled-post job accepted.`, ...result });
+  })
+);
+
+// Schedule the next Saturday/Sunday editions on Friday, just as Zernio
+// prepares its weekend posts. No public request can select an arbitrary date.
+router.post(
+  "/weekend/:day/:slot/schedule",
+  requestDedupe("blotato:weekend:schedule"),
+  asyncRoute(async (req, res) => {
+    const plan = fridayWeekendBlotatoPlan(req.params.day, req.params.slot);
+    if (!plan) return res.status(409).json({
+      ok: false, code: "blotato-weekend-friday-only",
+      error: "Only the configured Saturday/Sunday AM/PM posts may be prepared on Friday.",
+    });
+    const result = await triggerPublishNowJob(req, plan.laneSlug, {
+      scheduleSlot: plan.scheduleSlot, scheduleDate: plan.scheduleDate,
+      publishMode: plan.publishMode,
+    });
+    return res.status(result.statusCode || 202).json({
+      ok: true, service: "blotato", lane: plan.laneSlug,
+      preparedOn: "friday", publicationDate: plan.scheduleDate,
+      message: "Weekend video preparation accepted for the target publication date.",
+      ...result,
+    });
   })
 );
 

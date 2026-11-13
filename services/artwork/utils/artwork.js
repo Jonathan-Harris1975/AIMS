@@ -124,9 +124,10 @@ unrelated machinery or decorative technology wallpaper.",
 cinematic depth and modern magazine-quality framing.",
       "Style: intelligent, contemporary, human, engaging technology journalism rather than anime, fantasy, corporate stock photography or unrelated machinery. The AI \
 connection must be visually legible through supported software, compute, robotics, research, security, governance or human-tool context.",
-      "Stage one credible action or outcome that belongs to the exact post. Do not substitute a generic server room, electronics bench, invented black box or monitor for an abstract software topic.",
-      "Build a text-resistant frame: no readable screens, stickers, writing surfaces, whiteboards, signage, diagrams, pseudo-text or logos.",
       `Creative direction: ${policyPrompt}`,
+      "Depict a source-specific human decision using real-world objects; not a generic server room, monitor, " +
+        "electronics bench, mysterious AI box, whiteboard or abstract network graphic.",
+      "Compose a text-resistant frame: no readable screens, product labels, device stickers, written documents or whiteboards, and minimise complex hands.",
       "Final compliance check: inspect the whole composition and remove every accidental letter-like, number-like, logo-like or watermark-like mark before returning the image.",
     ].join(" ");
   }
@@ -234,20 +235,26 @@ function shouldUseShortPromptRetry(mode = "podcast") {
   return THRESHOLDS.podcastArtwork.shortPromptRetryEnabled;
 }
 
-export function buildQaRepairPrompt(prompt, qa = {}) {
-  // The model-specific image request compresses creative direction to 1,800–
-  // 2,600 characters. The previous implementation put defects at the END
-  // of a long branded prompt, so image regeneration repeatedly saw the
-  // original rejected scene and never saw the actual corrective instructions.
+export function buildQaRepairPrompt(prompt, qa = {}, mode = "podcast") {
+  // The model-specific prompt builder truncates long creative directions.
+  // Put specific pixel-QA defects first, where they cannot be clipped.
   const defects = [...(qa.hardDefects || []), ...(qa.defects || [])]
     .filter(Boolean).slice(0, 4).map((item) => String(item).slice(0, 190));
-  const sourceDirection = String(prompt || "").slice(0, 1100);
+  if (mode === "social") {
+    return [
+      "PIXEL QA REPAIR: change the entire scene, not only colours or framing.",
+      `Mandatory repairs: ${defects.join(" | ") || String(qa.summary || "Fix scene relevance").slice(0, 250)}.`,
+      "Choose one source-specific human decision, physical consequence or clearly documented technical result.",
+      "No visible text, pseudo-text, labels, signs, dashboards, whiteboards or watermarks.",
+      "Overrule any earlier staging involving server racks; show the human decision instead.",
+      `Source-specific subject: ${String(prompt || "").slice(0, 1050)}.`,
+    ].join(" ");
+  }
   return [
-    "PIXEL-LEVEL QA REPAIR. Change the scene, not just the colour or cropping.",
-    `Mandatory corrections: ${defects.join(" | ") || String(qa.summary || "Fix visual relevance and safety").slice(0, 250)}.`,
-    "Use one specific physical action or result directly grounded in the brief. Every surface must be completely blank: no letters, pseudo-text, screens, whiteboards, labels or signage.",
-    "Do not reproduce the last composition, abstract server room or decorative hardware.",
-    `Original evidence-grounded subject brief: ${sourceDirection}`,
+    "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
+    `Previous defects: ${defects.join(" | ") || qa.summary || "image failed visual QA"}.`,
+    "Create a materially different composition that fixes every listed defect.",
+    String(prompt || "").slice(0, 1300),
   ].join(" ");
 }
 
@@ -426,7 +433,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             throw err;
           }
 
-          qaPrompt = buildQaRepairPrompt(prompt, qa);
+          qaPrompt = buildQaRepairPrompt(prompt, qa, mode);
           const retryInstruction = buildModelAwareArtworkPrompt({
             model: provider.model,
             mode,

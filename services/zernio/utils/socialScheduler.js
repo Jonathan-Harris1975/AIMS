@@ -443,6 +443,7 @@ export function buildZernioSemanticRepairPrompt({ laneKey = "", post = {}, gate 
         "The repaired content must centre on one explicit AI ethics, governance, rights, privacy, safety, accountability, bias, consent or policy trade-off.",
         "State the strongest credible case on both sides before Jonathan's measured view.",
         "End with one direct open question asking where the reader would draw the line and why.",
+        "Artwork must be a source-specific scene, not an infographic, dashboard, diagram or generic racks of servers.",
       ]
     : [];
   const sundayRules = laneKey === "sunday"
@@ -1524,41 +1525,29 @@ them into one real physical action, decision or consequence.",
       "Keep AI as supporting machinery, not a floating abstract symbol.",
     ],
     friday: [
-      "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show the AI system constraint described by the post. For context-window, token-budget or prompt-trimming stories, " +
-        "depict a person selecting blank physical task objects, not a PC-card or server-rack repair.",
-      "Use hardware only when the source really concerns hardware. For software-only subjects, show one clear " +
-        "human-scale selection or checking action using text-free objects; no fabricated machinery.",
-      "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
-      "If infrastructure appears, frame one specific human intervention and one specific device rather than a wall of server racks.",
-      "Every concept must be represented by real objects, position, light and action. Never ask the image model to label components.",
-      "Avoid generic racks of servers, floating dashboards, coloured annotation lines, blank text boxes, pseudo-interface elements and decorative network cables.",
+      "FRIDAY — SOURCE-SPECIFIC SYSTEMS DECISION.",
+      "Show the precise constraint in the post. If it concerns prompt trimming, software evaluation or context windows, " +
+        "depict a person choosing blank physical task objects to retain or inspect, never a made-up server repair.",
+      "Include actual hardware only if the source genuinely concerns hardware.",
+      "Use one clean photographic scene showing a human-scale choice, physical consequence and clear focal subject.",
+      "Keep screens facing away, surfaces blank, no pseudo-text, signs, labels, charts or speculative circuitry.",
     ],
     saturday: [
       "SATURDAY — EDITORIAL DEBATE.",
-      "Create one continuous magazine-opinion scene, never a split panel or before-and-after graphic.",
-      "Stage an ethical tension: one adult actively enables a real AI-assisted decision while another visibly " +
-        "pauses or blocks that SAME decision. Never depict both cooperating at the same keyboard.",
-      "Keep screens out of frame or dark. Show the trade-off through body language, physical controls, distance, responsibility and the real-world stakes rather than labels, \
-charts, warning icons or holograms.",
-      "Human emotion, responsibility and real-world stakes should dominate over abstract technology; avoid humanoid robots and cyborg imagery unless the post genuinely concerns embodied robotics.",
-      "The composition should make viewers pause and form an opinion before reading the caption without visually declaring either side correct.",
-      "Avoid rage-bait, dystopian clichés and political campaign aesthetics.",
+      "Show one continuous real-world scene containing the actual trade-off, never split panels.",
+      "One adult visibly enables a source-supported AI-assisted decision while a second pauses the SAME decision.",
+      "Their opposing actions must be unambiguous; do not show both cooperating at one keyboard.",
+      "Communicate stakes through posture, objects and human responsibility, with no screens or writing.",
     ],
     sunday: [
-      "SUNDAY — PERSON SPOTLIGHT.",
-      "The named person's identity is context only: never fabricate their likeness. The actual source-supported contribution must be visible as a specific technical result, not a generic black box.",
-      "Translate the contribution into one concrete, source-supported research mechanism, object, experiment, machine-learning process or real-world consequence rather than depicting the person.",
-      "Prefer a human-free close-up of the relevant technical mechanism. If a person is essential, show only anonymous hands or a fully rear-facing figure with the face completely hidden.",
-      "For this lane avoid all text-bearing surfaces: no books, papers, notebooks, theses, whiteboards, chalkboards, posters, signs, monitors, terminal screens, interface \
-panels or labelled diagrams.",
-      "Do not include dates, publication titles, thesis titles, names, equations, letters, numerals or pseudo-writing even when they appear in the post context.",
-      "Aim for the authority of a magazine profile story through the contribution itself, without a corporate headshot, fabricated portrait or decorative AI wallpaper.",
+      "SUNDAY — REAL CONTRIBUTION SPOTLIGHT.",
+      "Never render, approximate or imply their face or recognisable likeness; do not invent identity or biographical appearance.",
+      "Show the concrete source-supported technical result or research contribution, not a generic black box.",
+      "Prefer a clean close-up of the actual physical mechanism without people or text-bearing surfaces.",
+      "No books, papers, notebooks, theses, whiteboards, chalkboards, monitor screens, pseudo-writing, names, equations or labels.",
     ],
   };
 
-  // Model-aware prompt shaping truncates long creative directions: move the
-  // actual post subject to the front so the QA regeneration can see it.
   return [...common.slice(0, 2), ...(directions[laneKey] || directions.thursday), ...common.slice(2)].join(" ");
 }
 

@@ -214,7 +214,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
 export default { runQaLoop };
 
 export async function runQaLoop(options) {
-  // Allow one evidence-based self-review and council correction cycle while
-  // retaining all independent editorial hard gates and model-cost budgets.
+  // Allow bounded factual-source repair after independent council feedback
+  // without reducing editorial scores or overriding factual hard gates.
   return withTaskRepairBudget(() => runQaLoopImpl(options), { repairs: 6, recoveries: 4 });
 }

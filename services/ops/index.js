@@ -267,16 +267,16 @@ const OPERATION_WINDOWS = Object.freeze({
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
     ["zernio-blog-social", "/zernio/blog-rss/daily", {}, null, false, "blog-social"],
     ["blotato-pm", "/blotato/shorts/ai-playbook/schedule", {}],
-    // These are generated on Friday but published in their own Saturday/Sunday
-    // morning/evening slots, with distinct durable IDs and paid-render dates.
-    ["blotato-saturday-am", "/blotato/weekend/saturday/am/prepare", {}],
-    ["blotato-saturday-pm", "/blotato/weekend/saturday/pm/prepare", {}],
-    ["blotato-sunday-am", "/blotato/weekend/sunday/am/prepare", {}],
-    ["blotato-sunday-pm", "/blotato/weekend/sunday/pm/prepare", {}],
     ["newsletter-generate", "/newsletter/generate", { profileId: "ai-edge" }, "newsletter"],
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-weekend-prepare", "/newsletter/weekend/prepare", {}, "newsletter"],
+    // Create and schedule both videos for each weekend day on Friday. Each
+    // video has a target-day reservation, deterministic ID and independent QA.
+    ["blotato-saturday-am", "/blotato/weekend/saturday/am/schedule", {}],
+    ["blotato-saturday-pm", "/blotato/weekend/saturday/pm/schedule", {}],
+    ["blotato-sunday-am", "/blotato/weekend/sunday/am/schedule", {}],
+    ["blotato-sunday-pm", "/blotato/weekend/sunday/pm/schedule", {}],
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -363,8 +363,8 @@ function assertContentOperationWindows() {
 
   const fridayAmPaths = OPERATION_WINDOWS["friday-am"].map((task) => task[1]);
   for (const required of ["/zernio/daily/saturday", "/zernio/daily/sunday", "/blotato/shorts/ai-playbook/schedule",
-    "/blotato/weekend/saturday/am/prepare", "/blotato/weekend/saturday/pm/prepare",
-    "/blotato/weekend/sunday/am/prepare", "/blotato/weekend/sunday/pm/prepare"]) {
+    "/blotato/weekend/saturday/am/schedule", "/blotato/weekend/saturday/pm/schedule",
+    "/blotato/weekend/sunday/am/schedule", "/blotato/weekend/sunday/pm/schedule"]) {
     if (!fridayAmPaths.includes(required)) throw new Error(`friday-am missing required scheduled-content task ${required}`);
   }
 
@@ -558,6 +558,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         maxConsecutiveErrors: Math.max(1, Number(process.env.AIMS_OPERATION_ASYNC_MAX_POLL_ERRORS || 8)),
         notFoundGraceMs: Math.max(0, Number(process.env.AIMS_OPERATION_ASYNC_NOT_FOUND_GRACE_MS || 120_000)),
         onPoll: heartbeat,
+        expectedEventId: name === "podcast" ? idempotencyKey : null,
       });
 
       const taskOutcome = assessAsyncTaskOutcome(path, asyncJob);

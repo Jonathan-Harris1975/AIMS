@@ -49,3 +49,17 @@ test("getMostRecentActiveJobFresh is exported and returns the active job after f
   assert.equal(active.sessionId, "AUD-jobstore-active");
   assert.equal(active.status, "queued");
 });
+
+
+test("retrying a failed podcast clears the previous error while preserving the new event ID", async () => {
+  process.env.APP_STATE_DIR = makeStateDir();
+  const mod = await import(`./services/shared/utils/jobStore.js?case=failed-retry-${Date.now()}`);
+  mod.beginJob("podcast", "TT-failed-retry", { eventId: "first-attempt" });
+  mod.failJob("podcast", "TT-failed-retry", new Error("Polly denied"));
+  const next = mod.beginJob("podcast", "TT-failed-retry", { eventId: "second-attempt" });
+  assert.equal(next.started, true);
+  assert.equal(next.job.status, "running");
+  assert.equal(next.job.attempt, 2);
+  assert.equal(next.job.eventId, "second-attempt");
+  assert.equal(next.job.error, undefined);
+});
