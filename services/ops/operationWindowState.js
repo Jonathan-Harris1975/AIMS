@@ -44,14 +44,15 @@ export function operationTaskSucceeded(result = {}) {
   // must not satisfy dependencies or be cached as a completed operation task.
   if (!result?.ok || result?.result?.ok === false || result?.result?.ready === false) return false;
   if (result.skipped) return result.reason === "newsletter-disabled-by-configuration";
-  // The provider has already accepted part of this podcast publication. A
-  // replay risks publishing the same episode twice, so preserve the handoff
-  // for reconciliation even though the task remains warning-marked.
-  if (result.nonRetryablePartialPublication === true && result.warning === true) return true;
+  // A partially published episode is deliberately NOT safe to replay. Keep
+  // its existing provider handoff, preserve the warning for reconciliation,
+  // and do not generate a duplicate podcast when the operation resumes.
+  if (result.name === "podcast" && result.nonRetryablePartialPublication === true && result.warning === true) return true;
 
   const payload = result?.asyncJob?.job?.result
     ?? result?.asyncJob?.result
     ?? result?.result;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (payload?.ok === false || payload?.ready === false || payload?.failed === true
       || payload?.partialFailure === true || payload?.quarantined === true) return false;
   const status = String(payload?.status || "").toLowerCase();
@@ -155,7 +156,8 @@ export function sameDayBackstopAllowance(receipt = {}, nowMs = Date.now()) {
     timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).formatToParts(new Date(nowMs)).map((part) => [part.type, part.value]));
-  if (!["year", "month", "day", "hour", "minute"].every((part) => /^\d+$/.test(parts[part] || ""))) return 0;
+  if (!parts.year || !parts.month || !parts.day || !/^\d{2}$/.test(parts.hour || "")
+      || !/^\d{2}$/.test(parts.minute || "")) return 0;
   const londonDate = `${parts.year}-${parts.month}-${parts.day}`;
   if (!normalise(receipt.id).startsWith(`${londonDate}:`)) return 0;
   const localMinute = Number(parts.hour) * 60 + Number(parts.minute);
