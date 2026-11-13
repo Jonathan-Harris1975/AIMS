@@ -214,5 +214,7 @@ async function runQaLoopImpl({ profile, newsletter, lead, stories, promotion = n
 export default { runQaLoop };
 
 export async function runQaLoop(options) {
-  // Six bounded repairs cover the self-review plus a source-integrity council fix.\n  // Do not lower editorial thresholds or permit failed reviewers to approve an issue.\n  return withTaskRepairBudget(() => runQaLoopImpl(options), { repairs: 6, recoveries: 4 });
+  // Six bounded repairs cover the self-review plus a source-integrity council fix.
+  // Do not lower editorial thresholds or permit failed reviewers to approve an issue.
+  return withTaskRepairBudget(() => runQaLoopImpl(options), { repairs: 6, recoveries: 4 });
 }
