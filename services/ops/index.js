@@ -271,6 +271,10 @@ const OPERATION_WINDOWS = Object.freeze({
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-weekend-prepare", "/newsletter/weekend/prepare", {}, "newsletter"],
+    ["blotato-saturday-am", "/blotato/autoshorts/schedule", { weekendTarget: "saturday" }],
+    ["blotato-saturday-pm", "/blotato/shorts/ai-playbook/schedule", { weekendTarget: "saturday" }],
+    ["blotato-sunday-am", "/blotato/autoshorts/schedule", { weekendTarget: "sunday" }],
+    ["blotato-sunday-pm", "/blotato/shorts/reality-check/schedule", { weekendTarget: "sunday" }],
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -356,6 +360,17 @@ function assertContentOperationWindows() {
   if (!thursdayPaths.includes("/zernio/daily/thursday")) throw new Error("thursday-am missing Zernio Thursday lane/podcast promo trigger");
 
   const fridayAmPaths = OPERATION_WINDOWS["friday-am"].map((task) => task[1]);
+  for (const [name, route, target] of [
+    ["blotato-saturday-am", "/blotato/autoshorts/schedule", "saturday"],
+    ["blotato-saturday-pm", "/blotato/shorts/ai-playbook/schedule", "saturday"],
+    ["blotato-sunday-am", "/blotato/autoshorts/schedule", "sunday"],
+    ["blotato-sunday-pm", "/blotato/shorts/reality-check/schedule", "sunday"],
+  ]) {
+    const task = OPERATION_WINDOWS["friday-am"].find((item) => item[0] === name);
+    if (task?.[1] !== route || task?.[2]?.weekendTarget !== target || task[5]) {
+      throw new Error(`Friday must separately prepare and confirm ${name} for the future publication date.`);
+    }
+  }
   for (const required of ["/zernio/daily/saturday", "/zernio/daily/sunday", "/blotato/shorts/ai-playbook/schedule"]) {
     if (!fridayAmPaths.includes(required)) throw new Error(`friday-am missing required scheduled-content task ${required}`);
   }
@@ -379,6 +394,19 @@ function operationNewsletterEnabled() {
 function operationOutreachEnabled() {
   // Compatibility/status flag only. Outreach execution is clocked exclusively by MAST at 09:00 and 16:00 weekdays.
   return booleanEnv("AIMS_OPERATION_OUTREACH_ENABLED", false);
+}
+
+function upcomingFridayWeekendDate(weekday) {
+  const now = new Date();
+  const londonDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now);
+  const friday = new Date(`${londonDate}T12:00:00Z`);
+  if (friday.getUTCDay() !== 5 || !["saturday", "sunday"].includes(weekday)) {
+    throw new Error("Weekend Blotato scheduling is owned by Friday UK-time operations only.");
+  }
+  return new Date(friday.getTime() + (weekday === "saturday" ? 1 : 2) * 86400000)
+    .toISOString().slice(0, 10);
 }
 
 function localWeekStartDate() {
@@ -467,6 +495,10 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   const sessionId = taskSessionId(job, name);
   const idempotencyKey = `ops:${job?.executionId || job?.id || "run"}:${name}`;
   const payload = { ...body, sessionId };
+  if (name.startsWith("blotato-") && ["saturday", "sunday"].includes(payload.weekendTarget)) {
+    payload.scheduleDate = upcomingFridayWeekendDate(payload.weekendTarget);
+    delete payload.weekendTarget;
+  }
   if (name === "podcast") {
     payload.targetMinutes = 60;
     payload.date = sessionId.replace(/^TT-/, "");
