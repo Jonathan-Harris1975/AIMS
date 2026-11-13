@@ -236,23 +236,24 @@ function shouldUseShortPromptRetry(mode = "podcast") {
 }
 
 export function buildQaRepairPrompt(prompt, qa = {}, mode = "podcast") {
-  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])].filter(Boolean).slice(0, 8);
+  // The model-specific prompt builder truncates long creative directions.
+  // Put specific pixel-QA defects first, where they cannot be clipped.
+  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])]
+    .filter(Boolean).slice(0, 4).map((item) => String(item).slice(0, 190));
   if (mode === "social") {
     return [
-      `Editorial topic and factual anchor (not a visual layout to copy): ${String(prompt || "").slice(0, 1100)}.`,
-      "Make a NEW source-specific photographic scene rather than editing the rejected image.",
-      "Overrule any earlier staging involving server racks, LED labels, circuit cards, monitors, whiteboards, control panels, code displays or written documents.",
-      "Communicate the source-specific human decision, real-world impact or technical consequence through ONE believable focal subject; not generic IT stock imagery.",
-      "Use a close crop of an adult professional in a grounded real setting; minimise or crop out hands and remove every surface that might acquire symbols.",
-      "No visible text, pseudo-text, signs, logos, screen content, handwriting, tiny labels, diagrams or watermarks. Do not invent facts outside the source topic.",
-      `Previous visual-QA defects to eliminate: ${defects.join(" | ") || qa.summary || "lack of topical relevance"}.`,
+      "PIXEL QA REPAIR: change the entire scene, not only colours or framing.",
+      `Mandatory repairs: ${defects.join(" | ") || String(qa.summary || "Fix scene relevance").slice(0, 250)}.`,
+      "Choose one source-specific real human decision, physical consequence or clearly documented technical result.",
+      "No server-room wallpaper, dashboards, whiteboards, labels, signs, screens, pseudo-text or watermarks.",
+      `Source-specific subject: ${String(prompt || "").slice(0, 1050)}.`,
     ].join(" ");
   }
   return [
-    prompt,
     "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
     `Previous defects: ${defects.join(" | ") || qa.summary || "image failed visual QA"}.`,
-    "Create a materially different composition that fixes every listed defect. Do not preserve the failed layout.",
+    "Create a materially different composition that fixes every listed defect.",
+    String(prompt || "").slice(0, 1300),
   ].join(" ");
 }
 
