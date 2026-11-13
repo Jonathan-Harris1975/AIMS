@@ -232,8 +232,19 @@ function shouldUseShortPromptRetry(mode = "podcast") {
   return THRESHOLDS.podcastArtwork.shortPromptRetryEnabled;
 }
 
-function buildQaRepairPrompt(prompt, qa = {}) {
+export function buildQaRepairPrompt(prompt, qa = {}, mode = "podcast") {
   const defects = [...(qa.hardDefects || []), ...(qa.defects || [])].filter(Boolean).slice(0, 8);
+  if (mode === "social") {
+    return [
+      `Editorial topic and factual anchor (not a visual layout to copy): ${String(prompt || "").slice(0, 1100)}.`,
+      "Make a NEW source-specific photographic scene rather than editing the rejected image.",
+      "Overrule any earlier staging involving server racks, LED labels, circuit cards, monitors, whiteboards, control panels, code displays or written documents.",
+      "Communicate the source-specific human decision, real-world impact or technical consequence through ONE believable focal subject; not generic IT stock imagery.",
+      "Use a close crop of an adult professional in a grounded real setting; minimise or crop out hands and remove every surface that might acquire symbols.",
+      "No visible text, pseudo-text, signs, logos, screen content, handwriting, tiny labels, diagrams or watermarks. Do not invent facts outside the source topic.",
+      `Previous visual-QA defects to eliminate: ${defects.join(" | ") || qa.summary || "lack of topical relevance"}.`,
+    ].join(" ");
+  }
   return [
     prompt,
     "REGENERATION REQUIRED AFTER PIXEL-LEVEL QA.",
@@ -417,7 +428,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             throw err;
           }
 
-          qaPrompt = buildQaRepairPrompt(prompt, qa);
+          qaPrompt = buildQaRepairPrompt(prompt, qa, mode);
           const retryInstruction = buildModelAwareArtworkPrompt({
             model: provider.model,
             mode,

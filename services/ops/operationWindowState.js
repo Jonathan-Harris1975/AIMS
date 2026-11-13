@@ -58,7 +58,15 @@ export function operationTaskSucceeded(result = {}) {
   const status = String(payload?.status || "").toLowerCase();
   if (["failed", "error", "partial", "pending", "queued", "accepted", "running"].includes(status)
       && result?.asyncStatus !== "completed") return false;
-  if (payload?.skipped !== true) return payload?.ok === true || payload?.ready === true;
+  // The RSS rewrite worker returns a verified result object rather than an
+  // `ok` boolean. Accept that specific contract only after the async worker
+  // terminated and all published rewrite batches passed phase-3 QA.
+  const verifiedRssRewrite = result.name === "rss-rewrite"
+    && result?.asyncJob?.status === "completed"
+    && Number.isInteger(payload.rewrittenItems) && payload.rewrittenItems > 0
+    && payload.phase3Quality?.status === "ALL_PASSED_AUTO_PUBLISH"
+    && payload.phase3Quality?.failed === 0;
+  if (payload?.skipped !== true) return payload?.ok === true || payload?.ready === true || verifiedRssRewrite;
 
   // A skip is successful only when backed by a confirmed existing artefact
   // or already-completed provider handoff. These are read-only confirmations;

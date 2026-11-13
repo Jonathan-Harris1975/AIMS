@@ -23,6 +23,7 @@ import { buildOrCreateNewsInsightShort, buildOrCreateShortLane } from "../utils/
 import { listShortLaneConfigs, requireShortLaneConfig } from "../utils/shortLanes.js";
 import { getPublishNowJob, triggerPublishNowJob } from "../utils/autoPublishService.js";
 import { getAutoShortStyleConfigSummary, getAutoShortStyleRotation } from "../utils/autoShortStyles.js";
+import { fridayWeekendBlotatoPlan } from "../utils/weekendSchedule.js";
 
 const router = express.Router();
 
@@ -201,6 +202,30 @@ router.post(
     const lane = requireShortLaneConfig(req.params.lane);
     const result = await triggerPublishNowJob(req, lane.slug, { publishMode: "evening-scheduled", scheduleSlot: "pm" });
     return res.status(result.statusCode || 202).json({ ok: true, service: "blotato", lane: `${lane.slug}-scheduled`, message: `Blotato ${lane.label} scheduled-post job accepted.`, ...result });
+  })
+);
+
+// Schedule the next Saturday/Sunday editions on Friday, just as Zernio
+// prepares its weekend posts. No public request can select an arbitrary date.
+router.post(
+  "/weekend/:day/:slot/schedule",
+  requestDedupe("blotato:weekend:schedule"),
+  asyncRoute(async (req, res) => {
+    const plan = fridayWeekendBlotatoPlan(req.params.day, req.params.slot);
+    if (!plan) return res.status(409).json({
+      ok: false, code: "blotato-weekend-friday-only",
+      error: "Only the configured Saturday/Sunday AM/PM posts may be prepared on Friday.",
+    });
+    const result = await triggerPublishNowJob(req, plan.laneSlug, {
+      scheduleSlot: plan.scheduleSlot, scheduleDate: plan.scheduleDate,
+      publishMode: plan.publishMode,
+    });
+    return res.status(result.statusCode || 202).json({
+      ok: true, service: "blotato", lane: plan.laneSlug,
+      preparedOn: "friday", publicationDate: plan.scheduleDate,
+      message: "Weekend video preparation accepted for the target publication date.",
+      ...result,
+    });
   })
 );
 

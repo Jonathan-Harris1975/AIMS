@@ -2533,7 +2533,7 @@ async function runPublishJobImpl({
 export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, options = {}) {
   const lane = requireShortLaneConfig(laneSlug);
   const scheduleSlot = trim(options.scheduleSlot).toLowerCase();
-  const scheduleDate = scheduleSlot ? londonDateString(new Date()) : null;
+  const scheduleDate = scheduleSlot ? (options.scheduleDate || londonDateString(new Date())) : null;
   let failedRenderReplacement = null;
   let failedPublishRecovery = null;
   let pendingRenderRecovery = null;
