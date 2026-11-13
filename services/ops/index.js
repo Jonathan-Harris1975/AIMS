@@ -555,7 +555,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
       const taskOutcome = assessAsyncTaskOutcome(path, asyncJob);
       const failureDetails = taskOutcome.ok ? {} : asyncFailureDetails(asyncJob);
 
-      return {
+      const taskResult = {
         name,
         path,
         ok: taskOutcome.ok,
@@ -573,6 +573,11 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         publicationIssues: taskOutcome.issues || undefined,
         ...failureDetails,
       };
+      if (taskResult.ok && !operationTaskSucceeded(taskResult)) {
+        return { ...taskResult, ok: false, status: 424,
+          reason: "content-task-completion-unverified", retryable: true };
+      }
+      return taskResult;
     }
 
     const resultFailed = Boolean(
@@ -585,7 +590,13 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
         || result.quarantined === true
       )
     );
-    return { name, path, ok: response.ok && !resultFailed, status: response.status, result, sessionId };
+    const taskResult = { name, path, ok: response.ok && !resultFailed,
+      status: response.status, result, sessionId };
+    if (taskResult.ok && !operationTaskSucceeded(taskResult)) {
+      return { ...taskResult, ok: false, status: 424,
+        reason: "content-task-completion-unverified", retryable: true };
+    }
+    return taskResult;
   } catch (error) {
     return {
       name,
@@ -641,11 +652,7 @@ async function executeOperationWindow(job, tasks, req) {
   // the HTTP request lifecycle ends.
   const requestContext = { authorization: normalise(req.get?.("authorization")) };
 
-  const operationDependencyReady = (dependency) => Boolean(
-    dependency?.ok
-    && dependency?.result?.ok !== false
-    && dependency?.result?.ready !== false
-  );
+  const operationDependencyReady = (dependency) => operationTaskSucceeded(dependency);
 
   const settlePendingTask = async (taskName) => {
     const pending = pendingTasks.get(taskName);
