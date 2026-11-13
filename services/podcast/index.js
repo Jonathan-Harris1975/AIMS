@@ -5,14 +5,19 @@ import { requestDedupe } from "../shared/utils/requestDedupe.js";
 import { getPublicJobFresh, beginJob, completeJob, failJob } from "../shared/utils/jobStore.js";
 import { validateBody, podcastRunBodySchema } from "../shared/utils/requestSchemas.js";
 import { info, error } from "../../logger.js";
-import { getPodcastReadiness } from "./readiness.js";
+import { getPodcastRuntimeReadiness } from "./readiness.js";
 import { podcastPipelineSucceeded } from "./pipelineOutcome.js";
 
 const router = express.Router();
 
-function sendReadiness(_req, res) {
-  const report = getPodcastReadiness();
-  return res.status(report.ready ? 200 : 503).json({ ok: report.ready, ...report });
+async function sendReadiness(_req, res) {
+  try {
+    const report = await getPodcastRuntimeReadiness();
+    return res.status(report.ready ? 200 : 503).json({ ok: report.ready, ...report });
+  } catch (err) {
+    error("podcast.readiness.error", { code: err?.code || "UNKNOWN" });
+    return res.status(503).json({ ok: false, ready: false, status: "blocked", errorCode: "PODCAST_READINESS_ERROR" });
+  }
 }
 
 router.get("/readiness", sendReadiness);
@@ -53,7 +58,7 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
       });
     }
 
-    const readiness = getPodcastReadiness();
+    const readiness = await getPodcastRuntimeReadiness();
     if (!readiness.ready) {
       return res.status(503).json({
         ok: false,
