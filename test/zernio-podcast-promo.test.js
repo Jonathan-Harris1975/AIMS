@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchLatestPodcastEpisode } from "../services/zernio/utils/podcastRssFeed.js";
+import { fetchLatestPodcastEpisode, fetchPodcastPromoEpisode } from "../services/zernio/utils/podcastRssFeed.js";
 import { buildPodcastPromoPrompt } from "../services/zernio/utils/prompts.js";
 
 test("podcast RSS helper selects latest episode metadata", async () => {
@@ -13,10 +13,56 @@ test("podcast RSS helper selects latest episode metadata", async () => {
   assert.equal(episode.link, "https://example.com/new");
 });
 
-test("Thursday promo forbids alternate podcast audio", () => {
-  const prompt = buildPodcastPromoPrompt({ publishDate: "2026-07-30", episode: { title: "Test", description: "Test description" } });
-  assert.match(prompt.system, /not a second podcast performance/i);
-  assert.match(prompt.system, /never synthesise or replace the programme voice/i);
-  assert.match(prompt.system, /Do not write a voiceover/i);
-  assert.match(prompt.user, /lands Friday/i);
+test("Thursday podcast promotion selects last week's verified transcript, not tomorrow's draft", async () => {
+  const entries = {
+    "episode-41.json": JSON.stringify({
+      sessionId: "episode-41", title: "AI Security: The Access Problem",
+      description: "A practical episode on permissions and agent security.",
+      pubDate: "2026-07-24T13:00:00Z", productionComplete: true,
+      episodeNumber: 41, episodePageUrl: "https://example.com/podcast/episode-41",
+    }),
+    "episode-42.json": JSON.stringify({
+      sessionId: "episode-42", title: "Unfinished Friday Show",
+      description: "This has not yet been published.", pubDate: "2026-07-31T13:00:00Z",
+      episodeNumber: 42, productionComplete: false,
+    }),
+    "episode-41.txt": "Turing's Torch discusses why agents require scoped tool permissions. We cover monitoring and the consequences of excessive access.".repeat(10),
+  };
+  const episode = await fetchPodcastPromoEpisode({
+    publishDate: "2026-07-30", feedUrl: "https://example.com/feed.xml",
+    listKeysImpl: async () => ["episode-42.json", "episode-41.json"],
+    getObjectAsTextImpl: async (_bucket, key) => entries[key],
+    fetchImpl: async () => { throw new Error("RSS should not be needed when a real transcript exists"); },
+  });
+  assert.equal(episode.title, "AI Security: The Access Problem");
+  assert.equal(episode.source, "published-transcript");
+  assert.match(episode.transcriptExcerpt, /scoped tool permissions/);
+  assert.doesNotMatch(episode.title, /Unfinished/);
+});
+
+test("Thursday podcast promotion uses published RSS fallback without pretending old content is new", async () => {
+  const xml = '<?xml version="1.0"?><rss version="2.0"><channel><title>Turing</title>' +
+    '<item><title>Unreleased</title><pubDate>Fri, 31 Jul 2026 13:00:00 GMT</pubDate><description>Future</description></item>' +
+    '<item><title>Published</title><pubDate>Fri, 24 Jul 2026 13:00:00 GMT</pubDate><description>Verified</description></item></channel></rss>';
+  const episode = await fetchPodcastPromoEpisode({
+    publishDate: "2026-07-30", feedUrl: "https://example.com/feed.xml",
+    listKeysImpl: async () => [],
+    getObjectAsTextImpl: async () => "",
+    fetchImpl: async () => ({ ok: true, text: async () => xml }),
+  });
+  assert.equal(episode.title, "Published");
+  assert.equal(episode.source, "published-rss");
+});
+
+test("Thursday promotion retains the original brand voice and podcast-only audio policy", () => {
+  const prompt = buildPodcastPromoPrompt({
+    publishDate: "2026-07-30",
+    episode: { title: "Real Episode", description: "A concrete AI security incident", transcriptExcerpt: "Security failures are usually permissions failures." },
+  });
+  assert.match(prompt.system, /not a podcast performance/i);
+  assert.match(prompt.system, /Never synthesise or replace the show voice/i);
+  assert.match(prompt.system, /Do not write voiceover/i);
+  assert.match(prompt.system, /Do not claim the episode is arriving tomorrow/i);
+  assert.match(prompt.user, /approved previous-episode transcript excerpt/i);
+  assert.match(prompt.user, /permissions failures/);
 });
