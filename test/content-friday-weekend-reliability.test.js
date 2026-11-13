@@ -10,13 +10,13 @@ import { reservePaidRender, linkPaidRenderVisual } from "../services/blotato/uti
 test("Friday schedules exactly two videos per weekend publication day", () => {
   const friday = new Date("2026-11-13T10:00:00Z");
   assert.deepEqual(fridayWeekendBlotatoPlan("saturday", "am", friday), {
-    laneSlug: "news-insight", scheduleSlot: "am", scheduleDate: "2026-11-14", publishMode: "autoshorts-scheduled",
+    laneSlug: "weekend-brief", scheduleSlot: "am", scheduleDate: "2026-11-14", publishMode: "autoshorts-scheduled",
   });
   assert.deepEqual(fridayWeekendBlotatoPlan("saturday", "pm", friday), {
-    laneSlug: "model-verdict", scheduleSlot: "pm", scheduleDate: "2026-11-14", publishMode: "evening-scheduled",
+    laneSlug: "weekend-debate", scheduleSlot: "pm", scheduleDate: "2026-11-14", publishMode: "evening-scheduled",
   });
   assert.equal(fridayWeekendBlotatoPlan("sunday", "am", friday).scheduleDate, "2026-11-15");
-  assert.equal(fridayWeekendBlotatoPlan("sunday", "pm", friday).laneSlug, "reality-check");
+  assert.equal(fridayWeekendBlotatoPlan("sunday", "pm", friday).laneSlug, "weekend-spotlight");
   assert.equal(fridayWeekendBlotatoPlan("saturday", "am", new Date("2026-11-14T10:00:00Z")), null);
   assert.equal(fridayWeekendBlotatoPlan("monday", "am", friday), null);
   assert.equal(fridayWeekendBlotatoPlan("saturday", "afternoon", friday), null);

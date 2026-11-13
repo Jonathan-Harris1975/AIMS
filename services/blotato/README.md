@@ -38,3 +38,12 @@ The `ai-playbook` lane is prepared in the **Friday AM** operation. Friday PM is 
 Use the `BLOTATO_*` variables plus the shared OpenRouter/artwork settings in `config/production.defaults.env` and `env.template`. Secrets remain deployment-only.
 
 RSS descriptions are unwrapped from JSON/XML CDATA before entering scripts or scene prompts. Narration word limits retain complete sentences; changed narration is redistributed across the scene scripts. Prompt-length limits reserve the opening human reaction and text-free framing instructions.
+
+## Friday-prepared Saturday and Sunday videos
+
+The Friday AM AIMS operation now prepares **four additional, distinct videos** for later provider scheduling:
+Saturday 10:30 (weekly brief) and 18:30 (evidence-led debate); Sunday 10:30 (practical lesson) and 18:30 (research spotlight), all Europe/London. The original Friday 10:30 and 16:30 video slots are unchanged. The Friday preparation requests are `/blotato/weekend/:day/:slot/schedule` and are valid only on Friday.
+
+A prepared video belongs to the **future target publication date and slot** for deduplication and provider schedule confirmation. Its estimated paid-render reservation belongs to **the actual Friday render date**. Friday has a configured six-paid-render allowance (`BLOTATO_FRIDAY_PAID_RENDER_CAP=6`), accommodating the two normal Friday videos and four weekend prebuilds; ordinary weekdays retain the two-render cap. The existing monthly estimated-credit budget is unchanged. If the provider fails or the budget is exhausted, the affected slot is reported as failed, not automatically repurchased. Existing paid visual IDs and reservations must be reconciled before any replay.
+
+Four independent weekend short-form lanes prevent recycling one source into both daily clips. All provider posts must receive schedule confirmation and pass existing publishing and quality checks. An unfinished Friday operation is retried by MAST's same-day operation backstops; no Saturday/Sunday direct generation is authorised.

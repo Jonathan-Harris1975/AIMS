@@ -1463,7 +1463,7 @@ function buildMondayArtworkPrompt({ verifiedQuote, post } = {}) {
   ].join(" ");
 }
 
-function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = null } = {}) {
+export function buildDailyLaneArtworkPrompt({ laneKey = "", post = {}, verifiedQuote = null } = {}) {
   if (laneKey === "monday") return buildMondayArtworkPrompt({ verifiedQuote, post });
 
   const topic = compactText(post?.topic || post?.title || "artificial intelligence");

@@ -99,11 +99,13 @@ export async function repairNewsletterDraft({ newsletter, lead, stories, profile
         "Return JSON edits using only allowed paths; links, titles and story selection are immutable. " +
         "Reality Check alone may change realityCheck.sourceId to a supplied sourceId; its canonical title/link will be reattached by code. " +
         "When changing that source, align the claim and assessment with its evidence. " +
-        "If the defect cannot be repaired from the evidence, return no edits; quality gates will hold publication." },
+        "When a claim lacks support, remove the unsupported numbers, names, comparisons or causal language instead of refusing to edit. " +
+        "Prefer precise, attributed, qualified wording using only the supplied summaries or verified article text. " +
+        "If no evidence-grounded repair is possible, return no edits and the quality gate will hold publication." },
       { role: "user", content: JSON.stringify({ ...publicationContext(profile), defects: repairContext, allowedPaths,
         brandVoice: profile.brandVoice, draft: newsletter,
         sources }) },
     ],
-  }), { repairs: 0, recoveries: 4 });
+  }), { repairs: 0, recoveries: 8 });
   return { ...applyNewsletterEdits(newsletter, parseNewsletterEdits(raw, allowedPaths, sources).edits, sources), ok: true };
 }
