@@ -188,7 +188,11 @@ router.post(
     const publicationAnchor = requestedPublicationDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedPublicationDate)
       ? new Date(`${requestedPublicationDate}T12:00:00Z`) : now;
     const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(publicationAnchor).toLowerCase();
-    const laneByWeekday = { monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work", thursday: "reality-check", friday: "ai-playbook", saturday: "news-insight", sunday: "ai-at-work" };
+    const laneByWeekday = {
+      monday: "news-insight", tuesday: "model-verdict", wednesday: "ai-at-work",
+      thursday: "reality-check", friday: "ai-playbook",
+      saturday: "news-insight", sunday: "ai-at-work",
+    };
     const laneSlug = laneByWeekday[weekday] || "news-insight";
     const style = getAutoShortStyleRotation(now);
     const result = await triggerPublishNowJob(req, laneSlug, { creativeStyle: style.creativeStyle, publishMode: "autoshorts-scheduled", scheduleSlot: "am", scheduleDate: requestedPublicationDate });
