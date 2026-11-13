@@ -51,3 +51,9 @@ Scheduled metadata also gates the ordinary send route and new-subscriber deliver
 ## Delivery evidence
 
 SMTP acceptance is recorded separately from delivery reports and never claims inbox receipt. The dedicated Newsletter mailbox monitor stores matched bounces/delays, warns when receipt remains unconfirmed after one hour, and reports worker health independently. Accepted messages are not automatically resent. See `docs/NEWSLETTER_DELIVERY_EVIDENCE.md` for states, configuration and production acceptance requirements.
+
+## Friday weekend source verification and automatic recovery
+
+Friday's Saturday/Sunday preparation uses the same article-evidence enrichment as weekday newsletters. The previous shortcut for supplied weekly `sourceItems` skipped original-article verification and the council correctly rejected unsupported details. The source-preserving composer now avoids introducing numbers, names or causal claims that are not grounded in the provided summaries or fetched original articles. Its targeted repair removes unsupported assertions and uses a bounded recovery allowance for transient model-provider failures. The 85-point editorial target and independent council hard gates are unchanged.
+
+Friday preparation remains per-edition idempotent: an approved Saturday issue is reused, while Sunday's missing or quarantined issue receives a fresh quality-gated attempt during MAST's Friday whole-operation recovery windows. Unapproved drafts are never dispatched, and a provider-uncertain email remains held under the existing delivery lease.
