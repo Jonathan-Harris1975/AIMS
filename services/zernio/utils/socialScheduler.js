@@ -1525,10 +1525,8 @@ them into one real physical action, decision or consequence.",
     ],
     friday: [
       "FRIDAY — SYSTEMS / OPERATOR VISUAL.",
-      "Show one concrete operational cause-and-effect moment from the post: an operator physically isolating, swapping, reconnecting, inspecting or recovering one AI-system \
-component, sensor, edge device, accelerator or workstation path.",
-      "For software evaluation, monitoring, routing or reliability topics, use a real bench/workstation intervention with the display dark or turned away; show the consequence \
-through hardware state, physical routing, posture and action rather than charts.",
+      "Show the AI system constraint described by the post. For context-window, token-budget or prompt-trimming stories, depict a person choosing which blank physical task objects to retain, not a PC-card or server-rack repair.",
+      "Use physical hardware only when the source is actually about hardware. For software-only subjects, show one clear, human-scale task selection or checking action with text-free objects; no fabricated machinery.",
       "Use photographic or cinematic editorial storytelling, not an infographic, dashboard, diagram, UI mock-up, labelled architecture, callout panel or presentation slide.",
       "If infrastructure appears, frame one specific human intervention and one specific device rather than a wall of server racks.",
       "Every concept must be represented by real objects, position, light and action. Never ask the image model to label components.",
@@ -1537,8 +1535,7 @@ through hardware state, physical routing, posture and action rather than charts.
     saturday: [
       "SATURDAY — EDITORIAL DEBATE.",
       "Create one continuous magazine-opinion scene, never a split panel or before-and-after graphic.",
-      "Put two credible human perspectives in the same physical environment around one real AI-enabled decision or consequence: one person ready to allow the system to act and \
-another visibly prepared to question, pause or intervene.",
+      "Stage an observable ethical tension: one adult actively enables a real AI-assisted decision and another visibly pauses or blocks the SAME decision. Never depict both cooperating at the same keyboard.",
       "Keep screens out of frame or dark. Show the trade-off through body language, physical controls, distance, responsibility and the real-world stakes rather than labels, \
 charts, warning icons or holograms.",
       "Human emotion, responsibility and real-world stakes should dominate over abstract technology; avoid humanoid robots and cyborg imagery unless the post genuinely concerns embodied robotics.",
@@ -1547,7 +1544,7 @@ charts, warning icons or holograms.",
     ],
     sunday: [
       "SUNDAY — PERSON SPOTLIGHT.",
-      "The named person's identity is editorial context only. Never render, approximate or imply their face or recognisable likeness from text alone.",
+      "The named person's identity is context only: never fabricate their likeness. The actual source-supported contribution must be visible as a specific technical result, not a generic black box.",
       "Translate the contribution into one concrete, source-supported research mechanism, object, experiment, machine-learning process or real-world consequence rather than depicting the person.",
       "Prefer a human-free close-up of the relevant technical mechanism. If a person is essential, show only anonymous hands or a fully rear-facing figure with the face completely hidden.",
       "For this lane avoid all text-bearing surfaces: no books, papers, notebooks, theses, whiteboards, chalkboards, posters, signs, monitors, terminal screens, interface \
@@ -1557,7 +1554,9 @@ panels or labelled diagrams.",
     ],
   };
 
-  return [...(directions[laneKey] || directions.thursday), ...common].join(" ");
+  // Model-aware prompt shaping truncates long creative directions: move the
+  // actual post subject to the front so the QA regeneration can see it.
+  return [...common.slice(0, 2), ...(directions[laneKey] || directions.thursday), ...common.slice(2)].join(" ");
 }
 
 
