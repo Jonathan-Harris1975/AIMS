@@ -44,9 +44,9 @@ export function operationTaskSucceeded(result = {}) {
   // must not satisfy dependencies or be cached as a completed operation task.
   if (!result?.ok || result?.result?.ok === false || result?.result?.ready === false) return false;
   if (result.skipped) return result.reason === "newsletter-disabled-by-configuration";
-  // A partially published episode is deliberately NOT safe to replay. Keep
-  // its existing provider handoff, preserve the warning for reconciliation,
-  // and do not generate a duplicate podcast when the operation resumes.
+  // The provider has already accepted part of this podcast publication. A
+  // replay risks publishing the same episode twice, so preserve the handoff
+  // for reconciliation even though the task remains warning-marked.
   if (result.nonRetryablePartialPublication === true && result.warning === true) return true;
 
   const payload = result?.asyncJob?.job?.result
@@ -57,7 +57,7 @@ export function operationTaskSucceeded(result = {}) {
   const status = String(payload?.status || "").toLowerCase();
   if (["failed", "error", "partial", "pending", "queued", "accepted", "running"].includes(status)
       && result?.asyncStatus !== "completed") return false;
-  if (payload?.skipped !== true) return true;
+  if (payload?.skipped !== true) return payload?.ok === true || payload?.ready === true;
 
   // A skip is successful only when backed by a confirmed existing artefact
   // or already-completed provider handoff. These are read-only confirmations;
@@ -67,7 +67,6 @@ export function operationTaskSucceeded(result = {}) {
     || payload.alreadyPublished === true
     || payload.alreadyDispatched === true
     || payload.alreadyScheduled === true
-    || payload.scheduled === true
     || (Array.isArray(payload.publicationReferences) && payload.publicationReferences.length > 0)
     || ["already_dispatched", "already_published", "already_scheduled", "already_completed"].includes(status)
   );
@@ -156,6 +155,7 @@ export function sameDayBackstopAllowance(receipt = {}, nowMs = Date.now()) {
     timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).formatToParts(new Date(nowMs)).map((part) => [part.type, part.value]));
+  if (!["year", "month", "day", "hour", "minute"].every((part) => /^\d+$/.test(parts[part] || ""))) return 0;
   const londonDate = `${parts.year}-${parts.month}-${parts.day}`;
   if (!normalise(receipt.id).startsWith(`${londonDate}:`)) return 0;
   const localMinute = Number(parts.hour) * 60 + Number(parts.minute);
