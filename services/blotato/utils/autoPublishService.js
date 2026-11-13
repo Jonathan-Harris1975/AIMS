@@ -1489,6 +1489,41 @@ function londonDateString(date = new Date()) {
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+// Provider usage is incurred on the day the visual is created, not its future
+// scheduled publication day. Persist that date alongside the reservation.
+export function paidRenderGuardDate(job = {}) {
+  return trim(job.creditGuardDate) || scheduleDateFromJob(job);
+}
+
+export function paidRenderDailyCap(creationDate) {
+  const ordinaryCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
+  const day = new Date(`${creationDate}T12:00:00Z`).getUTCDay();
+  return day === 5
+    ? Math.max(ordinaryCap, positiveIntEnv("BLOTATO_FRIDAY_PAID_RENDER_CAP", 6, 10))
+    : ordinaryCap;
+}
+
+export function resolveBlotatoTargetDate(requestedDate = "", now = new Date()) {
+  const today = londonDateString(now);
+  const raw = trim(requestedDate);
+  if (!raw || raw === today) return today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const error = new Error("Invalid Blotato publication date; expected YYYY-MM-DD.");
+    error.statusCode = 422;
+    throw error;
+  }
+  const anchor = new Date(`${today}T12:00:00Z`);
+  const destination = new Date(`${raw}T12:00:00Z`);
+  const offset = (destination.getTime() - anchor.getTime()) / 86_400_000;
+  if (anchor.getUTCDay() !== 5 || !Number.isInteger(offset) || ![1, 2].includes(offset)
+    || !Number.isFinite(destination.getTime())) {
+    const error = new Error("Advance Blotato scheduling is restricted to next Saturday/Sunday on Friday UK time.");
+    error.statusCode = 422;
+    throw error;
+  }
+  return raw;
+}
+
 function createScheduledSessionId(laneSlug, scheduleSlot, scheduleDate) {
   const lane = trim(laneSlug).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "short";
   const slot = trim(scheduleSlot).toLowerCase().replace(/[^a-z0-9-]+/g, "-") || "slot";
@@ -1733,6 +1768,7 @@ async function runPublishJobImpl({
     }
     defaults.publishMode = publishMode;
     const activeScheduleDate = scheduleSlot ? (scheduleDate || londonDateString(new Date())) : null;
+    const paidRenderDate = londonDateString(new Date());
     scheduledTime = scheduleSlot ? resolveBlotatoScheduledTime(scheduleSlot, new Date(), activeScheduleDate) : null;
     defaults.scheduledTime = scheduledTime;
     const platforms = defaults.channels;
@@ -1990,7 +2026,7 @@ async function runPublishJobImpl({
       });
     if (!reusedVideo && !pendingRenderRecovery?.visualId && scheduleSlot && activeScheduleDate) {
       await refreshJobStoreFromState();
-      const paidRenderCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 2, 10);
+      const paidRenderCap = paidRenderDailyCap(paidRenderDate);
       const nextBudget = expectedCreditBudget(pack);
       const maxExpectedCredits = positiveIntEnv("BLOTATO_MAX_EXPECTED_CREDITS", 10, 10_000);
       if (nextBudget.expectedCredits > maxExpectedCredits) {
@@ -2005,15 +2041,17 @@ async function runPublishJobImpl({
           sessionId: job.sessionId,
           visualId: trim(job.videoId || job.result?.visualId),
           reservationId: job.creditGuardReservationId,
-          date: scheduleDateFromJob(job),
+          date: paidRenderGuardDate(job),
           expectedCredits: Number(job.creditBudget?.expectedCredits || job.result?.creditBudget?.expectedCredits),
         }));
       const reservationId = `${sessionId}:attempt-${getJob(lane.jobType, sessionId)?.attempt || 1}`;
       const reservation = await reservePaidRender({
-        reservationId, scheduleDate: activeScheduleDate, expectedCredits: nextBudget.expectedCredits,
+        reservationId, scheduleDate: paidRenderDate, expectedCredits: nextBudget.expectedCredits,
         dailyCap: paidRenderCap, monthlyCap: monthlyBudget, priorRenders,
       });
-      updateJob(lane.jobType, sessionId, { creditGuardReservationId: reservation.reservationId, creditBudget: nextBudget });
+      updateJob(lane.jobType, sessionId, {
+        creditGuardReservationId: reservation.reservationId, creditGuardDate: paidRenderDate, creditBudget: nextBudget,
+      });
     }
     const video = reusedVideo || (pendingRenderRecovery?.visualId
       ? await (async () => {
@@ -2025,7 +2063,7 @@ async function runPublishJobImpl({
           try {
             await linkPaidRenderVisual({
               reservationId: pendingRenderRecovery.creditGuardReservationId,
-              scheduleDate: activeScheduleDate,
+              scheduleDate: pendingRenderRecovery.creditGuardDate || activeScheduleDate,
               visualId: pendingRenderRecovery.visualId,
             });
           } catch (error) {
@@ -2082,7 +2120,7 @@ async function runPublishJobImpl({
           try {
             await linkPaidRenderVisual({
               reservationId: existingReservation || `${sessionId}:attempt-${getJob(lane.jobType, sessionId)?.attempt || 1}`,
-              scheduleDate: activeScheduleDate,
+              scheduleDate: getJob(lane.jobType, sessionId)?.creditGuardDate || paidRenderDate,
               visualId: visualMeta.visualId,
             });
           } catch (error) {
@@ -2533,7 +2571,7 @@ async function runPublishJobImpl({
 export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_SHORT_LANE, options = {}) {
   const lane = requireShortLaneConfig(laneSlug);
   const scheduleSlot = trim(options.scheduleSlot).toLowerCase();
-  const scheduleDate = scheduleSlot ? (options.scheduleDate || londonDateString(new Date())) : null;
+  const scheduleDate = scheduleSlot ? resolveBlotatoTargetDate(options.scheduleDate, new Date()) : null;
   let failedRenderReplacement = null;
   let failedPublishRecovery = null;
   let pendingRenderRecovery = null;
@@ -2577,6 +2615,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
         templateIdCandidates: pending.templateIdCandidates || [],
         rejectedTemplateIds: pending.rejectedTemplateIds || [],
         creditGuardReservationId: pending.creditGuardReservationId || `${pending.sessionId}:attempt-${Number(pending.attempt || 1)}`,
+        creditGuardDate: pending.creditGuardDate || scheduleDate,
         attempt: Number(pending.attempt || 1),
       };
       warn("blotato.schedule.pending_render_reconcile", {
