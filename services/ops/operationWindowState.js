@@ -39,16 +39,37 @@ function publicReceipt(receipt) {
 }
 
 export function operationTaskSucceeded(result = {}) {
-  // Older builds called a source-empty or still-owned blog build a successful
-  // skip. It cannot satisfy today's handoff or be reused as completed work.
+  // A 2xx transport acknowledgement does not prove a content item exists.
+  // In particular, "skipped because no source / previous work is still owned"
+  // must not satisfy dependencies or be cached as a completed operation task.
+  if (!result?.ok || result?.result?.ok === false || result?.result?.ready === false) return false;
+  if (result.skipped) return result.reason === "newsletter-disabled-by-configuration";
+  // A partially published episode is deliberately NOT safe to replay. Keep
+  // its existing provider handoff, preserve the warning for reconciliation,
+  // and do not generate a duplicate podcast when the operation resumes.
+  if (result.name === "podcast" && result.nonRetryablePartialPublication === true && result.warning === true) return true;
+
   const payload = result?.asyncJob?.job?.result
     ?? result?.asyncJob?.result
     ?? result?.result;
-  if (result?.name === "blog-social" && payload?.skipped && !payload?.existing) return false;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if (payload?.ok === false || payload?.ready === false || payload?.failed === true
+      || payload?.partialFailure === true || payload?.quarantined === true) return false;
+  const status = String(payload?.status || "").toLowerCase();
+  if (["failed", "error", "partial", "pending", "queued", "accepted", "running"].includes(status)
+      && result?.asyncStatus !== "completed") return false;
+  if (payload?.skipped !== true) return true;
+
+  // A skip is successful only when backed by a confirmed existing artefact
+  // or already-completed provider handoff. These are read-only confirmations;
+  // ambiguous/unknown skips are recovered, never silently marked delivered.
   return Boolean(
-    result?.ok
-    && result?.result?.ok !== false
-    && result?.result?.ready !== false
+    payload.existing
+    || payload.alreadyPublished === true
+    || payload.alreadyDispatched === true
+    || payload.alreadyScheduled === true
+    || (Array.isArray(payload.publicationReferences) && payload.publicationReferences.length > 0)
+    || ["already_dispatched", "already_published", "already_scheduled", "already_completed"].includes(status)
   );
 }
 
@@ -120,6 +141,32 @@ export function operationWindowPollStatus(receipt, {
   };
 }
 
+// Reserve one bounded recovery attempt for each late MAST backstop. Without
+// this reservation, the original worker can exhaust the whole attempt budget
+// before the afternoon or evening continuity checks start. Never grant one
+// on a different calendar day, a non-content window, or before the slot opens.
+export function sameDayBackstopAllowance(receipt = {}, nowMs = Date.now()) {
+  const windowName = normalise(receipt.window || normalise(receipt.id).split(":")[1]);
+  const slots = windowName === "friday-pm"
+    ? ["18:30", "22:10"]
+    : /^(monday|tuesday|wednesday|thursday|friday)-am$/.test(windowName)
+      ? ["15:45", "21:20"] : [];
+  if (!slots.length || !Number.isFinite(nowMs)) return 0;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(nowMs)).map((part) => [part.type, part.value]));
+  if (!parts.year || !parts.month || !parts.day || !/^\d{2}$/.test(parts.hour || "")
+      || !/^\d{2}$/.test(parts.minute || "")) return 0;
+  const londonDate = `${parts.year}-${parts.month}-${parts.day}`;
+  if (!normalise(receipt.id).startsWith(`${londonDate}:`)) return 0;
+  const localMinute = Number(parts.hour) * 60 + Number(parts.minute);
+  return slots.filter((time) => {
+    const [hour, minute] = time.split(":").map(Number);
+    return localMinute >= hour * 60 + minute;
+  }).length;
+}
+
 export function evaluateOperationWindowClaim(existing, {
   force = false,
   allowRecovery = false,
@@ -167,7 +214,11 @@ export function evaluateOperationWindowClaim(existing, {
   const requestedRevision = normalise(recoveryRevision);
   const existingRevision = normalise(existing.recoveryRevision);
   const revisionRecovery = Boolean(requestedRevision && requestedRevision !== existingRevision);
-  if (currentAttempt >= attemptLimit && !revisionRecovery) {
+  // Normal attempts are capped by the configured budget. The two scheduled
+  // same-day backstop slots each unlock at most one *additional* claim; no
+  // high-frequency replays can consume tomorrow's recovery allowance.
+  const availableAttempts = attemptLimit + sameDayBackstopAllowance(existing, Number(nowMs));
+  if (currentAttempt >= availableAttempts && !revisionRecovery) {
     return {
       claimable: false,
       reason: "same-day-window-recovery-exhausted",

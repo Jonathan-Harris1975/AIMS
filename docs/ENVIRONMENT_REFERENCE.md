@@ -121,7 +121,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_HUMAN_VISUAL_MIN_SCENES` | Yes | services/blotato/utils/newsShortsService.js:55 |
 | `BLOTATO_IMAGE_PROMPT_PROFILE` | Yes | services/blotato/utils/newsShortsService.js:32 |
 | `BLOTATO_IMAGE_TO_VIDEO_MODEL` | Yes | services/blotato/utils/autoPublishService.js:475 |
-| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2745 |
+| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2767 |
 | `BLOTATO_INSTAGRAM_SHARE_TO_FEED` | Yes | services/blotato/utils/autoPublishService.js:1001 |
 | `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1719 |
 | `BLOTATO_LOW_COST_IMAGE_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:474<br>services/blotato/utils/newsShortsService.js:30 |
@@ -149,14 +149,14 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_PUBLISH_WEBHOOK_SECRET` | Yes | services/shared/middleware/suiteAuth.js:76 |
 | `BLOTATO_RENDERED_MAX_SECONDS` | Yes | services/blotato/utils/renderedVideoQa.js:13 |
 | `BLOTATO_RENDERED_MIN_SECONDS` | Yes | services/blotato/utils/renderedVideoQa.js:12 |
-| `BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2139 |
-| `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2136 |
+| `BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2159 |
+| `BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES` | Yes | services/blotato/utils/autoPublishService.js:2156 |
 | `BLOTATO_RENDERED_QA_DOWNLOAD_TIMEOUT_MS` | Yes | services/blotato/utils/renderedVideoQa.js:127 |
 | `BLOTATO_RENDERED_QA_FRAMES` | Yes | services/blotato/utils/renderedVideoQa.js:15 |
 | `BLOTATO_RENDERED_QA_JSON_ATTEMPTS` | Yes | services/blotato/utils/renderedVideoQa.js:348 |
 | `BLOTATO_RENDERED_QA_MAX_BYTES` | Yes | services/blotato/utils/renderedVideoQa.js:16 |
 | `BLOTATO_RENDERED_QA_THRESHOLD` | Yes | services/blotato/utils/renderedVideoQa.js:14 |
-| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2306 |
+| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2326 |
 | `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/blotato/utils/autoPublishService.js:1226 |
 | `BLOTATO_RSS_BUCKET_ALIAS` | Yes | services/blotato/utils/rssArticlePicker.js:94<br>services/blotato/utils/rssArticleSource.js:143 |
 | `BLOTATO_RSS_FEED_URL` | No | services/blotato/utils/rssArticlePicker.js:78<br>services/blotato/utils/rssArticleSource.js:130 |
@@ -205,7 +205,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED` | Yes | services/comms-hub/routes/index.js:145 |
 | `COMMS_HUB_BACKUP_ENABLED` | Yes | services/comms-hub/routes/index.js:125 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED` | Yes | services/comms-hub/routes/index.js:140 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2633 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2655 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS` | Yes | services/comms-hub/contentAutomationQueueCore.js:325 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:670<br>services/blog/weekly/buildWeeklyBlogPost.js:501<br>services/podcast/runPodcastPipeline.js:141 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS` | Yes | services/comms-hub/contentAutomationQueueCore.js:328 |

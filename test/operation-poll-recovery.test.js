@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { operationWindowPollStatus, evaluateOperationWindowClaim, reusableOperationTaskResults,
+import { operationWindowPollStatus, evaluateOperationWindowClaim, operationTaskSucceeded, reusableOperationTaskResults, sameDayBackstopAllowance,
   NEWSLETTER_RECOVERY_REVISION } from "../services/ops/operationWindowState.js";
 
 const nowMs = Date.parse("2026-10-30T11:58:00Z");
@@ -89,4 +89,88 @@ test("a settled failure advertises a deployment recovery only when the durable c
     recoveryRevision: NEWSLETTER_RECOVERY_REVISION }).recoveryAvailable, undefined);
   assert.equal(operationWindowPollStatus({ ...receipt, finishedAt: "2026-10-30T11:57:45Z" },
     { ...options, recoveryRevision: NEWSLETTER_RECOVERY_REVISION }).recoveryAvailable, undefined);
+});
+
+test("an incomplete or ambiguous skip cannot count as finished content", () => {
+  const confirmed = { name: "blog-social", ok: true,
+    result: { ok: true, skipped: true, existing: { sessionId: "previous-complete" } } };
+  const missingSource = { name: "blog-social", ok: true,
+    result: { ok: true, skipped: true, reason: "source_not_ready" } };
+  const skippedPublish = { name: "zernio-tuesday", ok: true,
+    result: { ok: true, skipped: true, reason: "still_owned_by_another_job" } };
+  const acceptedOnly = { name: "newsletter-send", ok: true,
+    result: { ok: true, status: "accepted" } };
+  const confirmedDelivery = { name: "newsletter-send", ok: true,
+    result: { ok: true, skipped: true, status: "already_dispatched" } };
+  const intentionalDisable = { name: "newsletter-generate", ok: true,
+    skipped: true, reason: "newsletter-disabled-by-configuration" };
+
+  assert.equal(operationTaskSucceeded({ name: "newsletter-send", ok: true }), false,
+    "bare transport success must not be reused as published content");
+  assert.equal(operationTaskSucceeded({ name: "newsletter-send", ok: true, result: null }), false);
+  assert.equal(operationTaskSucceeded({ name: "zernio-tuesday", ok: true,
+    result: { ok: true, skipped: true, scheduled: true } }), false,
+    "scheduled but unconfirmed is not already published");
+  const partialPodcast = { name: "podcast", ok: true, warning: true,
+    nonRetryablePartialPublication: true, result: { ok: true, status: "running" },
+    asyncJob: { result: { ok: false, partialFailure: true } } };
+  assert.equal(operationTaskSucceeded(partialPodcast), true,
+    "previously submitted podcast must be preserved for reconciliation rather than replayed");
+  assert.equal(operationTaskSucceeded({ ...partialPodcast, name: "zernio-tuesday" }), false,
+    "the podcast partial-publication exception must not apply to other services");
+  assert.equal(operationTaskSucceeded(confirmed), true);
+  assert.equal(operationTaskSucceeded(missingSource), false);
+  assert.equal(operationTaskSucceeded(skippedPublish), false);
+  assert.equal(operationTaskSucceeded(acceptedOnly), false);
+  assert.equal(operationTaskSucceeded(confirmedDelivery), true);
+  assert.equal(operationTaskSucceeded(intentionalDisable), true);
+  assert.equal(operationTaskSucceeded({ name: "zernio-friday", ok: true,
+    result: { ok: true, status: "partial", partialFailure: true } }), false);
+  const prior = { results: [confirmed, missingSource, skippedPublish,
+    acceptedOnly, confirmedDelivery, intentionalDisable] };
+  assert.deepEqual(reusableOperationTaskResults(prior).map((entry) => entry.name),
+    ["blog-social", "newsletter-send", "newsletter-generate"]);
+});
+
+test("operation orchestration fails uncertain successful HTTP skips rather than caching them", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../services/ops/index.js", import.meta.url), "utf8");
+  assert.match(source, /reason: "content-task-completion-unverified", retryable: true/);
+  assert.match(source, /operationDependencyReady = \(dependency\) => operationTaskSucceeded\(dependency\)/);
+  assert.match(source, /if \(taskResult\.ok && !operationTaskSucceeded\(taskResult\)\)/);
+});
+
+test("late content recovery slots each reserve exactly one bounded extra attempt", () => {
+  const id = "2026-11-13:friday-am";
+  const failed = { id, window: "friday-am", status: "completed-with-failures",
+    attempt: 3, recoveryRevision: NEWSLETTER_RECOVERY_REVISION,
+    finishedAt: "2026-11-13T10:55:00Z",
+    results: [{ name: "newsletter-generate", ok: false, retryable: true }] };
+  const check = (receipt, time) => evaluateOperationWindowClaim(receipt, {
+    nowMs: Date.parse(`2026-11-13T${time}:00Z`),
+    allowRecovery: true, maxAttempts: 3, recoveryCooldownMs: 60_000,
+    recoveryRevision: NEWSLETTER_RECOVERY_REVISION,
+  });
+
+  assert.equal(sameDayBackstopAllowance(failed, Date.parse("2026-11-13T15:44:00Z")), 0);
+  assert.equal(check(failed, "15:44").claimable, false);
+  assert.equal(sameDayBackstopAllowance(failed, Date.parse("2026-11-13T15:45:00Z")), 1);
+  assert.deepEqual({ allowed: check(failed, "15:45").claimable,
+    attempt: check(failed, "15:45").attempt }, { allowed: true, attempt: 4 });
+  const fourthAttempt = { ...failed, attempt: 4, finishedAt: "2026-11-13T15:55:00Z" };
+  assert.equal(check(fourthAttempt, "16:30").claimable, false);
+  assert.equal(sameDayBackstopAllowance(fourthAttempt, Date.parse("2026-11-13T21:20:00Z")), 2);
+  assert.equal(check(fourthAttempt, "21:20").attempt, 5);
+  const fifthAttempt = { ...failed, attempt: 5, finishedAt: "2026-11-13T21:30:00Z" };
+  assert.equal(check(fifthAttempt, "22:00").claimable, false);
+  assert.equal(sameDayBackstopAllowance(failed, Date.parse("2026-11-14T15:45:00Z")), 0);
+
+  const podcast = { ...failed, id: "2026-11-13:friday-pm", window: "friday-pm" };
+  assert.equal(sameDayBackstopAllowance(podcast, Date.parse("2026-11-13T18:29:00Z")), 0);
+  assert.equal(sameDayBackstopAllowance(podcast, Date.parse("2026-11-13T18:30:00Z")), 1);
+  assert.equal(sameDayBackstopAllowance(podcast, Date.parse("2026-11-13T22:10:00Z")), 2);
+  assert.equal(sameDayBackstopAllowance({ ...failed, window: "unrecognised" },
+    Date.parse("2026-11-13T22:00:00Z")), 0);
+  assert.equal(sameDayBackstopAllowance({ ...failed, id: "2026-11-12:thursday-am" },
+    Date.parse("2026-11-13T21:20:00Z")), 0);
 });
