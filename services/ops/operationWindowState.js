@@ -14,7 +14,7 @@ export const OPERATION_RECOVERY_REVISION = "content-upstream-recovery-2026-11-03
 export const PODCAST_RECOVERY_REVISION = "podcast-section-validation-2026-10-30-v2";
 // One deployment-scoped recovery for a failed newsletter window after the
 // source/artwork continuity repair. Successful sibling tasks remain reusable.
-export const NEWSLETTER_RECOVERY_REVISION = "newsletter-publication-continuity-2026-11-09-v2";
+export const NEWSLETTER_RECOVERY_REVISION = "newsletter-evidence-weekend-repair-2026-11-13-v3";
 
 function normalise(value = "") {
   return String(value || "").trim();
