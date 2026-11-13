@@ -58,7 +58,7 @@ export function operationTaskSucceeded(result = {}) {
   const status = String(payload?.status || "").toLowerCase();
   if (["failed", "error", "partial", "pending", "queued", "accepted", "running"].includes(status)
       && result?.asyncStatus !== "completed") return false;
-  if (payload?.skipped !== true) return true;
+  if (payload?.skipped !== true) return payload?.ok === true || payload?.ready === true;
 
   // A skip is successful only when backed by a confirmed existing artefact
   // or already-completed provider handoff. These are read-only confirmations;
