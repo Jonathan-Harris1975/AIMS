@@ -1,3 +1,4 @@
+import { reviewAuditEvidence } from "./stagedAuditReview.js";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { chromium } from "playwright-core";
@@ -892,13 +893,14 @@ export async function runWebsiteAuditCouncil(stageReports) {
   }
   try {
     const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../services/shared/utils/ai-service.js");
-    const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
+    const diagnostics = getProviderDiagnosticsForRoute("auditFinalReport");
     const configured = arr(diagnostics.configuredProviders).filter((provider) => provider.configured);
-    if (!configured.length) throw new Error("No configured auditForensic provider");
+    if (!configured.length) throw new Error("No configured auditFinalReport provider");
     const payload = compactWebsiteAuditInputs(stageReports);
-    const raw = await resilientRequest("auditForensic", {
+    const reviews = await reviewAuditEvidence(payload, resilientRequest);
+    const raw = await resilientRequest("auditFinalReport", {
       section: "website-audit-expert-council",
-      max_tokens: Number(process.env.WEBSITE_AUDIT_COUNCIL_MAX_TOKENS || 18000),
+      max_tokens: Math.min(12000, Number(process.env.WEBSITE_AUDIT_COUNCIL_MAX_TOKENS || 10000)),
       temperature: Number(process.env.WEBSITE_AUDIT_COUNCIL_TEMPERATURE || 0.12),
       top_p: 0.95,
       timeoutMs: Number(process.env.WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS || 300000),
@@ -907,7 +909,7 @@ export async function runWebsiteAuditCouncil(stageReports) {
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Consolidate this verified audit evidence bundle into the required council JSON.\n${JSON.stringify(payload)}` },
+        { role: "user", content: `Consolidate this verified audit evidence bundle into the required council JSON.\n${JSON.stringify(reviews)}` },
       ],
     });
     const normalised = normaliseCouncil(parseJsonResponse(raw), stageReports);

@@ -80,6 +80,14 @@ const openrouterFreePrimary = provider(
 );
 
 
+// Dedicated monthly routes cannot fall through to premium writers.
+const auditFreePrimary = provider("auditFreePrimary", ["AUDIT_FREE_PRIMARY_MODEL"], SHARED_OPENROUTER_KEY);
+const auditFreeBackup = provider("auditFreeBackup", ["AUDIT_FREE_BACKUP_MODEL"], SHARED_OPENROUTER_KEY);
+const auditEconomy = provider("auditEconomy", ["AUDIT_PAID_FINAL_MODEL"], SHARED_OPENROUTER_KEY);
+Object.defineProperty(auditFreePrimary, "name", { get: () => envValue("AUDIT_FREE_PRIMARY_MODEL") || "google/gemma-4-31b-it:free" });
+Object.defineProperty(auditFreeBackup, "name", { get: () => envValue("AUDIT_FREE_BACKUP_MODEL") || "nvidia/nemotron-3.5-super-vl:free" });
+Object.defineProperty(auditEconomy, "name", { get: () => envValue("AUDIT_PAID_FINAL_MODEL") || "google/gemini-2.5-flash-lite" });
+
 const commsFreePrimary = provider(
   "commsFreePrimary",
   ["COMMS_HUB_MODEL_FREE_PRIMARY"],
@@ -201,6 +209,9 @@ const modelRegistry = {
   claudeOpus47: claudeOpus,
   gpt56Sol,
   openrouterFreePrimary,
+  auditFreePrimary,
+  auditFreeBackup,
+  auditEconomy,
   commsFreePrimary,
   commsFreeBackup,
   commsFreeFallback,
@@ -286,6 +297,8 @@ export const aiConfig = {
     blogWeekly: routeChain(["standard", "summary", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     blogSocial: routeChain(["highQuality", "audit", "standard", "summary", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
     onBrandAudit: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "meta"]),
+    auditEvidenceReview: fixedRouteChain(["auditFreePrimary", "auditFreeBackup"]),
+    auditFinalReport: fixedRouteChain(["auditEconomy"]),
     auditForensic: routeChain(["audit", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite", "meta"]),
     zernioDaily: routeChain(["highQuality", "standard", "fast", "fallback"], ["claudeSonnet5", "anthropic46", "google25FlashLite"]),
     zernioMiniSeriesResearch: routeChain(["audit", "highQuality", "standard"], ["claudeSonnet5", "anthropic46"]),

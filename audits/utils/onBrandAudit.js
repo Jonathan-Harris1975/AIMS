@@ -1,3 +1,4 @@
+import { reviewAuditEvidence } from "./stagedAuditReview.js";
 import { resilientRequest } from "../../services/shared/utils/ai-service.js";
 import { sanitizeSessionId } from "../../services/shared/utils/sessionId.js";
 import { buildAuditPrefix, buildLatestKey } from "./auditPaths.js";
@@ -522,15 +523,19 @@ function deterministicFallbackReport(evidence, errorMessage) {
   return normaliseOnBrandReport({}, evidence, { rawModelError: errorMessage });
 }
 
-async function runModelAudit({ sessionId, evidence, dryRun }) {
+async function runModelAudit({ sessionId, evidence, dryRun, monthlyReview = false }) {
   if (dryRun) {
     return deterministicFallbackReport(evidence, "dryRun=true; LLM judgement skipped by request.");
   }
 
-  const messages = buildOnBrandAuditMessages({ evidence });
+  const modelEvidence = monthlyReview
+    ? { metadata: evidence.metadata, reviews: await reviewAuditEvidence(evidence, resilientRequest) }
+    : evidence;
+  const route = monthlyReview ? "auditFinalReport" : "onBrandAudit";
+  const messages = buildOnBrandAuditMessages({ evidence: modelEvidence });
   let raw = "";
   try {
-    raw = await resilientRequest("onBrandAudit", {
+    raw = await resilientRequest(route, {
       sessionId,
       messages,
       max_tokens: REPORT_MAX_TOKENS,
@@ -544,9 +549,9 @@ async function runModelAudit({ sessionId, evidence, dryRun }) {
       message: firstError?.message,
     });
     try {
-      const repairRaw = await resilientRequest("onBrandAudit", {
+      const repairRaw = await resilientRequest(route, {
         sessionId: `${sessionId}-repair`,
-        messages: buildOnBrandRepairMessages({ raw, evidence }),
+        messages: buildOnBrandRepairMessages({ raw, evidence: modelEvidence }),
         max_tokens: REPORT_MAX_TOKENS,
         temperature: 0.15,
         maxRetries: 0,
@@ -597,7 +602,7 @@ export async function runOnBrandAudit(options = {}) {
 
   const evidence = await collectOnBrandEvidence({ sessionId, ...runOptions });
   const evidencePublish = await publishAuditJson({ key: `${reportPrefix}/evidence.json`, payload: evidence });
-  const report = await runModelAudit({ sessionId, evidence, dryRun: runOptions.dryRun });
+  const report = await runModelAudit({ sessionId, evidence, dryRun: runOptions.dryRun, monthlyReview: options.monthlyReview === true });
   const html = renderOnBrandReportHtml(report);
 
   const reportJsonPublish = await publishAuditJson({ key: `${reportPrefix}/report.json`, payload: report });

@@ -742,7 +742,7 @@ export async function collectOnBrandEvidence(options = {}) {
 
   const [zernioBlogSocial, podcastTranscripts, rss] = await Promise.all([
     collectZernioEvidence({ include: options.includeZernio !== false, windowStart, windowEnd, lookbackDays }),
-    collectPodcastTranscriptEvidence({ include: options.includePodcastTranscripts !== false, windowStart, windowEnd }),
+    collectPodcastTranscriptEvidence({ include: options.includePodcastTranscripts !== false, windowStart, windowEnd, maxTranscripts: Math.max(3, Math.ceil(lookbackDays / 7) + 1) }),
     collectRssEvidence({ include: options.includeRss !== false, lookbackDays }),
   ]);
 

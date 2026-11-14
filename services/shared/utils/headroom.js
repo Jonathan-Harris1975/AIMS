@@ -29,6 +29,8 @@ const DEFAULT_ROUTES = Object.freeze([
   "blogSocial",
   "onBrandAudit",
   "auditForensic",
+  "auditEvidenceReview",
+  "auditFinalReport",
   "zernioDaily",
   "zernioMiniSeriesResearch",
   "zernioMiniSeriesTheme",
