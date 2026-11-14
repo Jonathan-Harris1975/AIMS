@@ -152,3 +152,44 @@ The final report also carries the compact website policy and a `targetAssessment
 `POST /audits/content-master/run` consolidates the latest AIMS-owned on-brand, Zernio/social-performance, newsletter, podcast-episode, podcast-transcript and brand-social evidence into one 36-seat editorial council. The board covers overall content quality, Zernio social, Blotato shorts, ebook conversion, dynamic/static hashtags, weekly blog, blog social, podcast transcript engagement, podcast keywords and AI Edge newsletter quality.
 
 The permanent output contract is exactly `content-audit.pdf`, `content-audit.html` and `content-audit.json` under `audits/content-master/YYYY-MM/<session>/`, plus the standard `audits/content-master/latest.json` pointer. The JSON uses remediation contract `rams-content/v1` and a five-total-attempt targeted-repair policy. RAMS dispatch uses `CONTENT_AUDIT_TRIGGER_RAMS=true` and hands the exact final JSON key to RAMS `POST /rebuild/content/run` with retry and idempotency protection.
+
+### Monthly audit recovery and economy synthesis (14 November 2026)
+
+The 13 November content audit retained all six source reports but its final model
+request failed with OpenRouter `402 / in_flight_budget_exhausted`. The previous
+pipeline also wrote timestamp-style report keys which did not satisfy the RAMS
+content handoff validator's month/session path contract.
+
+Monthly Content Master now refreshes 31 days of on-brand/podcast evidence, reads
+actual newsletter plaintext alongside QA/delivery counts, and inspects owned R2
+blog HTML modified in the monthly window. R2 modification time is disclosed as a
+scan proxy, not asserted to be the publication date. Unreadable objects and absent
+content remain explicit limitations. Text review does not prove audio quality,
+rendered image quality or video pacing; those require their respective evidence.
+
+Content Master, the monthly on-brand source and the website final council split
+evidence into sequential 24,000-character free-model reviews before economy paid
+synthesis. Default models verified against OpenRouter's catalogue on 14 November:
+
+- `AUDIT_FREE_PRIMARY_MODEL`: `google/gemma-4-31b-it:free`.
+- `AUDIT_FREE_BACKUP_MODEL`: `nvidia/nemotron-3.5-super-vl:free`.
+- `AUDIT_PAID_FINAL_MODEL`: `google/gemini-2.5-flash-lite`.
+
+The dedicated free route refuses paid slugs. The final route contains only the
+economy provider and cannot escalate to premium writers. These defaults establish
+a candidate routing policy; live editorial output still needs acceptance review.
+Free capacity/invalid-output failures pass the exact original fragment to the paid
+final step rather than discard evidence. All requests retain shared Headroom,
+credential resolution, usage logging and model exclusions. Existing standalone
+Digital Growth and SEO forensic source-analysis routing remains unchanged.
+
+Content reports require all nine lane sections, all 36 substantive specialist
+notes and actionable issue rows with an owner, exact remediation, acceptance and
+verification. Observed source finding IDs and exact files must support executable
+code fixes; unsupported paths are downgraded to manual review. PDF/HTML include
+the implementation evidence and verification details present in JSON.
+
+Final content artefacts use `audits/content-master/YYYY-MM/<session>/`. Incomplete
+synthesis is retained for diagnosis, returns `ok:false`, becomes a failed async
+job for MAST and cannot dispatch RAMS. A stored source report is availability
+proof; its nested coverage/limitations remain visible in the master report.

@@ -1,4 +1,3 @@
-import { buildAuditPrefix } from "./auditPaths.js";
 import { publishAuditBuffer, publishAuditJson, publishAuditLatest, publishAuditText } from "./publishAuditArtifacts.js";
 import { buildContentMasterHtml, loadContentMasterSources, renderContentMasterPdf, runContentMasterCouncil } from "./contentMasterCouncil.js";
 import { runOnBrandAudit } from "./onBrandAudit.js";
@@ -20,6 +19,8 @@ async function refreshMonthlySources(sessionId) {
   const onBrand = requireOk(await runOnBrandAudit({
     sessionId: `${sessionId}-on-brand`,
     runPodcastWebsiteReports: true,
+    lookbackDays: 31,
+    monthlyReview: true,
   }), "On-Brand audit");
 
   const podcastWebsite = requireOk(onBrand.podcastWebsiteReports, "Podcast website reports");
@@ -72,7 +73,8 @@ function assertFreshSources(sources, refreshed) {
 }
 
 export async function runContentMasterAudit({ sessionId = `content-master-${Date.now()}` } = {}) {
-  const reportPrefix = buildAuditPrefix(AUDIT_TYPE, sessionId);
+  if (!/^[A-Za-z0-9._-]+$/.test(sessionId)) throw new Error("Content master sessionId must be a safe single path segment");
+  const reportPrefix = `audits/${AUDIT_TYPE}/${new Date().toISOString().slice(0, 7)}/${sessionId}`;
   const generatedAt = new Date().toISOString();
 
   // A monthly master review is a transaction, not a reader of arbitrary
@@ -143,7 +145,13 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
   };
 
   const json = await publishAuditJson({ key: keys.json, payload: jsonPayload });
-  const ramsDispatch = await dispatchContentAuditToRams({ sessionId, auditJsonKey: json.key });
+  const synthesisComplete = council.synthesisState === "Complete";
+  let ramsDispatch = { ok: false, status: "blocked_incomplete_synthesis", enabled: false,
+    reason: "Final synthesis is incomplete; retained for diagnosis only." };
+  if (synthesisComplete) {
+    try { ramsDispatch = await dispatchContentAuditToRams({ sessionId, auditJsonKey: json.key }); }
+    catch (error) { ramsDispatch = { ok: false, status: "dispatch_failed", error: error.message }; }
+  }
   const latest = await publishAuditLatest({
     auditType: AUDIT_TYPE,
     sessionId,
@@ -168,7 +176,9 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
   });
 
   return {
-    ok: true,
+    ok: synthesisComplete && ramsDispatch.ok !== false,
+    synthesisState: council.synthesisState,
+    error: synthesisComplete ? (ramsDispatch.ok === false ? "RAMS dispatch failed" : null) : "Content master synthesis incomplete",
     auditType: AUDIT_TYPE,
     sessionId,
     reportPrefix,

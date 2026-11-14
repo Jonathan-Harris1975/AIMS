@@ -79,7 +79,12 @@ async function loadIssueRecordsForProfile(profile, { start, end }) {
           warn("audit.newsletter.campaign_record_unreadable", { key: campaignKey, error: err.message });
         }
       }
-      issues.push({ metadata, campaign });
+      const textKey = `${metadataKey.slice(0, metadataKey.lastIndexOf("/"))}/index.txt`;
+      let editorialText = null;
+      let editorialError = null;
+      try { editorialText = await getObjectAsText(bucketKey, textKey); }
+      catch (error) { editorialError = error.message; }
+      issues.push({ metadata, campaign, metadataKey, textKey, editorialText, editorialError });
     } catch (err) {
       warn("audit.newsletter.metadata_unreadable", { key: metadataKey, error: err.message });
     }
@@ -145,6 +150,14 @@ async function buildProfileSection(profile, window) {
     qa,
     audience,
     campaignPerformance,
+    editorialEvidence: issues.map((issue) => ({
+      metadataKey: issue.metadataKey, textKey: issue.textKey,
+      subject: issue.metadata.subject, previewText: issue.metadata.previewText,
+      sourceLinks: issue.metadata.sourceLinks || [],
+      text: issue.editorialText,
+      status: issue.editorialText ? "complete" : "missing",
+      error: issue.editorialError,
+    })),
   };
 }
 

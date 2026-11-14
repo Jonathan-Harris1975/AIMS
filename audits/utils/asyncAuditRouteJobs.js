@@ -50,6 +50,11 @@ async function executeAuditJob({ auditType, sessionId, payload, runner, metadata
   const jobType = asyncAuditJobType(auditType);
   try {
     const result = await runner(payload);
+    if (result?.ok === false) {
+      const failed = failJob(jobType, sessionId, new Error(result.error || "Audit returned an unsuccessful result"), { ...metadata, result });
+      await flushJobStoreWrites({ throwOnError: false });
+      return failed;
+    }
     const completed = completeJob(jobType, sessionId, {
       ...metadata,
       result,
