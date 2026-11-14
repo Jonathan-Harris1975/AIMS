@@ -369,7 +369,7 @@ export const ENV = {
 
 
   /* ---------------- AWS ---------------- */
-  AWS_REGION: opt("AWS_REGION", "eu-west-2"),
+  AWS_REGION: opt("AWS_REGION", "eu-north-1"),
   AWS_ACCESS_KEY_ID: opt("AWS_ACCESS_KEY_ID"),
   AWS_SECRET_ACCESS_KEY: opt("AWS_SECRET_ACCESS_KEY"),
 };

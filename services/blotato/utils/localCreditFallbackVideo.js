@@ -13,12 +13,12 @@ const VIDEO_FPS = 30;
 
 async function synthesizePollyNarration(text) {
   try {
-    const client = new PollyClient({ region: process.env.AWS_REGION || "eu-west-2" });
+    const client = new PollyClient({ region: process.env.AWS_REGION || "eu-north-1" });
     const response = await client.send(new SynthesizeSpeechCommand({
       Text: text,
       OutputFormat: "mp3",
       VoiceId: process.env.POLLY_VOICE_ID || "Brian",
-      Engine: "neural",
+      Engine: "standard",
     }));
     if (!response.AudioStream) throw new Error("Polly returned no narration audio.");
     return Buffer.from(await response.AudioStream.transformToByteArray());
