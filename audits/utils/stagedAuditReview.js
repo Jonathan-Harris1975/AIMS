@@ -4,6 +4,7 @@ export function evidenceChunks(sources, limit = 24000) {
   const chunks = [];
   for (const [source, value] of Object.entries(sources)) {
     const json = JSON.stringify(value);
+    if (json === undefined) continue;
     for (let offset = 0; offset < json.length; offset += limit) {
       chunks.push({ source, offset, totalCharacters: json.length, evidence: json.slice(offset, offset + limit) });
     }

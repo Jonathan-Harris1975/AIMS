@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { evidenceChunks } from '../audits/utils/stagedAuditReview.js';
 import { createAuditCapacityQueue, isAuditInFlightRefusal } from '../services/shared/utils/auditCapacity.js';
 
 const busy = () => Object.assign(new Error('OpenRouter in_flight_budget_exhausted'), {status:402,retryAfterMs:120000});
@@ -49,4 +50,12 @@ test('both website source analyses use staged economy requests with capped outpu
     assert.match(source,/await reviewAuditEvidence\(/);
     assert.match(source,/Math\.min\(10000,/);
   }
+});
+
+
+test('optional undefined source fields are omitted without failing website analysis', () => {
+  const chunks = evidenceChunks({generatedAt:undefined,baseUrl:undefined,inventory:{pages:7},missing:null});
+  assert.deepEqual(chunks.map(c=>c.source),['inventory','missing']);
+  assert.deepEqual(JSON.parse(chunks[0].evidence),{pages:7});
+  assert.equal(chunks[1].evidence,'null');
 });
