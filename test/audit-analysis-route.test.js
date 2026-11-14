@@ -77,12 +77,14 @@ function validAnalysisPayload() {
 test("/analysis returns validated forensic JSON through the shared AI route", async () => {
   const oldEnv = {
     AUDIT_CALLBACK_TOKEN: process.env.AUDIT_CALLBACK_TOKEN,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     OPENROUTER_ANTHROPIC: process.env.OPENROUTER_ANTHROPIC,
     OPENROUTER_API_KEY_ANTHROPIC: process.env.OPENROUTER_API_KEY_ANTHROPIC,
   };
   const oldFetch = globalThis.fetch;
 
   process.env.AUDIT_CALLBACK_TOKEN = "route-token";
+  process.env.OPENROUTER_API_KEY = ["synthetic", "shared", "audit", "test"].join("-");
   process.env.OPENROUTER_ANTHROPIC = "anthropic/test-model";
   process.env.OPENROUTER_API_KEY_ANTHROPIC = "test-key";
   globalThis.fetch = async () => ({
@@ -133,12 +135,14 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
 test("/analysis completes with deterministic fallback after malformed forensic JSON", async () => {
   const oldEnv = {
     AUDIT_CALLBACK_TOKEN: process.env.AUDIT_CALLBACK_TOKEN,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     OPENROUTER_ANTHROPIC: process.env.OPENROUTER_ANTHROPIC,
     OPENROUTER_API_KEY_ANTHROPIC: process.env.OPENROUTER_API_KEY_ANTHROPIC,
   };
   const oldFetch = globalThis.fetch;
 
   process.env.AUDIT_CALLBACK_TOKEN = "route-token";
+  process.env.OPENROUTER_API_KEY = ["synthetic", "shared", "audit", "test"].join("-");
   process.env.OPENROUTER_ANTHROPIC = "anthropic/test-model";
   process.env.OPENROUTER_API_KEY_ANTHROPIC = "test-key";
   globalThis.fetch = async () => ({

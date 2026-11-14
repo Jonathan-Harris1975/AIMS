@@ -180,8 +180,9 @@ economy provider and cannot escalate to premium writers. These defaults establis
 a candidate routing policy; live editorial output still needs acceptance review.
 Free capacity/invalid-output failures pass the exact original fragment to the paid
 final step rather than discard evidence. All requests retain shared Headroom,
-credential resolution, usage logging and model exclusions. Existing standalone
-Digital Growth and SEO forensic source-analysis routing remains unchanged.
+credential resolution, usage logging and model exclusions. Website Digital Growth and SEO forensic source analyses also use free evidence
+reviews followed by economy paid synthesis, including schema repair. Their paid
+output reservations are capped at 10,000 tokens.
 
 Content reports require all nine lane sections, all 36 substantive specialist
 notes and actionable issue rows with an owner, exact remediation, acceptance and
@@ -193,3 +194,17 @@ Final content artefacts use `audits/content-master/YYYY-MM/<session>/`. Incomple
 synthesis is retained for diagnosis, returns `ok:false`, becomes a failed async
 job for MAST and cannot dispatch RAMS. A stored source report is availability
 proof; its nested coverage/limitations remain visible in the master report.
+
+### Website audit shared-capacity recovery
+
+All `auditFinalReport` requests now share a process-local queue. This serialises
+paid audit synthesis without restricting Headroom or unrelated content routes.
+A `402` explicitly identifying `in_flight_budget_exhausted` waits for the supplied
+Retry-After (up to 120 seconds; 120 seconds if absent), then retries once on the
+same economy route. A real credit shortage is not retried. A second temporary
+refusal propagates to the existing controlled-failure/report handling.
+
+This reduces concurrent audit reservations within one AIMS process. It cannot
+reserve account capacity against other repositories or replicas. Website reports
+still require all source-stage evidence before RAMS dispatch; temporary source
+evidence is retained when required evidence is incomplete or handoff fails.

@@ -1,3 +1,4 @@
+import { createAuditCapacityQueue } from "./auditCapacity.js";
 import { claimRepairAction, currentTaskRepairBudget } from "./taskRepairBudget.js";
 import { prepareRepairRequest } from "./repairHistory.js";
 // ============================================================
@@ -431,7 +432,16 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
   signal?.addEventListener?.("abort", onAbort, { once: true });
 });
 
-export async function resilientRequest(routeName, {
+const queueAuditFinal = createAuditCapacityQueue();
+export async function resilientRequest(routeName, options = {}) {
+  if (resolveRouteKey(routeName) !== "auditFinalReport") return requestWithProviders(routeName, options);
+  return queueAuditFinal(() => requestWithProviders(routeName, { ...options, maxRetries: 0 }), {
+    signal: options.signal,
+    wait: delay => sleep(delay, options.signal),
+  });
+}
+
+async function requestWithProviders(routeName, {
   sessionId,
   section,
   messages,
