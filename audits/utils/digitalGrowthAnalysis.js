@@ -491,7 +491,7 @@ export async function runDigitalGrowthAnalysis(payload) {
         repairRaw = await resilientRequest("auditFinalReport", {
           sessionId: payload?.sessionId,
           section: "digital-growth-schema-repair",
-          max_tokens: Number(process.env.DIGITAL_GROWTH_AI_REPAIR_MAX_TOKENS || 8000),
+          max_tokens: Math.min(10000, Number(process.env.DIGITAL_GROWTH_AI_REPAIR_MAX_TOKENS || 8000)),
           temperature: 0,
           timeoutMs: Number(process.env.DIGITAL_GROWTH_AI_REPAIR_TIMEOUT_MS || 120000),
           maxRetries: 0,
