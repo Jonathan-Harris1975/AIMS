@@ -22,42 +22,13 @@ test("website audit fails fast when RAMS handoff credentials are absent", async 
   assert.throws(() => assertRamsWebsiteDispatchConfigured(), /RAMS_API_KEY or RMS_API_KEY is not configured/);
 });
 
-test("AIMS waits for the RAMS website report before completing the handoff", async () => {
+test("AIMS persists pending RAMS work instead of an in-memory report waiter", async () => {
   let polls = 0;
-  globalThis.fetch = async () => {
-    polls += 1;
-    if (polls === 1) {
-      return new Response(JSON.stringify({ status: "pending" }), { status: 202, headers: { "content-type": "application/json" } });
-    }
-    return new Response(JSON.stringify({
-      runId: "2026-08-01T15-30-00Z",
-      pipeline: "website",
-      finishedAt: "2026-08-01T16:10:00Z",
-      issuesTotal: 3,
-      issuesApplied: 2,
-      issuesReverted: 0,
-      issuesSkipped: 1,
-      issuesManualReview: 0,
-      branch: "rms-qa/website/2026-08-01",
-      error: null,
-    }), { status: 200, headers: { "content-type": "application/json" } });
-  };
-
-  const { __ramsWebsiteDispatchTestHooks } = await import(`../audits/utils/ramsWebsiteDispatch.js?wait=${Date.now()}`);
+  globalThis.fetch = async () => { polls += 1; return new Response('{}', { status: 202 }); };
+  const { __ramsWebsiteDispatchTestHooks } = await import('../audits/utils/ramsWebsiteDispatch.js');
   const result = await __ramsWebsiteDispatchTestHooks.waitForRamsRunCompletion({
-    config: {
-      baseUrl: "https://mod.example.test",
-      apiKey: "test-key",
-      timeoutMs: 1000,
-      completionPollIntervalMs: 1,
-      completionTimeoutMs: 1000,
-    },
-    runId: "2026-08-01T15-30-00Z",
-    sessionId: "website-2026-08-01",
-    auditJsonKey: "audits/website/2026-08/website-2026-08-01/website-audit.json",
+    config: { baseUrl: "https://mod.example.test", apiKey: "test-key", timeoutMs: 1000 }, runId: "run-1",
   });
-
-  assert.equal(result.status, "completed");
-  assert.equal(result.issuesApplied, 2);
-  assert.equal(polls, 2);
+  assert.equal(result.status, "pending");
+  assert.equal(polls, 1);
 });

@@ -1,3 +1,4 @@
+import { readRamsRemediationCompletion } from "./ramsRemediationCompletion.js";
 import { info, warn } from "../../logger.js";
 import { isRetryableDispatchError } from "./ramsWebsiteDispatchRetry.js";
 
@@ -98,39 +99,10 @@ async function getRamsRunReport({ config, runId }) {
   }
 }
 
-async function waitForRamsRunCompletion({ config, runId, sessionId, auditJsonKey }) {
-  const deadline = Date.now() + config.completionTimeoutMs;
-  while (Date.now() < deadline) {
-    const current = await getRamsRunReport({ config, runId });
-    if (current.state === "completed") {
-      if (current.payload?.error) {
-        const error = new Error(`RAMS website remediation completed with an error: ${current.payload.error}`);
-        error.payload = current.payload;
-        throw error;
-      }
-      info("audit.website.rams.completed", {
-        sessionId,
-        auditJsonKey,
-        runId,
-        issuesApplied: current.payload?.issuesApplied ?? null,
-        issuesManualReview: current.payload?.issuesManualReview ?? null,
-      });
-      return {
-        ok: true,
-        status: "completed",
-        runId,
-        finishedAt: current.payload?.finishedAt || null,
-        issuesTotal: current.payload?.issuesTotal ?? null,
-        issuesApplied: current.payload?.issuesApplied ?? null,
-        issuesReverted: current.payload?.issuesReverted ?? null,
-        issuesSkipped: current.payload?.issuesSkipped ?? null,
-        issuesManualReview: current.payload?.issuesManualReview ?? null,
-        branch: current.payload?.branch || null,
-      };
-    }
-    await sleep(config.completionPollIntervalMs);
-  }
-  throw new Error(`RAMS website remediation ${runId} exceeded ${config.completionTimeoutMs}ms completion timeout`);
+async function waitForRamsRunCompletion({ config, runId }) {
+  // Polling belongs to the durable parent job, so restarts do not lose an
+  // eight-hour in-memory waiter or confuse processing with deployed repairs.
+  return readRamsRemediationCompletion({ pipeline: "website", runId, config });
 }
 
 export function assertRamsWebsiteDispatchConfigured() {
@@ -156,17 +128,17 @@ export async function dispatchWebsiteAuditToRams({ sessionId, auditJsonKey }) {
     try {
       const payload = await postOnce({ config, sessionId, auditJsonKey: finalKey });
       info("audit.website.rams.dispatched", { sessionId, auditJsonKey: finalKey, attempt, runId: payload.runId || null });
-      if (!config.waitForCompletion) {
-        return { ok: true, status: "accepted", enabled: true, attempt, ...payload };
-      }
       if (!payload.runId) throw new Error("RAMS website rebuild dispatch omitted runId");
+      if (!config.waitForCompletion) {
+        return { ok: true, status: "awaiting-remediation", enabled: true, attempt, ...payload };
+      }
       const completion = await waitForRamsRunCompletion({
         config,
         runId: payload.runId,
         sessionId,
         auditJsonKey: finalKey,
       });
-      return { ok: true, enabled: true, attempt, accepted: true, ...payload, completion, status: completion.status };
+      return { ok: true, enabled: true, attempt, accepted: true, ...payload, completion, status: completion.status === "completed" ? "completed" : "awaiting-remediation" };
     } catch (err) {
       lastError = err;
       const retryable = isRetryableDispatchError(err);

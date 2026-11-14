@@ -1118,6 +1118,10 @@ def admit_manual_pr(pr: dict[str, Any]) -> None:
 
 
 def _reconcile_pr_candidate(pr: dict[str, Any]) -> None:
+    from audit_remediation_worker import audit_scope_admission
+    if not audit_scope_admission(pr):
+        log(f"PR #{pr['number']} failed durable audit scope/regression-test admission.")
+        return
     kind = automation_kind(pr)
     if pr.get("draft"):
         return

@@ -1,5 +1,7 @@
+import { readRamsRemediationCompletion } from "./ramsRemediationCompletion.js";
+import { getRamsContentDispatchConfig } from "./ramsContentDispatch.js";
 import crypto from "node:crypto";
-import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh } from "../../services/shared/utils/jobStore.js";
+import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh, updateJob } from "../../services/shared/utils/jobStore.js";
 import { info, error as logError } from "../../logger.js";
 
 function trim(value) {
@@ -54,6 +56,11 @@ async function executeAuditJob({ auditType, sessionId, payload, runner, metadata
       const failed = failJob(jobType, sessionId, new Error(result.error || "Audit returned an unsuccessful result"), { ...metadata, result });
       await flushJobStoreWrites({ throwOnError: false });
       return failed;
+    }
+    if (result?.remediationPending) {
+      const pending = updateJob(jobType, sessionId, { ...metadata, result, status: "running", phase: "awaiting-remediation" });
+      await flushJobStoreWrites({ throwOnError: false });
+      return pending;
     }
     const completed = completeJob(jobType, sessionId, {
       ...metadata,
@@ -127,7 +134,22 @@ export function getAsyncAuditRouteJob(auditType, sessionId, req = null) {
 }
 
 export async function getAsyncAuditRouteJobFresh(auditType, sessionId, req = null) {
-  return publicShape(auditType, await getPublicJobFresh(asyncAuditJobType(auditType), sessionId), req);
+  const type = asyncAuditJobType(auditType);
+  let job = await getPublicJobFresh(type, sessionId);
+  if (auditType === "content-master" && job?.result?.remediationPending) {
+    const completion = await readRamsRemediationCompletion({ pipeline: "content", runId: job.result.ramsDispatch?.runId,
+      config: getRamsContentDispatchConfig() });
+    if (completion.status === "completed") {
+      job = completeJob(type, sessionId, { result: { ...job.result, remediationPending: false,
+        ramsDispatch: { ...job.result.ramsDispatch, status: "completed", completion } }, phase: "completed" });
+      await flushJobStoreWrites({ throwOnError: false });
+    } else if (completion.status === "attention_required") {
+      job = failJob(type, sessionId, new Error("RAMS audit remediation needs attention; work is not complete"),
+        { result: { ...job.result, completion }, phase: "remediation-blocked" });
+      await flushJobStoreWrites({ throwOnError: false });
+    }
+  }
+  return publicShape(auditType, job, req);
 }
 
 export default {
