@@ -445,6 +445,12 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     }
     # Persist the deduplication marker before the external side effect. A rerun
     # after a successful Kilo dispatch can then never create a competing repair.
+    if os.environ.get("AUDIT_WRITER_COORDINATION_ENABLED") == "true":
+        from audit_remediation_worker import guard_pr_repair
+        if not guard_pr_repair(REPO, pr):
+            print("A different durable repository writer owns mutation; repair remains queued.")
+            return "repository-writer-busy"
+
     reservation = api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
         f"{marker}\ndispatch-state: pending\nAutonomous Kilo repair handoff reserved for the current {kind} findings. "
         "If delivery outcome is uncertain, inspect Kilo before retrying; the source PR remains governed by its normal checks."})

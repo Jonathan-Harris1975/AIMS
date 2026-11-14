@@ -1,0 +1,50 @@
+name: Audit remediation handoff
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/audit-remediation.yml", ".github/scripts/audit_remediation_worker.py"]
+  repository_dispatch:
+    types: [rams-audit-remediation]
+  workflow_run: # zizmor: ignore[dangerous-triggers] trusted default-branch metadata reconciliation; no PR code is executed
+    workflows: ["Koyeb production deployment watch"]
+    types: [completed]
+  schedule:
+    - cron: "19 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: audit-remediation-writer
+  cancel-in-progress: false
+
+jobs:
+  handoff:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: Autonomy
+    timeout-minutes: 10
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2
+        with:
+          egress-policy: audit
+      - name: Check out trusted audit worker
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Validate worker invariants
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_audit_remediation_worker.py' -v
+      - name: Dispatch bounded audit work or reconcile the writer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KILO_REPAIR_TRIGGER_URL: ${{ secrets.KILO_REPAIR_TRIGGER_URL }}
+          KILO_REPAIR_PR_LOGIN: ${{ vars.KILO_REPAIR_PR_LOGIN || 'kilo-code-bot[bot]' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.CF_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.CF_R2_SECRET_ACCESS_KEY }}
+        run: python3 .github/scripts/audit_remediation_worker.py

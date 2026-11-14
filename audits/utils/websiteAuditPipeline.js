@@ -1,3 +1,5 @@
+import { readRamsRemediationCompletion } from "./ramsRemediationCompletion.js";
+import { getRamsWebsiteDispatchConfig } from "./ramsWebsiteDispatch.js";
 import { info, error as logError } from "../../logger.js";
 import {
   completeJob,
@@ -857,6 +859,18 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
       sessionId: parentSessionId,
       auditJsonKey: jsonReport.key,
     });
+    if (ramsDispatch.status === "disabled") throw new Error("Website remediation is disabled; audit repair work cannot be certified complete");
+    if (ramsDispatch.status !== "completed") {
+      const pending = updateJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
+        status: "running", phase: "awaiting-remediation", finalising: false, currentStage: null,
+        finalReportKeys, finalReportUrl: pdf.url, finalReportPdfUrl: pdf.url,
+        finalReportHtmlUrl: htmlReport.url, finalReportJsonUrl: jsonReport.url, retainedArtefacts,
+        sourceStageHealth, synthesisState: council.synthesisState, ramsDispatch,
+        evidenceRetentionRequired: true, cleanupRequired: true,
+      });
+      await flushJobStoreWrites({ throwOnError: false });
+      return pending;
+    }
     cleanupResult = await strictTemporaryCleanup(current.tempPrefix || websitePipelineTempPrefix(parentSessionId));
 
     const completed = completeJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
@@ -1112,6 +1126,30 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
 }
 
 export async function getWebsiteAuditPipelineJobFresh(sessionId) {
+  const pending = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
+  if (pending?.phase === "awaiting-remediation") {
+    const completion = await readRamsRemediationCompletion({ pipeline: "website", runId: pending.ramsDispatch?.runId,
+      config: getRamsWebsiteDispatchConfig() });
+    if (completion.status === "completed") {
+      const cleanup = await strictTemporaryCleanup(pending.tempPrefix || websitePipelineTempPrefix(sessionId));
+      const completed = completeJob(WEBSITE_PIPELINE_JOB_TYPE, sessionId, {
+        phase: "completed", cleanupRequired: false, evidenceRetentionRequired: false,
+        temporaryCleanup: { ok: true, deletedCount: cleanup.deleted.length, remainingCount: cleanup.remaining?.length || 0 },
+        ramsDispatch: { ...pending.ramsDispatch, status: "completed", completion },
+      });
+      await flushJobStoreWrites({ throwOnError: false });
+      return completed;
+    }
+    if (completion.status === "attention_required") {
+      const failed = failJob(WEBSITE_PIPELINE_JOB_TYPE, sessionId,
+        new Error("RAMS website remediation needs attention; work is not complete"),
+        { phase: "remediation-blocked", ramsDispatch: { ...pending.ramsDispatch, completion } });
+      await flushJobStoreWrites({ throwOnError: false });
+      return failed;
+    }
+    return pending;
+  }
+
   let job = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
   if (!job || job.status === "completed" || job.status === "failed") return job;
 

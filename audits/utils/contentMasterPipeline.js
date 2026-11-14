@@ -176,9 +176,11 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
   });
 
   return {
-    ok: synthesisComplete && ramsDispatch.ok !== false,
+    ok: synthesisComplete && ramsDispatch.ok !== false && ramsDispatch.status !== "disabled",
+    remediationPending: synthesisComplete && ramsDispatch.status === "awaiting-remediation",
     synthesisState: council.synthesisState,
-    error: synthesisComplete ? (ramsDispatch.ok === false ? "RAMS dispatch failed" : null) : "Content master synthesis incomplete",
+    error: synthesisComplete ? (ramsDispatch.status === "disabled" ? "RAMS remediation dispatch is disabled"
+      : ramsDispatch.ok === false ? "RAMS dispatch failed" : null) : "Content master synthesis incomplete",
     auditType: AUDIT_TYPE,
     sessionId,
     reportPrefix,

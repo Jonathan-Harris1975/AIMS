@@ -131,6 +131,8 @@ jobs:
           REPAIR_APP_LOGIN: ${{ steps.app_token.outputs.repair_app_login }}
           KILO_REPAIR_PR_LOGIN: ${{ vars.KILO_REPAIR_PR_LOGIN }}
           CTO_NEW_PR_LOGIN: ${{ vars.CTO_NEW_PR_LOGIN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.CF_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.CF_R2_SECRET_ACCESS_KEY }}
           CURRENT_RUN_ID: ${{ github.run_id }}
           REQUIRED_WORKFLOWS: "AIMS CI|CodeQL|Security and repository quality|Item 6 hardening"
         run: python .github/scripts/trusted_automation.py
