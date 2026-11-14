@@ -20,7 +20,7 @@ async function synthesizeSample({ env }) {
   try {
     const response = await polly.send(new SynthesizeSpeechCommand({
       Text: "Podcast readiness check.", VoiceId: String(env.POLLY_VOICE_ID).trim(),
-      OutputFormat: "mp3", Engine: "neural",
+      OutputFormat: "mp3", Engine: "standard",
     }), { abortSignal: controller.signal });
     const bytes = await response.AudioStream?.transformToByteArray?.();
     if (!bytes?.length) throw new Error("AWS Polly returned empty speech output");

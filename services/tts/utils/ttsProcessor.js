@@ -59,7 +59,7 @@ async function synthesizeTextWithRetry(text, retries = 3) {
     Text: text,
     OutputFormat: "mp3",
     VoiceId: VOICE_ID,
-    Engine: "neural",
+    Engine: "standard",
   });
 
   for (let attempt = 1; attempt <= retries; attempt++) {

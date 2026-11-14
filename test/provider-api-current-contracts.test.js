@@ -93,7 +93,7 @@ test("current external-provider contracts stay aligned", async () => {
   assert.match(polly, /new SynthesizeSpeechCommand\(/);
   assert.match(polly, /OutputFormat: "mp3"/);
   assert.match(polly, /VoiceId: VOICE_ID/);
-  assert.match(polly, /Engine: "neural"/);
+  assert.match(polly, /Engine: "standard"/);
   assert.match(r2, /new S3Client\(/);
   assert.match(r2, /region: R2_REGION \|\| "auto"/);
   assert.match(r2, /endpoint: R2_ENDPOINT/);

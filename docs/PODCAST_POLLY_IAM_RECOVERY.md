@@ -36,3 +36,9 @@ The IAM policy cannot be applied by an AIMS code merge alone. The new preflight 
 ## Future alerts
 
 An `POLLY_ACCESS_DENIED` preflight is an actionable blocked dependency rather than a successful podcast job. It should appear in the failed Friday operation receipt and operational alerting. Do not automatically retry a failed IAM check dozens of times; the preflight negative result has a short cache and the scheduler's bounded backstops remain the only automatic recovery points.
+
+## Free-plan project recovery: 14 November 2026
+
+The replacement AWS project is restricted to Stockholm (`eu-north-1`). A live synthesis from the deployed AIMS container confirmed the new active credentials and IAM Allow policy work. London (`eu-west-2`) is denied by the AWS-managed service control policy. Stockholm rejects the neural engine, but Brian standard returns valid MP3 audio.
+
+Production now uses `AWS_REGION=eu-north-1`, `POLLY_VOICE_ID=Brian`, and the standard engine consistently in readiness, podcast synthesis and the shared Polly video fallback. The existing merge, post-TTS editing, intro/outro mix, mastering, duration fitting and publication gates are retained. Keep any explicit deployment AWS_REGION override aligned with Stockholm. No paid-plan upgrade is required for this configuration; actual free-plan credits and eligibility remain governed by AWS.
