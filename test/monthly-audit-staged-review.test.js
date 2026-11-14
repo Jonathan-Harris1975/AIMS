@@ -64,7 +64,7 @@ test('invented file paths cannot become executable code fixes', async () => {
 test('published blog audit reads actual monthly HTML and exposes failures', async () => {
   const evidence = await collectMonthlyPublishedContent({ now:new Date('2026-11-14T12:00:00Z'), storage: {
     listObjects:async () => [{key:'blog/posts/current/index.html',lastModified:'2026-11-10'}, {key:'blog/posts/old/index.html',lastModified:'2025-01-01'}],
-    getObjectAsText:async () => '<h1>Actual article</h1><p>Evidence.</p><a href="/ebooks">Book</a><script>ignored</script >'
+    getObjectAsText:async () => '<h1>Actual article</h1><p>Evidence.</p><a href="/ebooks">Book</a><script>ignored</script\t\n bar>'
   }});
   assert.equal(evidence.itemsInspected, 1);
   assert.match(evidence.items[0].content, /Actual article/);

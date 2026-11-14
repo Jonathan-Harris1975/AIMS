@@ -15,7 +15,7 @@ export async function collectMonthlyPublishedContent({ now = new Date(), storage
       const key = row.key || row.Key;
       try {
         const html = await storage.getObjectAsText("blog", key);
-        const content = html.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, " ").replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
+        const content = html.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, " ").replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, " ")
           .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         items.push({ key, lastModified: row.lastModified || row.LastModified, content,
           links: [...html.matchAll(/href=["']([^"']+)["']/gi)].map(match => match[1]) });
