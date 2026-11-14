@@ -1,3 +1,4 @@
+import { reviewAuditEvidence } from "./stagedAuditReview.js";
 import { compactWebsiteAuditPolicy } from "./websiteAuditPolicy.js";
 
 const OBJECTIVES = [
@@ -449,19 +450,20 @@ export async function runDigitalGrowthAnalysis(payload) {
   let repairRaw = "";
   try {
     const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../services/shared/utils/ai-service.js");
-    const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
+    const diagnostics = getProviderDiagnosticsForRoute("auditFinalReport");
     const configured = arr(diagnostics.configuredProviders).filter((provider) => provider.configured);
     if (!configured.length) {
       return attachFailureDiagnostics(
-        deterministicAnalysisFallback(payload, "No configured auditForensic provider was available."),
+        deterministicAnalysisFallback(payload, "No configured economy audit provider was available."),
         { inputCharacters }
       );
     }
 
-    raw = await resilientRequest("auditForensic", {
+    const evidenceReviews = await reviewAuditEvidence(evidence, resilientRequest);
+    raw = await resilientRequest("auditFinalReport", {
       sessionId: payload?.sessionId,
       section: "digital-growth-and-monetisation",
-      max_tokens: Number(process.env.DIGITAL_GROWTH_AI_MAX_TOKENS || 12000),
+      max_tokens: Math.min(10000, Number(process.env.DIGITAL_GROWTH_AI_MAX_TOKENS || 10000)),
       temperature: Number(process.env.DIGITAL_GROWTH_AI_TEMPERATURE || 0.15),
       timeoutMs: Number(process.env.DIGITAL_GROWTH_AI_TIMEOUT_MS || 240000),
       maxRetries: Number(process.env.DIGITAL_GROWTH_AI_MAX_RETRIES || 0),
@@ -469,7 +471,7 @@ export async function runDigitalGrowthAnalysis(payload) {
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Analyse this verified evidence bundle. Return only the required JSON.\n${JSON.stringify(evidence)}` },
+        { role: "user", content: `Analyse this verified evidence bundle. Return only the required JSON.\n${JSON.stringify(evidenceReviews)}` },
       ],
     });
 
@@ -486,7 +488,7 @@ export async function runDigitalGrowthAnalysis(payload) {
     } catch (validationError) {
       try {
         const retained = retainedRawResponse(raw);
-        repairRaw = await resilientRequest("auditForensic", {
+        repairRaw = await resilientRequest("auditFinalReport", {
           sessionId: payload?.sessionId,
           section: "digital-growth-schema-repair",
           max_tokens: Number(process.env.DIGITAL_GROWTH_AI_REPAIR_MAX_TOKENS || 8000),

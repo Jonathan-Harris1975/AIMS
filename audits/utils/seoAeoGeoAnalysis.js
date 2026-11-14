@@ -1,3 +1,4 @@
+import { reviewAuditEvidence } from "./stagedAuditReview.js";
 import { buildLane1SkillsBaseline } from "./lane1Skills.js";
 import { compactWebsiteAuditPolicy } from "./websiteAuditPolicy.js";
 
@@ -141,7 +142,7 @@ function safeJson(value, fallback = {}) {
   }
 }
 
-function buildUserPrompt(payload) {
+function buildSeoEvidence(payload) {
   const skillsBaseline = buildLane1SkillsBaseline(payload?.skillsBaseline);
   const compact = {
     website: payload?.baseUrl,
@@ -189,6 +190,11 @@ function buildUserPrompt(payload) {
       },
     },
   };
+  return compact;
+}
+
+function buildUserPrompt(payload, evidenceReviews = null) {
+  const compact = buildSeoEvidence(payload);
 
   return [
     "FORENSIC SEO + AEO + GEO AUDIT - FULL ESTATE EVIDENCE PACKAGE",
@@ -203,7 +209,11 @@ unless matching artefacts are present.",
     "Return one compact JSON object only, following the mandatory contract.",
     "Do not echo the complete route ledger; use [] for fullUrlCoverageAppendix unless a row adds unique judgement beyond allRoutes.",
     "",
-    JSON.stringify(compact, null, 2),
+    JSON.stringify(evidenceReviews === null ? compact : {
+      website: compact.website, sessionId: compact.sessionId, generatedAt: compact.generatedAt,
+      websiteAuditPolicy: compact.websiteAuditPolicy, workflowRequirements: compact.workflowRequirements,
+      evidenceReviews,
+    }, null, 2),
   ].join("\n");
 }
 
@@ -1921,10 +1931,10 @@ function auditIntegerEnv(name, fallback) {
 }
 
 async function callAuditForensic({ resilientRequest, payload, messages, section }) {
-  return resilientRequest("auditForensic", {
+  return resilientRequest("auditFinalReport", {
     sessionId: payload?.sessionId,
     section,
-    max_tokens: auditNumberEnv("AUDIT_AI_MAX_TOKENS", 12000),
+    max_tokens: Math.min(10000, auditNumberEnv("AUDIT_AI_MAX_TOKENS", 10000)),
     temperature: auditNumberEnv("AUDIT_AI_TEMPERATURE", 0.15),
     timeoutMs: auditNumberEnv("AUDIT_AI_TIMEOUT_MS", 240000),
     top_p: auditNumberEnv("AUDIT_AI_TOP_P", 0.95),
@@ -1937,17 +1947,18 @@ async function callAuditForensic({ resilientRequest, payload, messages, section 
 
 export async function runSeoAeoGeoAnalysis(payload) {
   const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../services/shared/utils/ai-service.js");
-  const diagnostics = getProviderDiagnosticsForRoute("auditForensic");
+  const diagnostics = getProviderDiagnosticsForRoute("auditFinalReport");
   const configuredProviders = asArray(diagnostics.configuredProviders).filter((provider) => provider.configured);
 
   if (!configuredProviders.length) {
     const expected = asArray(diagnostics.configuredProviders)
       .map((provider) => `${provider.providerId}(${provider.modelEnv}+${provider.apiKeyEnv})`)
       .join(", ");
-    throw new Error(`AI forensic analysis unavailable: no configured auditForensic providers. Expected one configured model/key pair from shared ai-config route: ${expected}`);
+    throw new Error(`AI forensic analysis unavailable: no configured economy audit providers. Expected one configured model/key pair from shared ai-config route: ${expected}`);
   }
 
-  const userPrompt = buildUserPrompt(payload);
+  const evidenceReviews = await reviewAuditEvidence(buildSeoEvidence(payload), resilientRequest);
+  const userPrompt = buildUserPrompt(payload, evidenceReviews);
   const raw = await callAuditForensic({
     resilientRequest,
     payload,
