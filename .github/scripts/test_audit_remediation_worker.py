@@ -19,6 +19,27 @@ class AuditWorkerTests(unittest.TestCase):
         with patch.object(worker, 's3', return_value=({'status': 'active', 'kind': 'audit', 'fingerprint': 'other'}, 'etag')):
             self.assertFalse(worker.acquire_writer(REPO, 'new', 'audit'))
 
+    def test_claim_cannot_overwrite_a_new_owner_after_release(self):
+        old = {'status':'active','kind':'pr','fingerprint':'old'}
+        new = {'status':'active','kind':'audit','fingerprint':'racing-owner'}
+        with patch.object(worker,'s3',side_effect=[(old,'old-etag'),(new,'new-etag')]) as storage:
+            with patch.object(worker,'release_verified',return_value=True):
+                self.assertFalse(worker.acquire_writer(REPO,'requester','audit'))
+                self.assertEqual(storage.call_count,2)
+
+    def test_linked_kilo_child_reuses_its_source_writer(self):
+        lease = {'status':'active','kind':'pr','fingerprint':'pr:7','sourcePr':7,'sourceSha':'a'*40}
+        child = {'number':8,'user':{'login':'kilo-code-bot[bot]'},'head':{'ref':'kilo/fix','sha':'b'*40,
+            'repo':{'full_name':REPO}},'body':f'Repairs https://github.com/{REPO}/pull/7.'}
+        with patch.dict(worker.os.environ,{'KILO_REPAIR_PR_LOGIN':'kilo-code-bot[bot]'}):
+            with patch.object(worker,'s3',return_value=(lease,'etag')):
+                with patch.object(worker,'gh',return_value={'behind_by':0,'status':'ahead'}):
+                    self.assertTrue(worker.guard_pr_repair(REPO,child))
+                child['body']=f'Repairs https://github.com/{REPO}/pull/70'
+                with patch.object(worker,'acquire_writer',return_value=False),patch.object(worker,'gh') as github:
+                    self.assertFalse(worker.guard_pr_repair(REPO,child))
+                    github.assert_not_called()
+
     def test_create_once_collision_does_not_acquire_writer(self):
         with patch.object(worker, 's3', side_effect=[(None, None), (False, None)]) as storage:
             self.assertFalse(worker.acquire_writer(REPO, 'new', 'audit'))

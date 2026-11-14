@@ -191,6 +191,8 @@ def acquire_writer(repository, fingerprint, kind, **metadata):
         if not release_verified(repository, existing, etag):
             return False
         existing, etag = s3('GET', 'hive-repositories', key)
+        if existing and existing.get('status') == 'active':
+            return existing.get('fingerprint') == fingerprint and existing.get('kind') == kind
     claim = {'schemaVersion': 'repository-mutation-writer/v1', 'repository': repository,
              'fingerprint': fingerprint, 'kind': kind, 'status': 'active', **metadata}
     condition = {'if-match': etag} if existing else {'if-none-match': '*'}
@@ -204,7 +206,28 @@ def guard_pr_repair(repository, pr):
     current, _ = s3('GET', 'hive-repositories', lease_key(repository))
     if current and current.get('status') == 'active' and current.get('kind') == 'audit':
         return branch == current.get('branch')
-    return acquire_writer(repository, f'pr:{pr["number"]}', 'pr', sourcePr=pr['number'], branch=branch)
+    if current and current.get('status') == 'active' and current.get('kind') == 'pr':
+        if current.get('sourcePr') == pr['number']:
+            return True
+        # A Kilo child repairs its existing source's work under the same lease.
+        # Verify exact creator, source URL boundary and commit ancestry.
+        source_number = current.get('sourcePr')
+        source_url = f'https://github.com/{repository}/pull/{source_number}'
+        if (isinstance(source_number, int)
+                and pr.get('user', {}).get('login') == os.environ.get('KILO_REPAIR_PR_LOGIN', 'kilo-code-bot[bot]')
+                and pr.get('head', {}).get('repo', {}).get('full_name') == repository
+                and re.search(re.escape(source_url) + r'(?![0-9A-Za-z_/#?=-])', pr.get('body') or '')):
+            source_sha = current.get('sourceSha')
+            if not SHA.fullmatch(source_sha or ''):
+                source = gh('GET', f'/repos/{repository}/pulls/{source_number}')
+                source_sha = source.get('head', {}).get('sha', '')
+            child_sha = pr.get('head', {}).get('sha', '')
+            if SHA.fullmatch(source_sha) and SHA.fullmatch(child_sha):
+                comparison = gh('GET', f'/repos/{repository}/compare/{source_sha}...{child_sha}')
+                if comparison.get('behind_by') == 0 and comparison.get('status') in {'ahead','identical'}:
+                    return True
+    return acquire_writer(repository, f'pr:{pr["number"]}', 'pr', sourcePr=pr['number'],
+                          sourceSha=pr.get('head', {}).get('sha'), branch=branch)
 
 
 def audit_scope_admission(pr):
