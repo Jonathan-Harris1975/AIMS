@@ -47,3 +47,29 @@ export async function reviewAuditEvidence(sources, request) {
   }
   return reviews;
 }
+
+// Keep council output sections independently within the economy model budget.
+// Only declared keys can enter the combined report; source evidence is reviewed
+// once and reused, while all paid calls remain sequential with no hidden retry.
+export async function synthesiseAuditSections(request, { sections, system, user, options = {}, parse = JSON.parse }) {
+  const combined = {};
+  for (const [name, keys] of sections) {
+    const raw = await request('auditFinalReport', {
+      ...options, section: `${options.section || 'monthly-final'}-${name}`, maxRetries: 0,
+      reasoning: { effort: 'none', exclude: true }, response_format: {type:'json_object'},
+      messages: [
+        {role:'system',content:system + '\nSECTION OUTPUT CONTRACT: Produce ONLY these keys for this call: ' + keys.join(', ') +
+          '. Other report sections are produced separately. Keep narrative fields below 40 words and prioritisation tables to 8 aggregated rows. ' +
+          'Preserve all required specialist seats. Group repeated defects by root cause with every relevant source finding ID. Return compact JSON.'},
+        {role:'user',content:user},
+        ...(Object.keys(combined).length ? [{role:'user',content:'Previously accepted report sections; preserve their priorities and finding references: ' + JSON.stringify(combined)}] : []),
+      ],
+    });
+    const value = parse(raw);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid monthly final section: ${name}`);
+    const missing = keys.filter(key => !(key in value));
+    if (missing.length) throw new Error(`Monthly final section ${name} missing ${missing.join(', ')}`);
+    for (const key of keys) combined[key] = value[key];
+  }
+  return combined;
+}

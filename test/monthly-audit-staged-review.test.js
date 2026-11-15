@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evidenceChunks, reviewAuditEvidence } from '../audits/utils/stagedAuditReview.js';
+import { evidenceChunks, reviewAuditEvidence, synthesiseAuditSections } from '../audits/utils/stagedAuditReview.js';
 import { collectMonthlyPublishedContent } from '../audits/utils/monthlyPublishedContent.js';
 import { runContentMasterCouncil, CONTENT_MASTER_COUNCIL_MEMBERS, __contentMasterCouncilTestHooks } from '../audits/utils/contentMasterCouncil.js';
 import { __ramsContentDispatchTestHooks } from '../audits/utils/ramsContentDispatch.js';
@@ -38,6 +38,7 @@ function validReport() {
     scorecard: Object.fromEntries(['overallContentQuality','zernioSocial','blotatoShorts','ebookConversion','hashtagStrategy','weeklyBlog',
       'blogSocial','podcastTranscript','podcastKeywords','newsletter','crossChannelCoherence','councilConfidence'].map(k => [k, {score:null,basis:'Evidence not supplied'}])),
     laneFindings: Object.fromEntries(['zernioSocial','blotatoShorts','ebookPosts','hashtagStrategy','weeklyBlog','blogSocial','podcastTranscript','podcastKeywords','newsletter'].map(k => [k, []])),
+    crossChannelFindings:[],retryAndQuarantinePolicy:{maxTotalAttempts:5,rules:[]},modelRoutingRecommendations:[],ramsUpdateContract:{},
     masterIssueLedger: [], topActions: [], definitionOfDone: ['Verify the next published output'],
     councilRecord: { seats: CONTENT_MASTER_COUNCIL_MEMBERS.map(s => ({...s, reviewNote:'Missing metrics remain unscored'})) } };
 }
@@ -108,4 +109,25 @@ test('content council reads saved captions and episode metadata rather than only
   assert.deepEqual(sources.publishedPodcast.errors,['Excerpt only']);
   assert.equal(publishedContentSources({}).publishedSocial.status,'missing');
   } finally { if(previousBucket===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=previousBucket; }
+});
+
+test('council sections preserve exact keys, prior findings and one bounded paid call per section', async () => {
+  const calls=[];
+  let active=0;
+  const result=await synthesiseAuditSections(async (route,options)=>{
+    assert.equal(++active,1);
+    assert.equal(route,'auditFinalReport');
+    assert.equal(options.maxRetries,0);
+    assert.deepEqual(options.reasoning,{effort:'none',exclude:true});
+    calls.push(options);
+    await new Promise(resolve=>setImmediate(resolve));
+    active--;
+    return JSON.stringify(calls.length===1?{verdict:'Evidence-led',ignored:'not allowed'}:{ledger:[{sourceFindingIds:['S-1']}]});
+  },{sections:[['verdict',['verdict']],['remediation',['ledger']]],system:'Evidence only',user:'Observed S-1',options:{max_tokens:9000}});
+  assert.deepEqual(result,{verdict:'Evidence-led',ledger:[{sourceFindingIds:['S-1']}]});
+  assert.equal(calls.length,2);
+  assert.match(calls[1].messages.at(-1).content,/Evidence-led/);
+  await assert.rejects(synthesiseAuditSections(async()=>'{"other":[]}',{
+    sections:[['required',['ledger']]],system:'Evidence only',user:'source'
+  }),/missing ledger/);
 });
