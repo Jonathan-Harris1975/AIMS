@@ -63,3 +63,10 @@ test("retrying a failed podcast clears the previous error while preserving the n
   assert.equal(next.job.eventId, "second-attempt");
   assert.equal(next.job.error, undefined);
 });
+
+test('every transition advances updatedAt even when existing metadata contains the old timestamp',async()=>{
+  const mod=await import(`./services/shared/utils/jobStore.js?case=timestamp-${Date.now()}`);
+  const first=mod.queueJob('audit:content-master','timestamp-regression');
+  const second=mod.updateJob('audit:content-master','timestamp-regression',{phase:'awaiting-remediation',updatedAt:first.updatedAt});
+  assert.ok(Date.parse(second.updatedAt)>Date.parse(first.updatedAt));
+});

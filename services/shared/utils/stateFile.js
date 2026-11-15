@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { debug, warn } from "../../../logger.js";
-import { getObjectAsText, putPrivateJson } from "./r2-client.js";
+import { getObjectAsText, getObjectAsTextWithMetadata, putPrivateJson } from "./r2-client.js";
+import { persistJobSnapshot } from "./jobStatePersistence.js";
 import { durableStateEnvHint, hasDurableStateEnv } from "./durableStateEnv.js";
 
 const BASE_STATE_DIR = path.resolve(
@@ -190,7 +191,16 @@ function queueRemoteWrite(filename, value) {
 
   remoteWriteQueue = remoteWriteQueue
     .then(async () => {
-      await putPrivateJson("metaSystem", key, snapshot);
+      if (filename === "job-store.json") {
+        const merged = await persistJobSnapshot(snapshot, {
+          read: () => getObjectAsTextWithMetadata("metaSystem", key),
+          write: (value, options) => putPrivateJson("metaSystem", key, value, options),
+          ttlMs: Number(process.env.JOB_STATUS_TTL_MS) || 24 * 60 * 60 * 1000,
+        });
+        remoteStateCache.set(filename, merged);
+      } else {
+        await putPrivateJson("metaSystem", key, snapshot);
+      }
       lastRemoteWriteError = null;
       debug("state.remote.write.complete", { key });
     })
@@ -248,7 +258,7 @@ export function writeJsonState(filename, value) {
 }
 
 
-export async function readJsonStateFresh(filename, fallback) {
+export async function readJsonStateFresh(filename, fallback, { throwOnError = false } = {}) {
   if (!remoteStateEnabled) {
     return readJsonState(filename, fallback);
   }
@@ -259,6 +269,7 @@ export async function readJsonStateFresh(filename, fallback) {
     const raw = await getObjectAsText("metaSystem", key);
     const trimmed = String(raw || "").trim();
     if (!trimmed) {
+      if (throwOnError) throw new Error(`Durable state object is empty: ${filename}`);
       remoteStateCache.delete(filename);
       return cloneValue(fallback);
     }
@@ -267,11 +278,14 @@ export async function readJsonStateFresh(filename, fallback) {
     remoteStateCache.set(filename, parsed);
     return cloneValue(parsed);
   } catch (err) {
+    if (throwOnError && !(err?.$metadata?.httpStatusCode === 404 ||
+        ["NoSuchKey", "NotFound"].includes(err?.name || err?.code))) throw err;
     if (isMissingRemoteStateError(err)) {
       remoteStateCache.delete(filename);
       return readJsonState(filename, fallback);
     }
 
+    if (throwOnError) throw err;
     warn("state.remote.read_fresh.fail", {
       key,
       error: err?.message || String(err),

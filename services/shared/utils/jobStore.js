@@ -1,4 +1,5 @@
 import { flushStateWrites, readJsonState, readJsonStateFresh, writeJsonState } from "./stateFile.js";
+import { retainJob } from "./jobStatePersistence.js";
 import { recordJobTransition } from "./operationalExcellence.js";
 
 const STATE_FILE = "job-store.json";
@@ -83,6 +84,8 @@ function loadJobs() {
   return loaded;
 }
 
+// Health startup stays independent of network hydration; audit admission awaits
+// refreshJobStoreFromState and every remote write merges under an exact ETag.
 const jobs = loadJobs();
 
 function persistJobs() {
@@ -98,11 +101,7 @@ function pruneExpired(now = Date.now()) {
   let changed = false;
 
   for (const [key, job] of jobs.entries()) {
-    if (String(job.type || '').startsWith('audit:') && job.status !== 'completed' &&
-        (job.phase === 'awaiting-remediation' || job.phase === 'remediation-blocked' ||
-          job.result?.remediationPending || job.evidenceRetentionRequired === true)) continue;
-    const updated = job?.updatedAt ? new Date(job.updatedAt).getTime() : 0;
-    if (!updated || now - updated > JOB_TTL_MS) {
+    if (!retainJob(job, now, JOB_TTL_MS)) {
       jobs.delete(key);
       changed = true;
     }
@@ -118,7 +117,7 @@ function upsertJob(type, sessionId, patch = {}) {
 
   const key = makeKey(type, sessionId);
   const existing = jobs.get(key);
-  const timestamp = nowIso();
+  const timestamp = new Date(Math.max(Date.now(), Date.parse(existing?.updatedAt || "") + 1 || 0)).toISOString();
 
   const next = {
     type,
@@ -128,6 +127,7 @@ function upsertJob(type, sessionId, patch = {}) {
     updatedAt: timestamp,
     ...existing,
     ...patch,
+    updatedAt: timestamp,
     // Explicitly clearing an error on retry must not resurrect the last
     // failed attempt's error through nullish coalescing.
     error: sanitiseJobError(Object.hasOwn(patch, "error") ? patch.error : existing?.error),
@@ -208,7 +208,8 @@ export function updateJob(type, sessionId, metadata = {}) {
 }
 
 export async function refreshJobStoreFromState() {
-  const persisted = await readJsonStateFresh(STATE_FILE, { jobs: [] });
+  const persisted = await readJsonStateFresh(STATE_FILE, { jobs: [] }, { throwOnError: true });
+  if (!Array.isArray(persisted?.jobs)) throw new Error("Invalid durable job-store snapshot");
   mergePersistedJobs(persistedJobsFrom(persisted));
   pruneExpired();
   return true;

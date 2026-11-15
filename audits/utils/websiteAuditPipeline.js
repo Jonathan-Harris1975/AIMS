@@ -238,7 +238,7 @@ function parentStageMetadata(parentSessionId, stage, websiteUrl) {
 
 async function persistParent(sessionId, metadata) {
   const job = updateJob(WEBSITE_PIPELINE_JOB_TYPE, sessionId, metadata);
-  await flushJobStoreWrites({ throwOnError: false });
+  await flushJobStoreWrites({ throwOnError: true });
   return job;
 }
 

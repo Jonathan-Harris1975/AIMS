@@ -1,7 +1,7 @@
 import { readRamsRemediationCompletion } from "./ramsRemediationCompletion.js";
 import { getRamsContentDispatchConfig } from "./ramsContentDispatch.js";
 import crypto from "node:crypto";
-import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh, updateJob } from "../../services/shared/utils/jobStore.js";
+import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh, refreshJobStoreFromState, updateJob } from "../../services/shared/utils/jobStore.js";
 import { info, error as logError } from "../../logger.js";
 
 function trim(value) {
@@ -96,6 +96,7 @@ export async function startAsyncAuditRouteJob({ auditType, payload = {}, runner,
   const payloadWithSession = { ...payload, sessionId };
   const statusUrl = statusUrlFor(req, auditType, sessionId);
 
+  await refreshJobStoreFromState();
   const { started, job } = beginJob(jobType, sessionId, {
     auditType,
     statusUrl,
@@ -103,6 +104,14 @@ export async function startAsyncAuditRouteJob({ auditType, payload = {}, runner,
     eventId: req?.idempotencyKey || null,
     ...metadata,
   });
+
+  try {
+    await flushJobStoreWrites({ throwOnError: true });
+  } catch (error) {
+    failJob(jobType, sessionId, error, { phase: "admission-failed" });
+    await flushJobStoreWrites({ throwOnError: false });
+    throw error; // Never start paid audit work without its durable parent.
+  }
 
   if (started) {
     setImmediate(() => {
