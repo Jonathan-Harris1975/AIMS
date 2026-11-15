@@ -98,6 +98,9 @@ function pruneExpired(now = Date.now()) {
   let changed = false;
 
   for (const [key, job] of jobs.entries()) {
+    if (String(job.type || '').startsWith('audit:') && job.status !== 'completed' &&
+        (job.phase === 'awaiting-remediation' || job.phase === 'remediation-blocked' ||
+          job.result?.remediationPending || job.evidenceRetentionRequired === true)) continue;
     const updated = job?.updatedAt ? new Date(job.updatedAt).getTime() : 0;
     if (!updated || now - updated > JOB_TTL_MS) {
       jobs.delete(key);

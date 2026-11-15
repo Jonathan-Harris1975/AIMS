@@ -859,7 +859,11 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
       sessionId: parentSessionId,
       auditJsonKey: jsonReport.key,
     });
-    if (ramsDispatch.status === "disabled") throw new Error("Website remediation is disabled; audit repair work cannot be certified complete");
+    if (ramsDispatch.status === "disabled") {
+      const disabled = new Error("Website remediation is disabled; audit repair work cannot be certified complete");
+      disabled.code = "REMEDIATION_DISABLED";
+      throw disabled;
+    }
     if (ramsDispatch.status !== "completed") {
       const pending = updateJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
         status: "running", phase: "awaiting-remediation", finalising: false, currentStage: null,
@@ -922,7 +926,8 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
       : [];
     const failed = failJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, err, {
       auditType: WEBSITE_PIPELINE_AUDIT_TYPE,
-      phase: publishedSet ? (ramsDispatch?.ok ? "temporary-cleanup-failed" : "rams-dispatch-failed") : "final-report-set-failed",
+      phase: err.code === "REMEDIATION_DISABLED" ? "remediation-disabled"
+        : publishedSet ? (ramsDispatch?.ok ? "temporary-cleanup-failed" : "rams-dispatch-failed") : "final-report-set-failed",
       currentStage: null,
       finalising: false,
       finalReportKey: publishedSet?.pdf?.key || finalReportKeys.pdf,
@@ -932,7 +937,7 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
       finalReportHtmlUrl: publishedSet?.html?.url || null,
       finalReportJsonUrl: publishedSet?.json?.url || null,
       retainedArtefacts,
-      cleanupRequired: Boolean(ramsDispatch?.ok) && !cleanupResult,
+      cleanupRequired: ramsDispatch?.status === "completed" && !cleanupResult,
       evidenceRetentionRequired: true,
       sourceStageHealth,
       finalisationAttempt,
@@ -979,18 +984,14 @@ export async function retryWebsiteAuditRamsDispatch(parentSessionId) {
   const ramsDispatch = parent.ramsDispatch?.ok
     ? parent.ramsDispatch
     : await dispatchWebsiteAuditToRams({ sessionId: parentSessionId, auditJsonKey });
-  const cleanup = await strictTemporaryCleanup(parent.tempPrefix || websitePipelineTempPrefix(parentSessionId));
-  const updated = updateJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
-    ramsDispatch,
-    temporaryCleanup: { ok: true, deletedCount: cleanup.deleted.length, attempts: cleanup.attempts, remainingCount: cleanup.remaining?.length || 0 },
-    cleanupRequired: false,
-    evidenceRetentionRequired: false,
-    status: parent.finalReportJsonUrl ? "completed" : parent.status,
-    phase: parent.finalReportJsonUrl ? "completed" : parent.phase,
-    updatedAt: new Date().toISOString(),
+  if (ramsDispatch.status === "disabled") throw new Error("Website remediation dispatch is disabled");
+  // Retrying the handoff must use the same verified completion gate as normal polling.
+  updateJob(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
+    ramsDispatch, status: "running", phase: "awaiting-remediation", finalising: false, currentStage: null,
+    error: undefined, finishedAt: undefined, evidenceRetentionRequired: true, cleanupRequired: false,
   });
   await flushJobStoreWrites({ throwOnError: false });
-  return updated;
+  return getWebsiteAuditPipelineJobFresh(parentSessionId);
 }
 
 function scheduleFinalisation(parentSessionId, { reason = "source-stages-finished" } = {}) {
@@ -1014,6 +1015,9 @@ function scheduleFinalisation(parentSessionId, { reason = "source-stages-finishe
 export async function retryWebsiteAuditFinalisation(parentSessionId) {
   const parent = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId);
   if (!parent) throw new Error(`Website audit pipeline job not found: ${parentSessionId}`);
+  if (parent.ramsDispatch?.runId && parent.finalReportJsonUrl) {
+    return { ok: true, scheduled: false, alreadyDispatched: true, job: await getWebsiteAuditPipelineJobFresh(parentSessionId) };
+  }
   if (parent.status === "completed" && parent.finalReportJsonUrl && parent.ramsDispatch?.ok) {
     return { ok: true, scheduled: false, alreadyCompleted: true, job: parent };
   }
@@ -1033,7 +1037,8 @@ export async function resumeWebsiteAuditPipelineFromChild({ auditType, result })
     logError("audit.website.pipeline.parent_missing", { pipelineSessionId, auditType, childSessionId: result?.sessionId });
     return null;
   }
-  if (parent.status === "completed" || parent.phase === "council-and-final-report" || parent.phase === "council-queued" || parent.finalising) {
+  if (parent.status === "completed" || parent.ramsDispatch?.runId || parent.phase === "awaiting-remediation" ||
+      parent.phase === "remediation-blocked" || parent.phase === "council-and-final-report" || parent.phase === "council-queued" || parent.finalising) {
     return { ok: true, ignored: true, reason: "pipeline already finalising or completed", job: parent };
   }
 

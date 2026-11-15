@@ -136,7 +136,7 @@ export function getAsyncAuditRouteJob(auditType, sessionId, req = null) {
 export async function getAsyncAuditRouteJobFresh(auditType, sessionId, req = null) {
   const type = asyncAuditJobType(auditType);
   let job = await getPublicJobFresh(type, sessionId);
-  if (auditType === "content-master" && job?.result?.remediationPending) {
+  if (auditType === "content-master" && job?.status === "running" && job?.result?.remediationPending) {
     const completion = await readRamsRemediationCompletion({ pipeline: "content", runId: job.result.ramsDispatch?.runId,
       config: getRamsContentDispatchConfig() });
     if (completion.status === "completed") {
@@ -145,7 +145,7 @@ export async function getAsyncAuditRouteJobFresh(auditType, sessionId, req = nul
       await flushJobStoreWrites({ throwOnError: false });
     } else if (completion.status === "attention_required") {
       job = failJob(type, sessionId, new Error("RAMS audit remediation needs attention; work is not complete"),
-        { result: { ...job.result, completion }, phase: "remediation-blocked" });
+        { result: { ...job.result, remediationPending: false, completion }, phase: "remediation-blocked" });
       await flushJobStoreWrites({ throwOnError: false });
     }
   }

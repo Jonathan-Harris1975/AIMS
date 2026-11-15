@@ -373,6 +373,10 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     destination = ("Update this existing Kilo PR branch; do not open a replacement PR. " if existing_kilo_pr else
                    f"Fetch and branch from source PR head {sha}; create one implementation PR to {DEFAULT} "
                    f"including {source} in its PR body. Preserve the source PR's exact commit ancestry. ")
+    audit_branch = str(pr.get('head', {}).get('ref', '')).startswith('fix/rams-audit-')
+    if audit_branch:
+        destination = (f"Update the exact reserved audit branch {pr['head']['ref']} in place. "
+                       "Do not open a sibling implementation PR. Preserve the immutable audit plan, allowed paths and required regression test. ")
     blocker_prefixes = ('merge-conflict-', 'branch-behind-', 'review-threads-')
     blocker_prefix = next((prefix for prefix in blocker_prefixes if kind.startswith(prefix)), None)
     blocker_recovery = blocker_prefix is not None
@@ -435,6 +439,12 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     if not valid_kilo_webhook_url(url):
         raise KiloConfigurationError(f"Configure {trigger_secret} with this repository's Kilo Cloud Agent webhook trigger") from None
 
+    if os.environ.get("AUDIT_WRITER_COORDINATION_ENABLED") == "true":
+        from audit_remediation_worker import guard_pr_repair
+        if not guard_pr_repair(REPO, pr):
+            print("A different durable repository writer owns mutation; repair remains queued.")
+            raise RuntimeError("Repository writer busy; repair remains queued for the next reconciliation")
+
     payload = {
         "repository": REPO,
         "source_pr": source,
@@ -445,11 +455,6 @@ def dispatch(pr: dict, kind: str, findings: list[str]) -> str:
     }
     # Persist the deduplication marker before the external side effect. A rerun
     # after a successful Kilo dispatch can then never create a competing repair.
-    if os.environ.get("AUDIT_WRITER_COORDINATION_ENABLED") == "true":
-        from audit_remediation_worker import guard_pr_repair
-        if not guard_pr_repair(REPO, pr):
-            print("A different durable repository writer owns mutation; repair remains queued.")
-            return "repository-writer-busy"
 
     reservation = api("POST", f"/repos/{REPO}/issues/{number}/comments", {"body":
         f"{marker}\ndispatch-state: pending\nAutonomous Kilo repair handoff reserved for the current {kind} findings. "
