@@ -131,9 +131,14 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
     assert.equal(statusBody.analysis.auditCompletionState, "Complete");
     assert.equal(statusBody.analysis.rankedIssueLedger[0].issueId, "JH-SEO-001");
     assert.equal(statusBody.analysis.aiAnalysisStatus, "valid");
-    assert.equal(paidCalls.length, 2);
+    assert.equal(paidCalls.length, 6);
     assert.ok(paidCalls.every(body => body.reasoning?.effort === "none" && body.reasoning?.exclude === true));
     assert.match(paidCalls[0].messages[0].content, /SECTION OUTPUT CONTRACT/);
+    const {getPublicJob}=await import('../services/shared/utils/jobStore.js');
+    const saved=getPublicJob('audit:seo-aeo-geo:analysis',sessionId).analysisCheckpoint;
+    assert.equal(saved.sections.rankedIssueLedger[0].issueId,'JH-SEO-001');
+    assert.ok(saved.reviews.length);
+    assert.match(saved.evidenceDigest,/^[a-f0-9]{64}$/);
   } finally {
     for (const [name, value] of Object.entries(oldEnv)) {
       if (value === undefined) delete process.env[name];
@@ -197,5 +202,46 @@ test("/analysis completes with deterministic fallback after malformed forensic J
       else process.env[name] = value;
     }
     globalThis.fetch = oldFetch;
+  }
+});
+
+test('failed SEO analysis resumes saved sections without repeating free reviews or accepted paid work', async () => {
+  const oldFetch=globalThis.fetch;
+  const oldEnv={...process.env};
+  process.env.AUDIT_CALLBACK_TOKEN='checkpoint-token';
+  process.env.OPENROUTER_API_KEY=['synthetic','checkpoint','test'].join('-');
+  let paid=0;let free=0;
+  globalThis.fetch=async(_url,options)=>{
+    const body=JSON.parse(options.body);
+    if(body.model.endsWith(':free'))free++;else paid++;
+    return {ok:true,json:async()=>({choices:[{finish_reason:!body.model.endsWith(':free')&&paid===3?'length':'stop',message:{
+      content:JSON.stringify(body.model.endsWith(':free')?{summary:'Evidence reviewed',findings:[],limitations:[]}:validForensicJson())}}]})};
+  };
+  try {
+    const {default:router}=await import('../audits/routes/seoAeoGeo.js');
+    const app=express();app.use(express.json({limit:'5mb'}));app.use('/audits/seo-aeo-geo',router);
+    const sessionId=`checkpoint-test-${Date.now()}`;
+    const payload={...validAnalysisPayload(),sessionId};
+    const post=()=>request(app).post('/audits/seo-aeo-geo/analysis').set('Authorization','Bearer checkpoint-token').send(payload);
+    const poll=async()=>{
+      for(let i=0;i<50;i++){
+        const res=await request(app).get(`/audits/seo-aeo-geo/analysis/${sessionId}`).set('Authorization','Bearer checkpoint-token');
+        if(['failed','completed'].includes(res.body.status))return res.body;
+        await new Promise(resolve=>setTimeout(resolve,20));
+      }
+      throw new Error('Analysis did not reach a terminal state');
+    };
+    await post().expect(202);
+    assert.equal((await poll()).status,'failed');
+    const reviews=free;
+    assert.equal(paid,3);
+    await post().expect(202);
+    assert.equal((await poll()).status,'completed');
+    assert.equal(free,reviews);
+    assert.equal(paid,7);
+  } finally {
+    globalThis.fetch=oldFetch;
+    for(const key of Object.keys(process.env))if(!(key in oldEnv))delete process.env[key];
+    Object.assign(process.env,oldEnv);
   }
 });

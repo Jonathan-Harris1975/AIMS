@@ -1,4 +1,4 @@
-import { reviewAuditEvidence } from "./stagedAuditReview.js";
+import { reviewAuditEvidence, synthesiseAuditSections } from "./stagedAuditReview.js";
 import { resilientRequest } from "../../services/shared/utils/ai-service.js";
 import { sanitizeSessionId } from "../../services/shared/utils/sessionId.js";
 import { buildAuditPrefix, buildLatestKey } from "./auditPaths.js";
@@ -27,7 +27,8 @@ function cleanString(value, fallback = "Not verified from supplied evidence") {
   return text || fallback;
 }
 
-function clampScore(value, fallback = 50) {
+function clampScore(value, fallback = null) {
+  if (value === null || value === undefined || value === "") return fallback;
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(0, Math.min(100, Math.round(number)));
@@ -411,8 +412,12 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
   const derivedPatterns = derivePatternDiagnosis(defects);
   const derivedPipeline = derivePipelineDiagnosis(defects);
   const derivedPlan = deriveRemediationPlan(defects);
-  const blockedOrPartial = sourceCoverage.some((source) => source.status !== "complete");
-  const completion = blockedOrPartial || rawModelError ? "Partial" : cleanString(reportObj.auditCompletionState, "Complete");
+  const blockedOrPartial = sourceCoverage.length !== 3 || sourceCoverage.some((source) => source.status !== "complete");
+  const scoreKeys = ["overallBrandFit", "rssBrandFit", "zernioBlogSocialBrandFit", "podcastTranscriptBrandFit", "titleQuality",
+    "spokenNaturalness", "editorialAuthority", "antiHypeControl", "implementationReadiness"];
+  const substantive = scoreKeys.every(key => typeof reportObj.scorecard?.[key] === "number" && Number.isFinite(reportObj.scorecard[key])) &&
+    Boolean(reportObj.executiveVerdict?.summary?.trim()) && Array.isArray(reportObj.confirmedDefectsLedger);
+  const completion = blockedOrPartial || rawModelError || !substantive ? "Partial" : cleanString(reportObj.auditCompletionState, "Partial");
 
   const limitations = [
     ...arr(reportObj.limitations).map(String),
@@ -450,15 +455,15 @@ export function normaliseOnBrandReport(report, evidence, { rawModelError } = {})
     },
     sourceCoverage,
     scorecard: {
-      overallBrandFit: clampScore(reportObj.scorecard?.overallBrandFit, defects.length ? 68 : 82),
-      rssBrandFit: clampScore(reportObj.scorecard?.rssBrandFit, 70),
-      zernioBlogSocialBrandFit: clampScore(reportObj.scorecard?.zernioBlogSocialBrandFit, 70),
-      podcastTranscriptBrandFit: clampScore(reportObj.scorecard?.podcastTranscriptBrandFit, 70),
-      titleQuality: clampScore(reportObj.scorecard?.titleQuality, defects.some((d) => /title/i.test(d.issueType)) ? 60 : 78),
-      spokenNaturalness: clampScore(reportObj.scorecard?.spokenNaturalness, defects.some((d) => d.sourceType === "podcast_transcript") ? 62 : 78),
-      editorialAuthority: clampScore(reportObj.scorecard?.editorialAuthority, 72),
-      antiHypeControl: clampScore(reportObj.scorecard?.antiHypeControl, defects.some((d) => /hype|filler/i.test(d.issueType)) ? 58 : 80),
-      implementationReadiness: clampScore(reportObj.scorecard?.implementationReadiness, 82),
+      overallBrandFit: clampScore(reportObj.scorecard?.overallBrandFit),
+      rssBrandFit: clampScore(reportObj.scorecard?.rssBrandFit),
+      zernioBlogSocialBrandFit: clampScore(reportObj.scorecard?.zernioBlogSocialBrandFit),
+      podcastTranscriptBrandFit: clampScore(reportObj.scorecard?.podcastTranscriptBrandFit),
+      titleQuality: clampScore(reportObj.scorecard?.titleQuality),
+      spokenNaturalness: clampScore(reportObj.scorecard?.spokenNaturalness),
+      editorialAuthority: clampScore(reportObj.scorecard?.editorialAuthority),
+      antiHypeControl: clampScore(reportObj.scorecard?.antiHypeControl),
+      implementationReadiness: clampScore(reportObj.scorecard?.implementationReadiness),
     },
     confirmedStrengths: (() => {
       const rows = normaliseObjectArray(reportObj.confirmedStrengths, ["sourceType", "evidence", "whyItWorks"]);
@@ -535,6 +540,7 @@ async function runModelAudit({ sessionId, evidence, dryRun, monthlyReview = fals
     : evidence;
   const route = monthlyReview ? "auditFinalReport" : "onBrandAudit";
   const messages = buildOnBrandAuditMessages({ evidence: modelEvidence });
+  if (monthlyReview) return runMonthlyBrandSections({messages, evidence, sessionId});
   let raw = "";
   try {
     raw = await resilientRequest(route, {
@@ -566,6 +572,38 @@ async function runModelAudit({ sessionId, evidence, dryRun, monthlyReview = fals
         `Initial model pass: ${firstError?.message || firstError}; repair pass: ${repairError?.message || repairError}`
       );
     }
+  }
+}
+
+export async function runMonthlyBrandSections({messages, evidence, sessionId}, request = resilientRequest) {
+  const configuration = {
+    sections: [
+      ["verdict", ["auditCompletionState", "sessionId", "generatedAt", "window", "executiveVerdict", "sourceCoverage", "scorecard", "confirmedStrengths", "limitations"]],
+      ["defects", ["confirmedDefectsLedger"]],
+      ["channels", ["rssFindings", "zernioBlogSocialFindings", "podcastTranscriptFindings", "patternLevelDiagnosis"]],
+      ["guardrails", ["promptLevelDiagnosis", "pipelineLevelDiagnosis", "rankedRemediationPlan", "doNotChange"]],
+    ],
+    system: messages[0].content,
+    user: messages[1].content,
+    parse: parseJsonObject,
+    options: {sessionId, section:"monthly-on-brand", max_tokens:REPORT_MAX_TOKENS, temperature:REPORT_TEMPERATURE,
+      timeoutMs:Number(process.env.ON_BRAND_AUDIT_TIMEOUT_MS || 90000)},
+  };
+  try { return normaliseOnBrandReport(await synthesiseAuditSections(request, configuration), evidence); }
+  catch (firstError) {
+    // Repair only malformed unfinished sections. Provider failures retain a
+    // partial report and never trigger a duplicate complete paid audit.
+    let finalError = firstError;
+    if (!firstError.code && firstError instanceof SyntaxError) {
+      try {
+        return normaliseOnBrandReport(await synthesiseAuditSections(request, {
+          ...configuration, previous:firstError.auditPartial || {},
+          user:configuration.user + "\nThe unfinished section contained invalid JSON. Return valid compact JSON without repeating accepted sections.",
+        }), evidence);
+      } catch (repairError) { finalError = repairError; }
+    }
+    return normaliseOnBrandReport({...finalError.auditPartial, auditCompletionState:"Partial"}, evidence,
+      {rawModelError:`Monthly ${finalError.auditSection || "unknown"} section failed: ${finalError.message}`});
   }
 }
 

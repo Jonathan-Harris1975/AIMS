@@ -27,7 +27,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:88 |
 | `AI_MODEL_DEFAULT` | No | scripts/verifyHeadroomProduction.js:17 |
-| `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1988 |
+| `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1995 |
 | `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:80 |
 | `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>server.js:201<br>services/shared/middleware/suiteAuth.js:60 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
@@ -308,7 +308,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:14 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:15 |
-| `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:545<br>audits/utils/onBrandAudit.js:560 |
+| `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:551<br>audits/utils/onBrandAudit.js:566<br>audits/utils/onBrandAudit.js:590 |
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |

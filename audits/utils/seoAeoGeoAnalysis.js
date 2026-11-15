@@ -1,4 +1,5 @@
 import { reviewAuditEvidence } from "./stagedAuditReview.js";
+import { createHash } from "node:crypto";
 import { buildLane1SkillsBaseline } from "./lane1Skills.js";
 import { compactWebsiteAuditPolicy } from "./websiteAuditPolicy.js";
 
@@ -1934,11 +1935,12 @@ function auditIntegerEnv(name, fallback) {
 // are assembled by buildNormalisedPayload from the unabridged local evidence.
 const FINAL_SECTIONS = [
   ["judgement", ["auditCompletionState", "aiAnalysisStatus", "executiveSummary", "overallVerdict", "scoreTable",
-    "topFivePriorities", "quickWins", "majorRisks", "estateLabels", "scopeInputsMethod",
-    "inventoryReconciliationSummary", "findingsByAuditLens", "rankedIssueLedger",
-    "deterministicRemediationLedger", "finalVerdictAndImplementationOrder", "limitations", "verificationItems"]],
-  ["annexes", ["pageTypeFindings", "priorityPageAnnex", "templateComponentGeneratorAnnex",
-    "codeMarkupContentRemediationAppendix", "bestPracticeGapMatrix"]],
+    "estateLabels", "scopeInputsMethod", "inventoryReconciliationSummary"]],
+  ["findings", ["findingsByAuditLens", "rankedIssueLedger"]],
+  ["remediation", ["deterministicRemediationLedger", "codeMarkupContentRemediationAppendix"]],
+  ["programme", ["topFivePriorities", "quickWins", "majorRisks", "finalVerdictAndImplementationOrder", "limitations", "verificationItems"]],
+  ["page-annexes", ["pageTypeFindings", "priorityPageAnnex"]],
+  ["template-annexes", ["templateComponentGeneratorAnnex", "bestPracticeGapMatrix"]],
 ];
 
 const SECTION_OUTPUT_CONTRACT = "\n\nSECTION OUTPUT CONTRACT (overrides the full-report output key list above):\n" +
@@ -1946,7 +1948,7 @@ const SECTION_OUTPUT_CONTRACT = "\n\nSECTION OUTPUT CONTRACT (overrides the full
   "coverageAssurance, sourceReconciliation or fullUrlCoverageAppendix: the local builder preserves those from original evidence. " +
   "Keep each narrative field under 40 words; use compact JSON. Preserve exact evidence, source targets and verification steps.";
 
-async function collectForensicSections({ resilientRequest, payload, userPrompt, section, previous = {} }) {
+async function collectForensicSections({ resilientRequest, payload, userPrompt, section, previous = {}, onSection = async () => {} }) {
   const combined = { ...previous };
   for (const [name, keys] of FINAL_SECTIONS) {
     if (keys.every(key => key in combined)) continue;
@@ -1955,10 +1957,13 @@ async function collectForensicSections({ resilientRequest, payload, userPrompt, 
       messages: [
         { role: "system", content: SYSTEM_PROMPT + SECTION_OUTPUT_CONTRACT.replace("{keys}", keys.join(", ")) },
         { role: "user", content: userPrompt },
-        ...(name === "annexes" ? [{ role: "user", content: "Use these final ranked issues for consistent appendix references: " + JSON.stringify(combined.rankedIssueLedger || []) }] : []),
+        ...(combined.rankedIssueLedger ? [{ role: "user", content:
+          "Use these final ranked issues for consistent references: " + JSON.stringify(combined.rankedIssueLedger) }] : []),
       ],
     }).catch(error => {
       error.forensicProviderFailure = true;
+      error.forensicPartial = { ...combined };
+      error.message = `Forensic section ${name}: ${error.message}`;
       throw error;
     });
     try {
@@ -1968,6 +1973,8 @@ async function collectForensicSections({ resilientRequest, payload, userPrompt, 
       const missing = keys.filter(key => !(key in data));
       if (missing.length) throw new Error(`Forensic ${name} section missing keys: ${missing.join(", ")}`);
       for (const key of keys) combined[key] = data[key];
+      try { await onSection({ ...combined }); }
+      catch (error) { error.forensicCheckpointFailure = true; throw error; }
     } catch (error) {
       error.forensicPartial = { ...combined };
       throw error;
@@ -1992,7 +1999,11 @@ async function callAuditForensic({ resilientRequest, payload, messages, section 
   });
 }
 
-export async function runSeoAeoGeoAnalysis(payload) {
+export function forensicCheckpointDigest(payload) {
+  return createHash("sha256").update(JSON.stringify({payload, system:SYSTEM_PROMPT, contract:SECTION_OUTPUT_CONTRACT, sections:FINAL_SECTIONS})).digest("hex");
+}
+
+export async function runSeoAeoGeoAnalysis(payload, { checkpoint, onCheckpoint = async () => {} } = {}) {
   const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../services/shared/utils/ai-service.js");
   const diagnostics = getProviderDiagnosticsForRoute("auditFinalReport");
   const configuredProviders = asArray(diagnostics.configuredProviders).filter((provider) => provider.configured);
@@ -2004,15 +2015,20 @@ export async function runSeoAeoGeoAnalysis(payload) {
     throw new Error(`AI forensic analysis unavailable: no configured economy audit providers. Expected one configured model/key pair from shared ai-config route: ${expected}`);
   }
 
-  const evidenceReviews = await reviewAuditEvidence(buildSeoEvidence(payload), resilientRequest);
+  const evidenceDigest = forensicCheckpointDigest(payload);
+  const saved = checkpoint?.evidenceDigest === evidenceDigest ? checkpoint : null;
+  const evidenceReviews = Array.isArray(saved?.reviews) ? saved.reviews : await reviewAuditEvidence(buildSeoEvidence(payload), resilientRequest);
+  const persist = sections => onCheckpoint({evidenceDigest, reviews:evidenceReviews, sections});
+  await persist(saved?.sections || {});
   const userPrompt = buildUserPrompt(payload, evidenceReviews);
   let draft;
   try {
-    draft = await collectForensicSections({ resilientRequest, payload, userPrompt, section: "seo-aeo-geo-forensic" });
+    draft = await collectForensicSections({ resilientRequest, payload, userPrompt, section: "seo-aeo-geo-forensic",
+      previous:saved?.sections || {}, onSection:persist });
     return validateAndNormaliseAnalysisShape(draft, payload);
   } catch (err) {
     const firstError = err;
-    if (err?.forensicProviderFailure) throw err;
+    if (err?.forensicProviderFailure || err?.forensicCheckpointFailure) throw err;
     if (err?.code === "AUDIT_AI_PROMPT_ECHO") {
       return buildDeterministicFallback(payload, firstError, new Error("Repair skipped because the provider echoed the prompt/request."));
     }
@@ -2023,10 +2039,11 @@ export async function runSeoAeoGeoAnalysis(payload) {
       const repaired = await collectForensicSections({
         resilientRequest, payload, userPrompt: userPrompt + "\n\n" + repairPrompt,
         section: "seo-aeo-geo-forensic-repair", previous: firstError.forensicPartial || {},
+        onSection:persist,
       });
       return validateAndNormaliseAnalysisShape(repaired, payload);
     } catch (repairError) {
-      if (repairError?.forensicProviderFailure) throw repairError;
+      if (repairError?.forensicProviderFailure || repairError?.forensicCheckpointFailure) throw repairError;
       return buildDeterministicFallback(payload, firstError, repairError);
     }
   }

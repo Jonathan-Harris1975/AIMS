@@ -24,6 +24,16 @@ test('bounded chunks preserve every evidence character and run sequentially', as
   assert.equal(reviews.length, chunks.length);
 });
 
+test('later evidence fragments retain authoritative source availability and sampling limits', async () => {
+  const source={sourceType:'podcast_transcript',status:'complete',items:[{text:'x'.repeat(50000)}],limitations:['Excerpt only']};
+  const chunks=evidenceChunks({podcast:source});
+  assert.ok(chunks.length>1);
+  for (const chunk of chunks) assert.deepEqual(chunk.context,{sourceType:'podcast_transcript',status:'complete',itemCount:1,limitations:['Excerpt only']});
+  const reviews=await reviewAuditEvidence({podcast:source},async()=>{throw new Error('free provider unavailable');});
+  assert.deepEqual(reviews.at(-1).context,chunks.at(-1).context);
+  assert.equal(reviews.map(row=>row.evidence).join(''),JSON.stringify(source));
+});
+
 test('free capacity failure retains exact original evidence for the paid final pass', async () => {
   const source = { findingId: 'P-1', affectedPaths: ['services/podcast/index.js'] };
   const reviews = await reviewAuditEvidence({ podcast: source }, async () => { throw new Error('429'); });
