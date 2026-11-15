@@ -208,7 +208,7 @@ test("/analysis completes with deterministic fallback after malformed forensic J
 test('failed SEO analysis resumes saved sections without repeating free reviews or accepted paid work', async () => {
   const oldFetch=globalThis.fetch;
   const oldEnv={...process.env};
-  process.env.AUDIT_CALLBACK_TOKEN='checkpoint-token';
+  process.env.AUDIT_CALLBACK_TOKEN='test-checkpoint-token';
   process.env.OPENROUTER_API_KEY=['synthetic','checkpoint','test'].join('-');
   let paid=0;let free=0;
   globalThis.fetch=async(_url,options)=>{
@@ -222,10 +222,10 @@ test('failed SEO analysis resumes saved sections without repeating free reviews 
     const app=express();app.use(express.json({limit:'5mb'}));app.use('/audits/seo-aeo-geo',router);
     const sessionId=`checkpoint-test-${Date.now()}`;
     const payload={...validAnalysisPayload(),sessionId};
-    const post=()=>request(app).post('/audits/seo-aeo-geo/analysis').set('Authorization','Bearer checkpoint-token').send(payload);
+    const post=()=>request(app).post('/audits/seo-aeo-geo/analysis').set('Authorization','Bearer test-checkpoint-token').send(payload);
     const poll=async()=>{
       for(let i=0;i<50;i++){
-        const res=await request(app).get(`/audits/seo-aeo-geo/analysis/${sessionId}`).set('Authorization','Bearer checkpoint-token');
+        const res=await request(app).get(`/audits/seo-aeo-geo/analysis/${sessionId}`).set('Authorization','Bearer test-checkpoint-token');
         if(['failed','completed'].includes(res.body.status))return res.body;
         await new Promise(resolve=>setTimeout(resolve,20));
       }
