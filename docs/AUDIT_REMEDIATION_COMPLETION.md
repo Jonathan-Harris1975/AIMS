@@ -9,3 +9,5 @@ The trusted `Audit remediation handoff` workflow uses existing Autonomy R2 crede
 Required regression tests use `node:test` in the exact `test/rams-audit-*.test.js` path declared by the immutable plan. Trusted admission checks changed paths and this test file before permitting a managed audit PR. Existing premium model policy and Headroom remain independent of repair completion.
 
 Operational acceptance must include a real audit repair passing through the external writer and production verification. Unit tests and a successful workflow preflight alone do not certify that acceptance.
+
+Pending and evidence-retaining audit jobs are exempt from ordinary status expiry. The Website retry and late child-callback paths preserve the original accepted report and use the same deployed-repair completion gate. Permanent ledger or authentication errors fail explicitly; transient transport failures stay pending. Main-branch and PR repair share the audit writer fence, and native audit PR repairs must update the reserved branch in place. Local trigger/payload checks precede provider reservation. R2 credentials are trimmed before signing to tolerate copied trailing newlines.

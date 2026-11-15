@@ -130,7 +130,7 @@ export async function dispatchWebsiteAuditToRams({ sessionId, auditJsonKey }) {
       info("audit.website.rams.dispatched", { sessionId, auditJsonKey: finalKey, attempt, runId: payload.runId || null });
       if (!payload.runId) throw new Error("RAMS website rebuild dispatch omitted runId");
       if (!config.waitForCompletion) {
-        return { ok: true, status: "awaiting-remediation", enabled: true, attempt, ...payload };
+        return { ...payload, ok: true, status: "awaiting-remediation", enabled: true, attempt };
       }
       const completion = await waitForRamsRunCompletion({
         config,

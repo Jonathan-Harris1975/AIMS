@@ -5,6 +5,8 @@ on: # zizmor: ignore[dangerous-triggers] trusted event router; code is fixed to 
     workflows: ["AIMS CI", "CodeQL", "Security and repository quality", "Koyeb production deployment watch"]
     types: [completed]
   workflow_dispatch:
+  schedule:
+    - cron: "31 * * * *"
 
 permissions:
   actions: read
@@ -18,12 +20,13 @@ jobs:
   create_repair_pr:
     if: >-
       ${{
-        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' ||
         (github.event.workflow_run.event != 'pull_request' &&
          github.event.workflow_run.head_branch == github.event.repository.default_branch &&
          github.event.workflow_run.head_repository.full_name == github.repository)
       }}
     runs-on: ubuntu-latest
+    environment: Autonomy
     steps:
       - name: Mint autonomous repair GitHub App token
         id: app_token
@@ -100,6 +103,8 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           KILO_REPAIR_TRIGGER_URL: ${{ secrets.KILO_REPAIR_TRIGGER_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.CF_R2_ACCESS_KEY_ID || vars.R2_ACCESS_KEY_ID || vars.CF_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.CF_R2_SECRET_ACCESS_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -107,6 +112,24 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "GitHub App authentication succeeded; manual dispatch creates no repair PR."
             exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            HEAD_SHA="$(gh api "repos/${REPO}/commits/${DEFAULT_BRANCH}" --jq '.sha')"
+            candidate="$(gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" | \
+              jq -c --argjson names '["AIMS CI","CodeQL","Security and repository quality","Koyeb production deployment watch"]' \
+                '[.workflow_runs[] | select(.event != "pull_request" and (.name as $n | $names | index($n)))] |
+                 group_by(.workflow_id) | map(sort_by(.run_number,.run_attempt) | last) |
+                 map(select(.status == "completed" and .conclusion == "failure")) | sort_by(.id) | last')"
+            if [ "$candidate" = "null" ]; then
+              echo "No current failed default-branch workflow needs repair."
+              exit 0
+            fi
+            RUN_WORKFLOW_ID="$(jq -r '.workflow_id' <<< "$candidate")"
+            RUN_ID="$(jq -r '.id' <<< "$candidate")"
+            RUN_NAME="$(jq -r '.name' <<< "$candidate")"
+            RUN_CONCLUSION=failure
+            RUN_URL="$(jq -r '.html_url' <<< "$candidate")"
           fi
 
           # An old/out-of-order completion must not retire or create current repairs.
@@ -164,6 +187,8 @@ jobs:
               echo "::error::KILO_REPAIR_TRIGGER_URL is missing, unsupported or invalid for this repository."
               exit 1
             fi
+            # The durable repository fence is checked before any provider/comment lease.
+            python3 .github/scripts/audit_remediation_worker.py --guard-main-repair "$repair_pr" "$HEAD_SHA"
             contract="$(cat .github/kilo-machine-repair-contract.md)"
             test -n "$contract" || { echo "::error::Kilo machine repair contract is empty."; exit 1; }
             carrier_url="https://github.com/${REPO}/pull/${repair_pr}"

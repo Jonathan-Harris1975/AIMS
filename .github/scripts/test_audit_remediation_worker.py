@@ -11,6 +11,19 @@ REPO = 'Jonathan-Harris1975/AIMS'
 
 
 class AuditWorkerTests(unittest.TestCase):
+    def test_storage_credentials_trim_copy_paste_whitespace_before_signing(self):
+        from unittest.mock import MagicMock
+        response=MagicMock()
+        response.__enter__.return_value=response
+        response.read.return_value=b'{}'
+        response.headers.get.return_value='etag'
+        with patch.dict(worker.os.environ,{'R2_ACCESS_KEY_ID':' test-access\n','R2_SECRET_ACCESS_KEY':'test-secret\n'}):
+            with patch.object(worker.urllib.request,'urlopen',return_value=response) as opened:
+                worker.s3('GET','audits','qa-suite/reports/test.json')
+                authorization=opened.call_args.args[0].get_header('Authorization')
+                self.assertNotIn('\n',authorization)
+                self.assertIn('Credential=test-access/',authorization)
+
     def test_non_audit_pr_never_reads_secrets(self):
         with patch.object(worker, 's3', side_effect=AssertionError('unneeded storage read')):
             self.assertTrue(worker.audit_scope_admission({'head': {'ref': 'fix/ordinary'}}))
@@ -81,6 +94,20 @@ class AuditWorkerTests(unittest.TestCase):
             worker.dispatch('qa-suite/reports/remediation/content/run/groups/'+'a'*64+'.json',REPO)
             self.assertEqual(storage.call_count,1)
             self.assertEqual(storage.call_args.args[0],'GET')
+
+    def test_missing_provider_config_never_claims_or_reserves_a_writer(self):
+        import hashlib
+        plan={'auditJsonKey':'source','auditDigest':hashlib.sha256(worker.encoded({})).hexdigest(),
+              'baseBranch':'main','sourceSha':'a'*40,'batchId':'b'*64,'branch':'fix/rams-audit-'+'b'*24,
+              'regressionTestPath':'test/repair.test.js','tasks':[]}
+        import sys
+        sys.path.insert(0,str(path.parent))
+        with patch.dict(worker.os.environ,{'KILO_REPAIR_TRIGGER_URL':''}):
+            with patch.object(worker,'read_plan',return_value=plan),patch.object(worker,'gh',return_value={'sha':'a'*40}):
+                with patch.object(worker,'s3',side_effect=[(None,None),({},None),(None,None)]) as storage:
+                    with patch.object(worker,'acquire_writer',side_effect=AssertionError('must not claim')):
+                        self.assertRaisesRegex(RuntimeError,'trigger required',worker.dispatch,'plan.json',REPO)
+                    self.assertEqual(storage.call_args.args[3]['status'],'configuration_pending')
 
     def test_protected_paths_cannot_be_audit_scope(self):
         for path in ['../x','/etc/passwd','.github/workflows/ci.yml','package-lock.json','a\\b']:
