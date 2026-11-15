@@ -1,4 +1,4 @@
-import { reviewAuditEvidence } from "./stagedAuditReview.js";
+import { reviewAuditEvidence, synthesiseAuditSections, retainAuditSourceFindings } from "./stagedAuditReview.js";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { chromium } from "playwright-core";
@@ -889,7 +889,8 @@ synthesis directly from the retained source ledgers without inventing evidence. 
 export async function runWebsiteAuditCouncil(stageReports) {
   const health = evaluateWebsiteAuditStageHealth(stageReports);
   if (health.failures.length === health.stages.length) {
-    return deterministicFallback(stageReports, "All required source audit stages were incomplete; AI council synthesis was skipped to avoid spending tokens on an evidence-empty report.");
+    return retainAuditSourceFindings(deterministicFallback(stageReports,
+      "All required source audit stages were incomplete; AI council synthesis was skipped to avoid spending tokens on an evidence-empty report."), stageReports);
   }
   try {
     const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../services/shared/utils/ai-service.js");
@@ -898,27 +899,32 @@ export async function runWebsiteAuditCouncil(stageReports) {
     if (!configured.length) throw new Error("No configured auditFinalReport provider");
     const payload = compactWebsiteAuditInputs(stageReports);
     const reviews = await reviewAuditEvidence(payload, resilientRequest);
-    const raw = await resilientRequest("auditFinalReport", {
+    const combined = await synthesiseAuditSections(resilientRequest, {
+      sections: [
+        ["verdict", ["synthesisState", "executiveSummary", "scorecard", "councilVerdict", "councilRecord"]],
+        ["remediation", ["masterIssueLedger", "topActions", "blockers", "definitionOfDone"]],
+        ["programme", ["quickWins", "conflicts", "funnelMap", "keywordOpportunities", "implementationProgramme", "measurementPlan", "gapMatrix"]],
+      ], parse: parseJsonResponse,
+      options: {
       section: "website-audit-expert-council",
       max_tokens: Math.min(12000, Number(process.env.WEBSITE_AUDIT_COUNCIL_MAX_TOKENS || 10000)),
       temperature: Number(process.env.WEBSITE_AUDIT_COUNCIL_TEMPERATURE || 0.12),
       top_p: 0.95,
       timeoutMs: Number(process.env.WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS || 300000),
       maxRetries: Number(process.env.WEBSITE_AUDIT_COUNCIL_MAX_RETRIES || 0),
-      reasoning: false,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Consolidate this verified audit evidence bundle into the required council JSON.\n${JSON.stringify(reviews)}` },
-      ],
+      },
+      system: SYSTEM_PROMPT + "\nDo not duplicate unifiedFindings: they are assembled locally from masterIssueLedger with the same finding IDs.",
+      user: `Consolidate this verified audit evidence bundle into the required council JSON.\n${JSON.stringify(reviews)}`,
     });
-    const normalised = normaliseCouncil(parseJsonResponse(raw), stageReports);
+    combined.unifiedFindings = arr(combined.masterIssueLedger).map(row => ({...row}));
+    const normalised = normaliseCouncil(combined, stageReports);
     if (!councilHasRequiredSubstance(normalised)) {
-      return deterministicFallback(stageReports, "The AI council returned structurally valid JSON without the required verdict, scored evidence and remediation substance.");
+      return retainAuditSourceFindings(deterministicFallback(stageReports,
+        "The AI council returned structurally valid JSON without the required verdict, scored evidence and remediation substance."), stageReports);
     }
-    return normalised;
+    return retainAuditSourceFindings(normalised, stageReports);
   } catch (err) {
-    return deterministicFallback(stageReports, err?.message || String(err));
+    return retainAuditSourceFindings(deterministicFallback(stageReports, err?.message || String(err)), stageReports);
   }
 }
 

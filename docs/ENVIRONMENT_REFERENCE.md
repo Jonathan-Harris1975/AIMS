@@ -27,7 +27,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:88 |
 | `AI_MODEL_DEFAULT` | No | scripts/verifyHeadroomProduction.js:17 |
-| `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1942 |
+| `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1988 |
 | `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:80 |
 | `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>server.js:201<br>services/shared/middleware/suiteAuth.js:60 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
@@ -193,7 +193,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:722 |
 | `CF_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CHROME_BIN` | No | audits/utils/socialThumbnailAudit.js:133 |
-| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:272<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1082<br>services/artwork/utils/quizCardRenderer.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:130 |
+| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:301<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1088<br>services/artwork/utils/quizCardRenderer.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:130 |
 | `CLOUDFLARE_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CLOUDFLARE_API_BASE_URL` | No | services/kdp/catalogue.js:19 |
 | `CLOUDFLARE_PURGE_ALLOW_PUBLIC` | Yes | services/shared/middleware/suiteAuth.js:81 |
@@ -344,7 +344,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PHASE3_SOURCE_COVERAGE_MIN` | No | services/content-quality/phase3Gates.js:372 |
 | `PHASE3_SOURCE_MIN_CHARS` | Yes | services/content-quality/phase3Gates.js:341 |
 | `PHASE3_SOURCE_OVERLAP_MIN` | No | services/content-quality/phase3Gates.js:369 |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:272<br>audits/utils/websiteAuditCouncil.js:1083<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:301<br>audits/utils/websiteAuditCouncil.js:1089<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
 | `PODCASTINDEX_USER_AGENT` | Yes | services/shared/utils/podcastIndexClient.js:34 |
 | `PODCAST_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createPodcastArtwork.js:12 |
 | `PODCAST_DURATION_MINS` | No | services/script/utils/durationCalculator.js:79 |
@@ -457,10 +457,10 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBHOOK_TIMEOUT_MS` | Yes | services/podcast/runPodcastPipeline.js:21 |
 | `WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS` | No | audits/utils/websiteAuditPipeline.js:46 |
 | `WEBSITE_AUDIT_CHILD_RECONCILE_INTERVAL_MS` | No | audits/utils/websiteAuditPipeline.js:47 |
-| `WEBSITE_AUDIT_COUNCIL_MAX_RETRIES` | Yes | audits/utils/websiteAuditCouncil.js:907 |
-| `WEBSITE_AUDIT_COUNCIL_MAX_TOKENS` | Yes | audits/utils/websiteAuditCouncil.js:903 |
-| `WEBSITE_AUDIT_COUNCIL_TEMPERATURE` | No | audits/utils/websiteAuditCouncil.js:904 |
-| `WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/websiteAuditCouncil.js:906 |
+| `WEBSITE_AUDIT_COUNCIL_MAX_RETRIES` | Yes | audits/utils/websiteAuditCouncil.js:914 |
+| `WEBSITE_AUDIT_COUNCIL_MAX_TOKENS` | Yes | audits/utils/websiteAuditCouncil.js:910 |
+| `WEBSITE_AUDIT_COUNCIL_TEMPERATURE` | No | audits/utils/websiteAuditCouncil.js:911 |
+| `WEBSITE_AUDIT_COUNCIL_TIMEOUT_MS` | Yes | audits/utils/websiteAuditCouncil.js:913 |
 | `WEBSITE_AUDIT_FINALISATION_STALE_MS` | Yes | audits/utils/websiteAuditPipeline.js:45 |
 | `WEBSITE_AUDIT_RUN_REUSE_ACTIVE_MS` | Yes | audits/utils/websiteAuditPipeline.js:40 |
 | `WEBSITE_REBUILD_HOOK` | Yes | scripts/backfill-blog-main-site-links.js:20<br>services/blog/social/buildDailySocialBlogPost.js:244<br>services/blog/weekly/buildWeeklyBlogPost.js:220<br>services/podcast/runPodcastPipeline.js:73 |

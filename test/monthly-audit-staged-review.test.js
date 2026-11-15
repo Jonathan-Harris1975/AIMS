@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evidenceChunks, reviewAuditEvidence } from '../audits/utils/stagedAuditReview.js';
+import { evidenceChunks, reviewAuditEvidence, synthesiseAuditSections, retainAuditSourceFindings } from '../audits/utils/stagedAuditReview.js';
 import { collectMonthlyPublishedContent } from '../audits/utils/monthlyPublishedContent.js';
 import { runContentMasterCouncil, CONTENT_MASTER_COUNCIL_MEMBERS, __contentMasterCouncilTestHooks } from '../audits/utils/contentMasterCouncil.js';
 import { __ramsContentDispatchTestHooks } from '../audits/utils/ramsContentDispatch.js';
@@ -38,6 +38,7 @@ function validReport() {
     scorecard: Object.fromEntries(['overallContentQuality','zernioSocial','blotatoShorts','ebookConversion','hashtagStrategy','weeklyBlog',
       'blogSocial','podcastTranscript','podcastKeywords','newsletter','crossChannelCoherence','councilConfidence'].map(k => [k, {score:null,basis:'Evidence not supplied'}])),
     laneFindings: Object.fromEntries(['zernioSocial','blotatoShorts','ebookPosts','hashtagStrategy','weeklyBlog','blogSocial','podcastTranscript','podcastKeywords','newsletter'].map(k => [k, []])),
+    crossChannelFindings:[],retryAndQuarantinePolicy:{maxTotalAttempts:5,rules:[]},modelRoutingRecommendations:[],ramsUpdateContract:{},
     masterIssueLedger: [], topActions: [], definitionOfDone: ['Verify the next published output'],
     councilRecord: { seats: CONTENT_MASTER_COUNCIL_MEMBERS.map(s => ({...s, reviewNote:'Missing metrics remain unscored'})) } };
 }
@@ -82,4 +83,64 @@ test('an unsuccessful audit result is a failed MAST job with diagnostic links re
   const result=await getAsyncAuditRouteJobFresh('content-master',sessionId);
   assert.equal(result.status,'failed');
   assert.equal(result.result.reportJsonUrl,'r2://audits/diagnostic.json');
+});
+
+test('content council reads saved captions and episode metadata rather than only QA reports', async () => {
+  const { loadContentMasterSourceBundle, publishedContentSources } = await import('../audits/utils/contentMasterCouncil.js');
+  const saved = {
+    'audits/on-brand/latest.json': { reportJsonUrl:'r2://audits/audits/on-brand/run/report.json', evidenceUrl:'r2://audits/audits/on-brand/run/evidence.json' },
+    'audits/on-brand/run/report.json': { findings:[] },
+    'audits/on-brand/run/evidence.json': {
+      zernioBlogSocial:{status:'complete',items:[{content:'Actual caption #AIgovernance',firstComment:'#GenX'}]},
+      podcastTranscripts:{status:'complete',items:[{episodeMetadata:{keywords:['AI infrastructure costs']},textExcerpt:'Actual episode argument.'}],limitations:['Excerpt only']}
+    }
+  };
+  const previousBucket=process.env.R2_BUCKET_AUDITS;
+  process.env.R2_BUCKET_AUDITS='audits';
+  const reads=[];
+  try {
+  const bundle=await loadContentMasterSourceBundle('onBrand','audits/on-brand/latest.json',async key=>{
+    reads.push(key);return {ok:true,value:saved[key]};
+  });
+  assert.equal(reads.length,3);
+  const sources=publishedContentSources(bundle);
+  assert.equal(sources.publishedSocial.report.items[0].content,'Actual caption #AIgovernance');
+  assert.deepEqual(sources.publishedPodcast.report.items[0].episodeMetadata.keywords,['AI infrastructure costs']);
+  assert.deepEqual(sources.publishedPodcast.errors,['Excerpt only']);
+  assert.equal(publishedContentSources({}).publishedSocial.status,'missing');
+  } finally { if(previousBucket===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=previousBucket; }
+});
+
+test('council sections preserve exact keys, prior findings and one bounded paid call per section', async () => {
+  const calls=[];
+  let active=0;
+  const result=await synthesiseAuditSections(async (route,options)=>{
+    assert.equal(++active,1);
+    assert.equal(route,'auditFinalReport');
+    assert.equal(options.maxRetries,0);
+    assert.deepEqual(options.reasoning,{effort:'none',exclude:true});
+    calls.push(options);
+    await new Promise(resolve=>setImmediate(resolve));
+    active--;
+    return JSON.stringify(calls.length===1?{verdict:'Evidence-led',ignored:'not allowed'}:{ledger:[{sourceFindingIds:['S-1']}]});
+  },{sections:[['verdict',['verdict']],['remediation',['ledger']]],system:'Evidence only',user:'Observed S-1',options:{max_tokens:9000}});
+  assert.deepEqual(result,{verdict:'Evidence-led',ledger:[{sourceFindingIds:['S-1']}]});
+  assert.equal(calls.length,2);
+  assert.match(calls[1].messages.at(-1).content,/Evidence-led/);
+  await assert.rejects(synthesiseAuditSections(async()=>'{"other":[]}',{
+    sections:[['required',['ledger']]],system:'Evidence only',user:'source'
+  }),/missing ledger/);
+});
+
+
+test('every original finding survives council aggregation without authorising inferred code edits', () => {
+  const sources={onBrand:{findings:Array.from({length:150},(_,i)=>({findingId:`S-${i}`,title:`Observed defect ${i}`,classification:i===1?'future_guidance':'code_fix'}))}};
+  const report=retainAuditSourceFindings({masterIssueLedger:[{findingId:'C-1',sourceFindingIds:['S-0'],classification:'manual_review'}]},sources);
+  assert.equal(report.masterIssueLedger.length,150);
+  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:150});
+  assert.equal(report.masterIssueLedger[1].classification,'future_guidance');
+  assert.equal(report.masterIssueLedger[2].classification,'manual_review');
+  assert.deepEqual(report.masterIssueLedger[2].affectedPaths,[]);
+  retainAuditSourceFindings(report,sources);
+  assert.equal(report.masterIssueLedger.length,150);
 });
