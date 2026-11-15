@@ -123,7 +123,9 @@ async function loadBundle(label,key,read=readIfPresent){
   const readUrl=url=>{const sourceKey=auditKeyFromPublicUrl(url);return sourceKey?read(sourceKey):{ok:false,error:"missing report JSON URL",value:null};};
   const report=await readUrl(l.reportJsonUrl||(String(l.reportUrl||"").endsWith('.json')?l.reportUrl:""));
   const evidence=l.evidenceUrl?await readUrl(l.evidenceUrl):null;
-  return {label,latestKey:key,latest:l,report:obj(report.value),evidence:obj(evidence?.value),
+  return {label,latestKey:key,latest:l,report:obj(report.value),evidence:evidence?.ok?obj(evidence.value):null,
+    evidenceStatus:evidence?(evidence.ok?"available":"unavailable"):"not_provided",
+    evidenceError:evidence&&!evidence.ok?evidence.error:null,
     status:latest.ok?(report.ok?"complete":"latest-only"):"missing",
     errors:[latest,report,...(evidence?[evidence]:[])].filter(x=>!x.ok).map(x=>x.error)};
 }
@@ -133,7 +135,7 @@ export { loadBundle as loadContentMasterSourceBundle };
 export function publishedContentSources(onBrand={}){
   const evidence=obj(onBrand.evidence);
   const source=(label,value)=>({label,report:obj(value),status:value?.status||"missing",
-    errors:arr(value?.limitations).concat(value?[]:["Saved on-brand published evidence was unavailable."])});
+    errors:arr(value?.limitations).concat(value?[]:[onBrand.evidenceError||"Saved on-brand published evidence was unavailable."])});
   return {
     publishedSocial:source("publishedSocial",evidence.zernioBlogSocial),
     publishedPodcast:source("publishedPodcast",evidence.podcastTranscripts),
@@ -146,7 +148,13 @@ export async function loadContentMasterSources(){const entries=await Promise.all
    const sources=Object.fromEntries(entries.map(x=>[x.label,x]));
    return {...sources,...publishedContentSources(sources.onBrand),publishedContent: await loadPublishedContentBundle()};}
 
-function compactSources(sources){const out={}; for(const [key,b] of Object.entries(sources||{})){out[key]={status:b.status,latest:b.latest,report:b.report,errors:b.errors};} return out;}
+function compactSources(sources){
+  const out={};
+  for(const [key,b] of Object.entries(sources||{})){
+    out[key]={status:b.status,latest:b.latest,report:b.report,errors:b.errors,evidenceStatus:b.evidenceStatus,evidenceError:b.evidenceError};
+  }
+  return out;
+}
 
 function normalise(source,sources){const s=obj(source); const sc=obj(s.scorecard); const scoreKeys=["overallContentQuality","zernioSocial","blotatoShorts","ebookConversion",
   "hashtagStrategy","weeklyBlog","blogSocial","podcastTranscript","podcastKeywords","newsletter","crossChannelCoherence","councilConfidence"]; const scorecard={}; for(
@@ -164,10 +172,12 @@ function normalise(source,sources){const s=obj(source); const sc=obj(s.scorecard
                       majorVotes:arr(s.councilRecord?.majorVotes),dissent:arr(s.councilRecord?.dissent),rejectedAssumptions:arr(s.councilRecord?.rejectedAssumptions),
                         unresolvedVerificationItems:arr(s.councilRecord?.unresolvedVerificationItems)},definitionOfDone:arr(s.definitionOfDone)};}
 
-function fallback(sources,message){return normalise({synthesisState:"Incomplete",executiveSummary:
+function fallback(sources,message,partialResult){const result=normalise({synthesisState:"Incomplete",executiveSummary:
   "Source reports were collected but the 36-seat AI synthesis was unavailable. Evidence is retained without invented conclusions.",scorecard:{councilConfidence:{score:1,basis:
     message}},councilVerdict:{overallDiagnosis:"Rerun council synthesis before allowing RAMS to treat cross-channel priorities as final."},councilRecord:{
-      unresolvedVerificationItems:[message]},definitionOfDone:["Complete a successful 36-seat content council synthesis."]},sources);}
+      unresolvedVerificationItems:[message]},definitionOfDone:["Complete a successful 36-seat content council synthesis."]},sources);
+  if(partialResult&&Object.keys(partialResult).length)result.partialSynthesis=partialResult;
+  return result;}
 
 export function validateContentMasterSynthesis(value) {
   if (value?.synthesisState !== "Complete" || !text(value.executiveSummary) || !text(value.councilVerdict?.overallDiagnosis)) {
@@ -198,7 +208,10 @@ export function validateContentMasterSynthesis(value) {
 export async function runContentMasterCouncil(sources, request = null) {
   try {
     const resilientRequest = request || (await import("../../services/shared/utils/ai-service.js")).resilientRequest;
-    const evidence = Object.fromEntries(Object.entries(compactSources(sources)).map(([key, bundle]) => [key, {status: bundle.status, report: bundle.report, errors: bundle.errors}]));
+    const evidence = Object.fromEntries(Object.entries(compactSources(sources)).map(([key, bundle]) => [key, {
+      status: bundle.status, report: bundle.report, errors: bundle.errors,
+      evidenceStatus: bundle.evidenceStatus, evidenceError: bundle.evidenceError,
+    }]));
     const reviews = await reviewAuditEvidence(evidence, resilientRequest);
     const sourceFindingLedger = [];
     const collectFindings = (value, source) => {
@@ -245,7 +258,7 @@ export async function runContentMasterCouncil(sources, request = null) {
     retainAuditSourceFindings(council, Object.fromEntries(Object.entries(evidence).map(([key,bundle])=>[key,bundle.report])));
     council.evidenceReviews = reviews.map(({evidence, review, ...metadata}) => metadata);
     return council;
-  } catch (err) { return fallback(sources, err?.message || String(err)); }
+  } catch (err) { return fallback(sources, err?.message || String(err), err?.partialResult); }
 }
 
 function list(items){const a=arr(items);return a.length?`<ul>${a.map(x=>`<li>${esc(typeof x==='string'?x:(x.exactChange||x.title||x.action||x.note||JSON.stringify(

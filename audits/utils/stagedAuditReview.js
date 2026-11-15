@@ -54,22 +54,27 @@ export async function reviewAuditEvidence(sources, request) {
 export async function synthesiseAuditSections(request, { sections, system, user, options = {}, parse = JSON.parse }) {
   const combined = {};
   for (const [name, keys] of sections) {
-    const raw = await request('auditFinalReport', {
-      ...options, section: `${options.section || 'monthly-final'}-${name}`, maxRetries: 0,
-      reasoning: { effort: 'none', exclude: true }, response_format: {type:'json_object'},
-      messages: [
-        {role:'system',content:system + '\nSECTION OUTPUT CONTRACT: Produce ONLY these keys for this call: ' + keys.join(', ') +
-          '. Other report sections are produced separately. Keep narrative fields below 40 words and prioritisation tables to 8 aggregated rows. ' +
-          'Preserve all required specialist seats. Group repeated defects by root cause with every relevant source finding ID. Return compact JSON.'},
-        {role:'user',content:user},
-        ...(Object.keys(combined).length ? [{role:'user',content:'Previously accepted report sections; preserve their priorities and finding references: ' + JSON.stringify(combined)}] : []),
-      ],
-    });
-    const value = parse(raw);
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid monthly final section: ${name}`);
-    const missing = keys.filter(key => !(key in value));
-    if (missing.length) throw new Error(`Monthly final section ${name} missing ${missing.join(', ')}`);
-    for (const key of keys) combined[key] = value[key];
+    try {
+      const raw = await request('auditFinalReport', {
+        ...options, section: `${options.section || 'monthly-final'}-${name}`, maxRetries: 0,
+        reasoning: { effort: 'none', exclude: true }, response_format: {type:'json_object'},
+        messages: [
+          {role:'system',content:system + '\nSECTION OUTPUT CONTRACT: Produce ONLY these keys for this call: ' + keys.join(', ') +
+            '. Other report sections are produced separately. Keep narrative fields below 40 words and prioritisation tables to 8 aggregated rows. ' +
+            'Preserve all required specialist seats. Group repeated defects by root cause with every relevant source finding ID. Return compact JSON.'},
+          {role:'user',content:user},
+        ],
+      });
+      const value = parse(raw);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid monthly final section: ${name}`);
+      const missing = keys.filter(key => !(key in value));
+      if (missing.length) throw new Error(`Monthly final section ${name} missing ${missing.join(', ')}`);
+      for (const key of keys) combined[key] = value[key];
+    } catch (error) {
+      const failure = new Error(error?.message || String(error), { cause: error });
+      failure.partialResult = { ...combined };
+      throw failure;
+    }
   }
   return combined;
 }
@@ -77,30 +82,35 @@ export async function synthesiseAuditSections(request, { sections, system, user,
 // Summary models may aggregate findings, but may never silently drop them.
 // Unrepresented source rows remain traceable, conservatively non-executable.
 export function retainAuditSourceFindings(report, sources) {
-  const rows = report.masterIssueLedger || [];
+  const rows = [...(report.masterIssueLedger || [])];
   const covered = new Set(rows.flatMap(row => row.sourceFindingIds || []));
   const seen = new Set();
   const visit = (value, source) => {
     if (!value || typeof value !== 'object') return;
     const id = value.findingId || value.issueId || value.groupId;
-    if (!id) { for (const child of Object.values(value)) visit(child, source); return; }
-    seen.add(id);
-    if (covered.has(id)) return;
-    rows.push({
-      findingId:`retained-${rows.length + 1}`,title:value.title || value.rootCause || value.issue || `Source finding ${id}`,
-      severity:value.severity || 'Medium',confidence:value.confidence || 'Needs Verification',
-      classification:value.classification === 'future_guidance' ? 'future_guidance' : 'manual_review',
-      fixClass:'',affectedPaths:[],sourceFindingIds:[id],sourceAudit:source,
-      evidence:value.evidence || value.evidenceObserved || value.exactEvidence || [],
-      exactRemediation:value.exactRemediation || value.requiredOutcome || value.recommendedFix || 'Review the retained original source finding before defining a code change.',
-      owner:value.owner || value.recommendedOwner || 'Audit source owner',
-      acceptanceCriterion:value.acceptanceCriterion || 'Resolve the original source finding and verify against its retained evidence.',
-      verificationMethod:value.verificationMethod || 'Rerun the affected source audit and compare the original finding.',
-    });
-    covered.add(id);
+    if (id) {
+      seen.add(id);
+      if (!covered.has(id)) {
+        rows.push({
+          findingId:`retained-${rows.length + 1}`,title:value.title || value.rootCause || value.issue || `Source finding ${id}`,
+          severity:value.severity || 'Medium',confidence:value.confidence || 'Needs Verification',
+          classification:value.classification === 'future_guidance' ? 'future_guidance' : 'manual_review',
+          fixClass:'',affectedPaths:[],sourceFindingIds:[id],sourceAudit:source,
+          evidence:value.evidence || value.evidenceObserved || value.exactEvidence || [],
+          exactRemediation:value.exactRemediation || value.requiredOutcome || value.recommendedFix || 'Review the retained original source finding before defining a code change.',
+          owner:value.owner || value.recommendedOwner || 'Audit source owner',
+          acceptanceCriterion:value.acceptanceCriterion || 'Resolve the original source finding and verify against its retained evidence.',
+          verificationMethod:value.verificationMethod || 'Rerun the affected source audit and compare the original finding.',
+        });
+        covered.add(id);
+      }
+    }
+    for (const child of Object.values(value)) visit(child, source);
   };
   for (const [source,value] of Object.entries(sources)) visit(value,source);
-  report.masterIssueLedger = rows;
-  report.sourceFindingCoverage = {sourceFindingCount:seen.size,representedFindingCount:[...seen].filter(id=>covered.has(id)).length};
-  return report;
+  return {
+    ...report,
+    masterIssueLedger: rows,
+    sourceFindingCoverage: {sourceFindingCount:seen.size,representedFindingCount:[...seen].filter(id=>covered.has(id)).length},
+  };
 }
