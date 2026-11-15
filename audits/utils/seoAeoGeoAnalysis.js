@@ -1941,17 +1941,18 @@ const FINAL_SECTIONS = [
     "codeMarkupContentRemediationAppendix", "bestPracticeGapMatrix"]],
 ];
 
+const SECTION_OUTPUT_CONTRACT = "\n\nSECTION OUTPUT CONTRACT (overrides the full-report output key list above):\n" +
+  "Return ONLY these keys in this call: {keys}. Other report sections are produced separately. Never repeat fullIssueRecords, sourceLedger, sourceMismatchesThatMatter, " +
+  "coverageAssurance, sourceReconciliation or fullUrlCoverageAppendix: the local builder preserves those from original evidence. " +
+  "Keep each narrative field under 40 words; use compact JSON. Preserve exact evidence, source targets and verification steps.";
+
 async function collectForensicSections({ resilientRequest, payload, userPrompt, section }) {
   const combined = {};
   for (const [name, keys] of FINAL_SECTIONS) {
     const raw = await callAuditForensic({
       resilientRequest, payload, section: `${section}-${name}`,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT + "\n\nSECTION OUTPUT CONTRACT (overrides the full-report output key list above):\n" +
-          `Return ONLY these keys in this call: ${keys.join(", ")}. ` +
-          "Other report sections are produced separately. Never repeat fullIssueRecords, sourceLedger, sourceMismatchesThatMatter, " +
-          "coverageAssurance, sourceReconciliation or fullUrlCoverageAppendix: the local builder preserves those from original evidence. " +
-          "Keep each narrative field under 40 words; use compact JSON. Preserve exact evidence, source targets and verification steps." },
+        { role: "system", content: SYSTEM_PROMPT + SECTION_OUTPUT_CONTRACT.replace("{keys}", keys.join(", ")) },
         { role: "user", content: userPrompt },
         ...(name === "annexes" ? [{ role: "user", content: "Use these final ranked issues for consistent appendix references: " + JSON.stringify(combined.rankedIssueLedger || []) }] : []),
       ],
