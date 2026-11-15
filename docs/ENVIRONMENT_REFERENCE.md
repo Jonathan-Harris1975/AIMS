@@ -193,7 +193,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:722 |
 | `CF_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CHROME_BIN` | No | audits/utils/socialThumbnailAudit.js:133 |
-| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:301<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1088<br>services/artwork/utils/quizCardRenderer.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:130 |
+| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:303<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1088<br>services/artwork/utils/quizCardRenderer.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:130 |
 | `CLOUDFLARE_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CLOUDFLARE_API_BASE_URL` | No | services/kdp/catalogue.js:19 |
 | `CLOUDFLARE_PURGE_ALLOW_PUBLIC` | Yes | services/shared/middleware/suiteAuth.js:81 |
@@ -308,7 +308,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:14 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:15 |
-| `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:543<br>audits/utils/onBrandAudit.js:558 |
+| `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:545<br>audits/utils/onBrandAudit.js:560 |
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |
@@ -344,7 +344,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PHASE3_SOURCE_COVERAGE_MIN` | No | services/content-quality/phase3Gates.js:372 |
 | `PHASE3_SOURCE_MIN_CHARS` | Yes | services/content-quality/phase3Gates.js:341 |
 | `PHASE3_SOURCE_OVERLAP_MIN` | No | services/content-quality/phase3Gates.js:369 |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:301<br>audits/utils/websiteAuditCouncil.js:1089<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:303<br>audits/utils/websiteAuditCouncil.js:1089<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
 | `PODCASTINDEX_USER_AGENT` | Yes | services/shared/utils/podcastIndexClient.js:34 |
 | `PODCAST_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createPodcastArtwork.js:12 |
 | `PODCAST_DURATION_MINS` | No | services/script/utils/durationCalculator.js:79 |

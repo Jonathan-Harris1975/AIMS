@@ -111,6 +111,19 @@ test('content council reads saved captions and episode metadata rather than only
   } finally { if(previousBucket===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=previousBucket; }
 });
 
+test('partial source reports cannot enter the master council as complete bundles', async () => {
+  const { loadContentMasterSourceBundle } = await import('../audits/utils/contentMasterCouncil.js');
+  const previousBucket=process.env.R2_BUCKET_AUDITS;
+  process.env.R2_BUCKET_AUDITS='audits';
+  try {
+    for (const [latestPartial, completion, expected] of [[false,'Partial','partial'],[true,'Complete','partial'],[false,'Complete','complete']]) {
+      const bundle=await loadContentMasterSourceBundle('onBrand','latest',async key=>({ok:true,value:key==='latest'
+        ?{partial:latestPartial,reportJsonUrl:'r2://audits/audits/on-brand/run/report.json'}:{auditCompletionState:completion}}));
+      assert.equal(bundle.status,expected);
+    }
+  } finally { if(previousBucket===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=previousBucket; }
+});
+
 test('council sections preserve exact keys, prior findings and one bounded paid call per section', async () => {
   const calls=[];
   let active=0;

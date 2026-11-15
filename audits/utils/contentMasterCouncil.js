@@ -123,8 +123,10 @@ async function loadBundle(label,key,read=readIfPresent){
   const readUrl=url=>{const sourceKey=auditKeyFromPublicUrl(url);return sourceKey?read(sourceKey):{ok:false,error:"missing report JSON URL",value:null};};
   const report=await readUrl(l.reportJsonUrl||(String(l.reportUrl||"").endsWith('.json')?l.reportUrl:""));
   const evidence=l.evidenceUrl?await readUrl(l.evidenceUrl):null;
+  const completion = text(report.value?.auditCompletionState || report.value?.synthesisState).toLowerCase();
+  const partial = l.partial === true || ["partial", "incomplete", "failed"].includes(completion);
   return {label,latestKey:key,latest:l,report:obj(report.value),evidence:obj(evidence?.value),
-    status:latest.ok?(report.ok?"complete":"latest-only"):"missing",
+    status:latest.ok?(report.ok?(partial?"partial":"complete"):"latest-only"):"missing",
     errors:[latest,report,...(evidence?[evidence]:[])].filter(x=>!x.ok).map(x=>x.error)};
 }
 

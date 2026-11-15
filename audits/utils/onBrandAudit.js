@@ -529,7 +529,9 @@ async function runModelAudit({ sessionId, evidence, dryRun, monthlyReview = fals
   }
 
   const modelEvidence = monthlyReview
-    ? { metadata: evidence.metadata, reviews: await reviewAuditEvidence(evidence, resilientRequest) }
+    ? { metadata: evidence.metadata, sourceCoverage: sourceCoverageFromEvidence(evidence),
+      reviewMethod: "All fragments of the bounded saved evidence are reviewed below. Fragment boundaries do not mean the original source was inaccessible.",
+      reviews: await reviewAuditEvidence(evidence, resilientRequest) }
     : evidence;
   const route = monthlyReview ? "auditFinalReport" : "onBrandAudit";
   const messages = buildOnBrandAuditMessages({ evidence: modelEvidence });
