@@ -292,7 +292,7 @@ test("economy final sections are sequential and rebuild full coverage without mo
     } });
   assert.equal(calls.length, 2);
   assert.match(calls[1].messages.at(-1).content, /JH-SEO-001/);
-  assert.equal(draft.fullUrlCoverageAppendix, undefined);
+  assert.equal(Object.hasOwn(draft, "fullUrlCoverageAppendix"), false);
   const report = validateAndNormaliseAnalysisShape(draft, payload);
   assert.deepEqual(report.fullUrlCoverageAppendix.map(row => row.url), payload.allRoutes.map(row => row.url));
   assert.equal(report.fullIssueRecords.length, report.rankedIssueLedger.length);
