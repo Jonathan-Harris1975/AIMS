@@ -132,6 +132,7 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
     assert.equal(statusBody.analysis.rankedIssueLedger[0].issueId, "JH-SEO-001");
     assert.equal(statusBody.analysis.aiAnalysisStatus, "valid");
     assert.equal(paidCalls.length, 2);
+    assert.ok(paidCalls.every(body => body.reasoning?.effort === "none" && body.reasoning?.exclude === true));
     assert.match(paidCalls[0].messages[0].content, /SECTION OUTPUT CONTRACT/);
   } finally {
     for (const [name, value] of Object.entries(oldEnv)) {

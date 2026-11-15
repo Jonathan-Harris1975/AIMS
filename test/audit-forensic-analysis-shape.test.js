@@ -281,7 +281,7 @@ test("economy final sections are sequential and rebuild full coverage without mo
     resilientRequest: async (route, options) => {
       assert.equal(++active, 1);
       assert.equal(route, "auditFinalReport");
-      assert.equal(options.reasoning, false);
+      assert.deepEqual(options.reasoning, { effort: "none", exclude: true });
       assert.ok(options.max_tokens <= 10000);
       const [, keys] = FINAL_SECTIONS[calls.length];
       calls.push(options);

@@ -19,7 +19,7 @@ export async function reviewAuditEvidence(sources, request) {
       const result = await request("auditEvidenceReview", {
         section: `monthly-evidence-${chunk.source}-${chunk.offset}`,
         max_tokens: 1600, maxRetries: 0, timeoutMs: 90000,
-        temperature: 0.1, reasoning: false, returnMetadata: true,
+        temperature: 0.1, reasoning: { effort: "none", exclude: true }, returnMetadata: true,
         response_format: { type: "json_object" },
         validateContent: (raw) => {
           const value = JSON.parse(raw);

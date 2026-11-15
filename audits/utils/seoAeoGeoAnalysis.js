@@ -1980,7 +1980,7 @@ async function callAuditForensic({ resilientRequest, payload, messages, section 
     maxRetries: auditIntegerEnv("AUDIT_AI_MAX_RETRIES", 0),
     retryBaseMs: auditNumberEnv("AUDIT_AI_RETRY_BASE_MS", Number(process.env.AI_RETRY_BASE_MS || 500)),
     response_format: { type: "json_object" },
-    reasoning: false,
+    reasoning: { effort: "none", exclude: true },
     messages,
   });
 }
