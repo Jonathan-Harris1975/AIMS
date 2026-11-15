@@ -23,6 +23,7 @@ function validForensicJson() {
     scopeInputsMethod: { inspected: ["repo", "coverage"] },
     inventoryReconciliationSummary: { summary: "One podcast page was analysed in the fixture." },
     findingsByAuditLens: { technicalSeo: "The fixture route is crawlable." },
+    deterministicRemediationLedger: { findings: [] },
     rankedIssueLedger: [
       {
         issueId: "JH-SEO-001",
@@ -87,10 +88,15 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
   process.env.OPENROUTER_API_KEY = ["synthetic", "shared", "audit", "test"].join("-");
   process.env.OPENROUTER_ANTHROPIC = "anthropic/test-model";
   process.env.OPENROUTER_API_KEY_ANTHROPIC = "test-key";
-  globalThis.fetch = async () => ({
-    ok: true,
-    json: async () => ({ choices: [{ message: { content: JSON.stringify(validForensicJson()) } }] }),
-  });
+  const paidCalls = [];
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const free = body.model.endsWith(":free");
+    if (!free) paidCalls.push(body);
+    return { ok: true, json: async () => ({ choices: [{ finish_reason: "stop", message: {
+      content: JSON.stringify(free ? {summary:"Fixture evidence reviewed",findings:[],limitations:[]} : validForensicJson())
+    } }] }) };
+  };
 
   try {
     const { default: router } = await import(`../audits/routes/seoAeoGeo.js?routeTest=${Date.now()}`);
@@ -98,19 +104,20 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
     app.use(express.json({ limit: "5mb" }));
     app.use("/audits/seo-aeo-geo", router);
 
+    const sessionId = `route-test-${Date.now()}`;
     const response = await request(app)
       .post("/audits/seo-aeo-geo/analysis")
       .set("Authorization", "Bearer route-token")
-      .send(validAnalysisPayload())
+      .send({ ...validAnalysisPayload(), sessionId })
       .expect(202);
 
     assert.equal(response.body.ok, true);
-    assert.equal(response.body.statusUrl.endsWith("/audits/seo-aeo-geo/analysis/route-test"), true);
+    assert.equal(response.body.statusUrl.endsWith(`/audits/seo-aeo-geo/analysis/${sessionId}`), true);
 
     let statusBody;
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const statusResponse = await request(app)
-        .get("/audits/seo-aeo-geo/analysis/route-test")
+        .get(`/audits/seo-aeo-geo/analysis/${sessionId}`)
         .set("Authorization", "Bearer route-token");
       assert.ok([200, 202].includes(statusResponse.status), `unexpected polling status ${statusResponse.status}: ${statusResponse.text}`);
       statusBody = statusResponse.body;
@@ -123,6 +130,9 @@ test("/analysis returns validated forensic JSON through the shared AI route", as
     assert.equal(statusBody.hasAnalysis, true);
     assert.equal(statusBody.analysis.auditCompletionState, "Complete");
     assert.equal(statusBody.analysis.rankedIssueLedger[0].issueId, "JH-SEO-001");
+    assert.equal(statusBody.analysis.aiAnalysisStatus, "valid");
+    assert.equal(paidCalls.length, 2);
+    assert.match(paidCalls[0].messages[0].content, /SECTION OUTPUT CONTRACT/);
   } finally {
     for (const [name, value] of Object.entries(oldEnv)) {
       if (value === undefined) delete process.env[name];
@@ -156,7 +166,7 @@ test("/analysis completes with deterministic fallback after malformed forensic J
     app.use(express.json({ limit: "5mb" }));
     app.use("/audits/seo-aeo-geo", router);
 
-    const payload = { ...validAnalysisPayload(), sessionId: "route-malformed-test" };
+    const payload = { ...validAnalysisPayload(), sessionId: `route-malformed-test-${Date.now()}` };
     const response = await request(app)
       .post("/audits/seo-aeo-geo/analysis")
       .set("Authorization", "Bearer route-token")
@@ -168,7 +178,7 @@ test("/analysis completes with deterministic fallback after malformed forensic J
     let statusBody;
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const statusResponse = await request(app)
-        .get("/audits/seo-aeo-geo/analysis/route-malformed-test")
+        .get(`/audits/seo-aeo-geo/analysis/${payload.sessionId}`)
         .set("Authorization", "Bearer route-token");
       assert.ok([200, 202].includes(statusResponse.status), `unexpected polling status ${statusResponse.status}: ${statusResponse.text}`);
       statusBody = statusResponse.body;
