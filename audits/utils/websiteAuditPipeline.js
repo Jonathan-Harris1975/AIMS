@@ -242,17 +242,46 @@ async function persistParent(sessionId, metadata) {
   return job;
 }
 
-async function dispatchStage(parentSessionId, stage, parentJob) {
+async function advanceParentForStage(parentSessionId, next, previous, {
+  persist = persistParent, restore = updateJob, flush = flushJobStoreWrites,
+} = {}) {
+  try { return await persist(parentSessionId, next); }
+  catch (error) {
+    // No child dispatch has occurred yet. Restore the last committed stage so
+    // its callback or the status reconciler can advance it after R2 recovers.
+    restore(WEBSITE_PIPELINE_JOB_TYPE, parentSessionId, {
+      ...previous, stageAdmissionError: error.message,
+      ...(!previous.currentStage ? {status:"failed",phase:"stage-admission-failed",error} : {}),
+    });
+    await flush({ throwOnError: false });
+    throw error;
+  }
+}
+
+const stageDispatches = new Map();
+function singleStageDispatch(key, run) {
+  if (stageDispatches.has(key)) return stageDispatches.get(key);
+  const pending = Promise.resolve().then(run).finally(() => stageDispatches.delete(key));
+  stageDispatches.set(key, pending);
+  return pending;
+}
+
+function dispatchStage(parentSessionId, stage, parentJob) {
+  return singleStageDispatch(`${parentSessionId}:${stage.auditType}`, () => performStageDispatch(parentSessionId, stage, parentJob));
+}
+
+async function performStageDispatch(parentSessionId, stage, parentJob) {
   const websiteUrl = parentJob.websiteUrl || DEFAULT_WEBSITE_URL;
   const child = parentStageMetadata(parentSessionId, stage, websiteUrl);
   const stages = { ...(parentJob.stages || {}), [stage.key]: child };
-  await persistParent(parentSessionId, {
+  await advanceParentForStage(parentSessionId, {
     status: "running",
     phase: stage.auditType,
     currentStage: stage.auditType,
+    stageAdmissionError: undefined,
     stages,
     updatedAt: new Date().toISOString(),
-  });
+  }, parentJob);
 
   try {
     const result = await startAuditRun({
@@ -1158,6 +1187,14 @@ export async function getWebsiteAuditPipelineJobFresh(sessionId) {
   let job = await getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
   if (!job || job.status === "completed" || job.status === "failed") return job;
 
+  if (job.stageAdmissionError && !job.finalising && job.stages?.[stageDefinition(job.currentStage)?.key]?.status === "completed") {
+    const next = WEBSITE_PIPELINE_STAGES[stageIndex(job.currentStage) + 1];
+    if (next && !["completed", "failed"].includes(job.stages?.[next.key]?.status)) {
+      await dispatchStage(sessionId, next, job);
+      return getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
+    }
+  }
+
   if (!job.finalising && stageDefinition(job.currentStage)) {
     job = await reconcileCurrentChildStage(job);
     if (!job || job.status === "completed" || job.status === "failed") return job;
@@ -1179,6 +1216,8 @@ export async function getWebsiteAuditPipelineJobFresh(sessionId) {
 
 export const __websiteAuditPipelineTestHooks = {
   safeSegment,
+  advanceParentForStage,
+  singleStageDispatch,
   stageDefinition,
   stageIndex,
   workflowRunIdFromUrl,

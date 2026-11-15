@@ -110,12 +110,14 @@ export async function startAsyncAuditRouteJob({ auditType, payload = {}, runner,
     ...metadata,
   });
 
-  try {
-    await flushJobStoreWrites({ throwOnError: true });
-  } catch (error) {
-    failJob(jobType, sessionId, error, { phase: "admission-failed" });
-    await flushJobStoreWrites({ throwOnError: false });
-    throw error; // Never start paid audit work without its durable parent.
+  if (started) {
+    try {
+      await flushJobStoreWrites({ throwOnError: true });
+    } catch (error) {
+      failJob(jobType, sessionId, error, { phase: "admission-failed" });
+      await flushJobStoreWrites({ throwOnError: false });
+      throw error; // Only this request's newly started runner can be rejected.
+    }
   }
 
   if (started) {

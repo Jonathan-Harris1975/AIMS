@@ -20,6 +20,8 @@ test('a 202 payload cannot overwrite the locally controlled pending status',asyn
   globalThis.fetch=async()=>new Response(JSON.stringify({status:'accepted',ok:true,runId:'run-1'}),{status:202});
   const result=await dispatch.dispatchContentAuditToRams({sessionId:'source-1',auditJsonKey:'audits/content-master/2026-11/source-1/content-audit.json'});
   assert.equal(result.status,'awaiting-remediation');
+  assert.equal(result.pipeline,'content');
+  assert.equal(result.auditJsonKey,'audits/content-master/2026-11/source-1/content-audit.json');
 });
 
 test('unresolved audit parents survive TTL while ordinary completed jobs expire',(t)=>{
@@ -60,4 +62,31 @@ test('permanent completion probe errors fail content parent and cannot resurrect
   assert.equal(failed.result.remediationPending,false);
   globalThis.fetch=async()=>{throw new Error('failed jobs must not poll again');};
   assert.equal((await content.getAsyncAuditRouteJobFresh('content-master','content-probe-failure')).status,'failed');
+});
+
+test('failed stage admission restores the previously committed stage before any child handoff',async()=>{
+  const previous={status:'running',currentStage:'digital-growth',phase:'digital-growth',stages:{digitalGrowth:{status:'completed'}}};
+  let restored;
+  await assert.rejects(website.__websiteAuditPipelineTestHooks.advanceParentForStage('stage-admission-test',{
+    currentStage:'seo-aeo-geo',stages:{seoAeoGeo:{status:'queued'}}
+  },previous,{
+    persist:async()=>{throw new Error('R2 interrupted');},
+    restore:(_type,id,metadata)=>{assert.equal(id,'stage-admission-test');restored=metadata;},
+    flush:async()=>{},
+  }),/R2 interrupted/);
+  assert.equal(restored.currentStage,'digital-growth');
+  assert.equal(restored.stages.digitalGrowth.status,'completed');
+  assert.equal(restored.stageAdmissionError,'R2 interrupted');
+});
+
+
+test('concurrent recovery polls share one stage-dispatch handoff',async()=>{
+  const run=website.__websiteAuditPipelineTestHooks.singleStageDispatch;
+  let calls=0,release;
+  const wait=new Promise(resolve=>{release=resolve;});
+  const first=run('recovery-single-writer',async()=>{calls++;await wait;return 'accepted';});
+  const second=run('recovery-single-writer',()=>{throw new Error('duplicate dispatch');});
+  release();
+  assert.deepEqual(await Promise.all([first,second]),['accepted','accepted']);
+  assert.equal(calls,1);
 });

@@ -4,7 +4,7 @@ import { readAuditJson } from './publishAuditArtifacts.js';
 export async function recoverContentAuditJob(sessionId, read = readAuditJson) {
   let latest;
   try { latest = await read({key:'audits/content-master/latest.json'}); }
-  catch(error) { if(error?.$metadata?.httpStatusCode===404 || error?.name==='NoSuchKey') return null; throw error; }
+  catch(error) { if(error?.$metadata?.httpStatusCode===404 || ['NoSuchKey','NotFound'].includes(error?.name || error?.code)) return null; throw error; }
   if(latest.sessionId!==sessionId) return null;
   const prefix=`audits/content-master/`;
   const reportPrefix=String(latest.reportPrefix||'');
