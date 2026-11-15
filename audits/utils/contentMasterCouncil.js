@@ -68,7 +68,14 @@ Rules:
 - Weekly blog: assess professional editorial quality, opening, argument, evidence, original judgement, SEO intent, AEO extractability, internal linking and authority.
 - Blog social: assess fidelity to the article, curiosity and click-through rather than generic engagement bait.
 - Podcast/transcript: assess opening hook, conversational energy, repetition, narrative flow, pacing, final takeaway, TTS readiness and transcript utility.
-- Podcast keywords: derive recommendations from final episode/transcript evidence, not generic AI terms.
+- Podcast keywords: assess the supplied publishedPodcast episodeMetadata keywords against that same episode's textExcerpt; name exact relevant and irrelevant phrases, and record
+missing metadata. Do not substitute the absence of rule-based findings for editorial review.
+- Hashtag strategy: inspect the actual publishedSocial captions and first comments; assess exact observed tags, topical relevance, repetition and platform fit. Do not infer hashtag
+performance from overall engagement.
+- PublishedPodcast transcript excerpts support only the inspected passages, not claims about complete episode pacing, audio/TTS quality or full transcript excellence. A zero-defect
+deterministic check is not a 10/10 editorial assessment.
+- Blotato text/analytics do not verify rendered video, first frames, image alignment, motion or pacing. Mark those visual dimensions unverified unless actual visual evidence is
+supplied.
 - Newsletter: use AI Edge format principles: opening note, Big Three with what happened/why it matters/Jonathan's take, Worth Using, On the Radar, Reality Check, Turing's \
 Torch, Your Turn. Tuesday may promote the featured book; Thursday may promote Turing's Torch. Promotion must remain subordinate to reader value.
 - Cross-channel: flag copy-paste duplication but allow intentional thematic reinforcement.
@@ -111,15 +118,33 @@ function firstJson(raw){const s=text(raw).replace(/^```(?:json)?\s*/i,"").replac
   s.lastIndexOf("}"); if(a>=0&&b>a)return JSON.parse(s.slice(a,b+1)); throw new Error("Content council response did not contain valid JSON");}
 
 async function readIfPresent(key){try{return {ok:true,key,value:await readAuditJson({key})};}catch(error){return {ok:false,key,error:error?.message||String(error),value:null};}}
-async function readUrlIfPresent(url){const key=auditKeyFromPublicUrl(url); return key?readIfPresent(key):{ok:false,key:"",error:"missing report JSON URL",value:null};}
-async function loadBundle(label,key){const latest=await readIfPresent(key); const l=obj(latest.value); const report=l.reportJsonUrl?await readUrlIfPresent(l.reportJsonUrl):(
-  l.reportUrl&&String(l.reportUrl).endsWith('.json')?await readUrlIfPresent(l.reportUrl):{ok:false,error:"missing reportJsonUrl",value:null}); return {label,latestKey:key,
-    latest:obj(latest.value),report:obj(report.value),status:latest.ok?(report.ok?"complete":"latest-only"):"missing",errors:[latest,report].filter(x=>!x.ok).map(x=>x.error)};}
+async function loadBundle(label,key,read=readIfPresent){
+  const latest=await read(key); const l=obj(latest.value);
+  const readUrl=url=>{const sourceKey=auditKeyFromPublicUrl(url);return sourceKey?read(sourceKey):{ok:false,error:"missing report JSON URL",value:null};};
+  const report=await readUrl(l.reportJsonUrl||(String(l.reportUrl||"").endsWith('.json')?l.reportUrl:""));
+  const evidence=l.evidenceUrl?await readUrl(l.evidenceUrl):null;
+  return {label,latestKey:key,latest:l,report:obj(report.value),evidence:obj(evidence?.value),
+    status:latest.ok?(report.ok?"complete":"latest-only"):"missing",
+    errors:[latest,report,...(evidence?[evidence]:[])].filter(x=>!x.ok).map(x=>x.error)};
+}
+
+export { loadBundle as loadContentMasterSourceBundle };
+
+export function publishedContentSources(onBrand={}){
+  const evidence=obj(onBrand.evidence);
+  const source=(label,value)=>({label,report:obj(value),status:value?.status||"missing",
+    errors:arr(value?.limitations).concat(value?[]:["Saved on-brand published evidence was unavailable."])});
+  return {
+    publishedSocial:source("publishedSocial",evidence.zernioBlogSocial),
+    publishedPodcast:source("publishedPodcast",evidence.podcastTranscripts),
+  };
+}
 
 async function loadPublishedContentBundle(){const report=await collectMonthlyPublishedContent();return {label:"publishedContent",report,status:report.status,errors:report.errors};}
 
 export async function loadContentMasterSources(){const entries=await Promise.all(Object.entries(CONTENT_SOURCE_LATEST_KEYS).map(([label,key])=>loadBundle(label,key)));
-   return {...Object.fromEntries(entries.map(x=>[x.label,x])), publishedContent: await loadPublishedContentBundle()};}
+   const sources=Object.fromEntries(entries.map(x=>[x.label,x]));
+   return {...sources,...publishedContentSources(sources.onBrand),publishedContent: await loadPublishedContentBundle()};}
 
 function compactSources(sources){const out={}; for(const [key,b] of Object.entries(sources||{})){out[key]={status:b.status,latest:b.latest,report:b.report,errors:b.errors};} return out;}
 

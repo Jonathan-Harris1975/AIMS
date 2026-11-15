@@ -83,3 +83,29 @@ test('an unsuccessful audit result is a failed MAST job with diagnostic links re
   assert.equal(result.status,'failed');
   assert.equal(result.result.reportJsonUrl,'r2://audits/diagnostic.json');
 });
+
+test('content council reads saved captions and episode metadata rather than only QA reports', async () => {
+  const { loadContentMasterSourceBundle, publishedContentSources } = await import('../audits/utils/contentMasterCouncil.js');
+  const saved = {
+    'audits/on-brand/latest.json': { reportJsonUrl:'r2://audits/audits/on-brand/run/report.json', evidenceUrl:'r2://audits/audits/on-brand/run/evidence.json' },
+    'audits/on-brand/run/report.json': { findings:[] },
+    'audits/on-brand/run/evidence.json': {
+      zernioBlogSocial:{status:'complete',items:[{content:'Actual caption #AIgovernance',firstComment:'#GenX'}]},
+      podcastTranscripts:{status:'complete',items:[{episodeMetadata:{keywords:['AI infrastructure costs']},textExcerpt:'Actual episode argument.'}],limitations:['Excerpt only']}
+    }
+  };
+  const previousBucket=process.env.R2_BUCKET_AUDITS;
+  process.env.R2_BUCKET_AUDITS='audits';
+  const reads=[];
+  try {
+  const bundle=await loadContentMasterSourceBundle('onBrand','audits/on-brand/latest.json',async key=>{
+    reads.push(key);return {ok:true,value:saved[key]};
+  });
+  assert.equal(reads.length,3);
+  const sources=publishedContentSources(bundle);
+  assert.equal(sources.publishedSocial.report.items[0].content,'Actual caption #AIgovernance');
+  assert.deepEqual(sources.publishedPodcast.report.items[0].episodeMetadata.keywords,['AI infrastructure costs']);
+  assert.deepEqual(sources.publishedPodcast.errors,['Excerpt only']);
+  assert.equal(publishedContentSources({}).publishedSocial.status,'missing');
+  } finally { if(previousBucket===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=previousBucket; }
+});
