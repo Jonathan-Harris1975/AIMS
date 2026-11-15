@@ -173,6 +173,14 @@ test('incomplete council fallback retains a previously accepted section', async 
   assert.equal(result.partialSynthesis.executiveSummary,'Evidence reviewed');
 });
 
+test('content council fallback retains source findings when synthesis fails', async () => {
+  const sources={onBrand:{status:'complete',report:{findings:[{findingId:'SOURCE-1',title:'Observed source finding'}]},errors:[]}};
+  const report=await runContentMasterCouncil(sources,async()=>{throw new Error('synthesis unavailable');});
+  assert.equal(report.synthesisState,'Incomplete');
+  assert.ok(report.masterIssueLedger.some(row=>row.sourceFindingIds?.includes('SOURCE-1')));
+  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:1,representedFindingCount:0,retainedFindingCount:1});
+});
+
 
 test('every original finding survives council aggregation without authorising inferred code edits', () => {
   const sources={onBrand:{findings:Array.from({length:150},(_,i)=>({findingId:`S-${i}`,title:`Observed defect ${i}`,classification:i===1?'future_guidance':'code_fix'}))}};
@@ -181,7 +189,7 @@ test('every original finding survives council aggregation without authorising in
   assert.equal(original.masterIssueLedger.length,1);
   assert.equal(original.sourceFindingCoverage,undefined);
   assert.equal(report.masterIssueLedger.length,150);
-  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:150});
+  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:1,retainedFindingCount:149});
   assert.equal(report.masterIssueLedger[1].classification,'future_guidance');
   assert.equal(report.masterIssueLedger[2].classification,'manual_review');
   assert.deepEqual(report.masterIssueLedger[2].affectedPaths,[]);

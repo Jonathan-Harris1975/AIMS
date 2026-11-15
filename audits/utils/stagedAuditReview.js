@@ -84,6 +84,7 @@ export async function synthesiseAuditSections(request, { sections, system, user,
 export function retainAuditSourceFindings(report, sources) {
   const rows = [...(report.masterIssueLedger || [])];
   const covered = new Set(rows.flatMap(row => row.sourceFindingIds || []));
+  const coveredBeforeRetention = new Set(covered);
   const seen = new Set();
   const visit = (value, source) => {
     if (!value || typeof value !== 'object') return;
@@ -108,9 +109,14 @@ export function retainAuditSourceFindings(report, sources) {
     for (const child of Object.values(value)) visit(child, source);
   };
   for (const [source,value] of Object.entries(sources)) visit(value,source);
+  const representedFindingCount = [...seen].filter(id => coveredBeforeRetention.has(id)).length;
   return {
     ...report,
     masterIssueLedger: rows,
-    sourceFindingCoverage: {sourceFindingCount:seen.size,representedFindingCount:[...seen].filter(id=>covered.has(id)).length},
+    sourceFindingCoverage: {
+      sourceFindingCount: seen.size,
+      representedFindingCount,
+      retainedFindingCount: seen.size - representedFindingCount,
+    },
   };
 }

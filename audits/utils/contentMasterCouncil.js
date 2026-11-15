@@ -255,10 +255,14 @@ export async function runContentMasterCouncil(sources, request = null) {
         row.affectedPaths = [];
       }
     }
-    retainAuditSourceFindings(council, Object.fromEntries(Object.entries(evidence).map(([key,bundle])=>[key,bundle.report])));
-    council.evidenceReviews = reviews.map(({evidence, review, ...metadata}) => metadata);
-    return council;
-  } catch (err) { return fallback(sources, err?.message || String(err), err?.partialResult); }
+    const retained = retainAuditSourceFindings(council, Object.fromEntries(Object.entries(evidence).map(([key,bundle])=>[key,bundle.report])));
+    retained.evidenceReviews = reviews.map(({evidence, review, ...metadata}) => metadata);
+    return retained;
+  } catch (err) {
+    const council = fallback(sources, err?.message || String(err), err?.partialResult);
+    const sourceReports = Object.fromEntries(Object.entries(sources).map(([key, bundle]) => [key, bundle.report]));
+    return retainAuditSourceFindings(council, sourceReports);
+  }
 }
 
 function list(items){const a=arr(items);return a.length?`<ul>${a.map(x=>`<li>${esc(typeof x==='string'?x:(x.exactChange||x.title||x.action||x.note||JSON.stringify(
