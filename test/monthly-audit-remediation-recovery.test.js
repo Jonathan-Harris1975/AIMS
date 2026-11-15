@@ -22,10 +22,11 @@ test('a 202 payload cannot overwrite the locally controlled pending status',asyn
   assert.equal(result.status,'awaiting-remediation');
 });
 
-test('unresolved audit parents survive TTL while ordinary completed jobs expire',()=>{
-  const old=new Date(Date.now()-3*86400000).toISOString();
-  store.beginJob('audit:website','retained-source',{phase:'awaiting-remediation',evidenceRetentionRequired:true,updatedAt:old});
-  store.completeJob('ordinary','expired-source',{updatedAt:old});
+test('unresolved audit parents survive TTL while ordinary completed jobs expire',(t)=>{
+  const start=Date.now();
+  store.beginJob('audit:website','retained-source',{phase:'awaiting-remediation',evidenceRetentionRequired:true});
+  store.completeJob('ordinary','expired-source');
+  t.mock.method(Date,'now',()=>start+3*86400000);
   assert.ok(store.getJob('audit:website','retained-source'));
   assert.equal(store.getJob('ordinary','expired-source'),null);
 });
