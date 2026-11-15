@@ -1930,6 +1930,45 @@ function auditIntegerEnv(name, fallback) {
   return Number.isInteger(value) && value >= 0 ? value : fallback;
 }
 
+// Model judgement is emitted once; factual coverage and duplicate issue records
+// are assembled by buildNormalisedPayload from the unabridged local evidence.
+const FINAL_SECTIONS = [
+  ["judgement", ["auditCompletionState", "aiAnalysisStatus", "executiveSummary", "overallVerdict", "scoreTable",
+    "topFivePriorities", "quickWins", "majorRisks", "estateLabels", "scopeInputsMethod",
+    "inventoryReconciliationSummary", "findingsByAuditLens", "rankedIssueLedger",
+    "deterministicRemediationLedger", "finalVerdictAndImplementationOrder", "limitations", "verificationItems"]],
+  ["annexes", ["pageTypeFindings", "priorityPageAnnex", "templateComponentGeneratorAnnex",
+    "codeMarkupContentRemediationAppendix", "bestPracticeGapMatrix"]],
+];
+
+async function collectForensicSections({ resilientRequest, payload, userPrompt, section }) {
+  const combined = {};
+  for (const [name, keys] of FINAL_SECTIONS) {
+    const raw = await callAuditForensic({
+      resilientRequest, payload, section: `${section}-${name}`,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT + "\n\nSECTION OUTPUT CONTRACT (overrides the full-report output key list above):\n" +
+          `Return ONLY these keys in this call: ${keys.join(", ")}. ` +
+          "Other report sections are produced separately. Never repeat fullIssueRecords, sourceLedger, sourceMismatchesThatMatter, " +
+          "coverageAssurance, sourceReconciliation or fullUrlCoverageAppendix: the local builder preserves those from original evidence. " +
+          "Keep each narrative field under 40 words; use compact JSON. Preserve exact evidence, source targets and verification steps." },
+        { role: "user", content: userPrompt },
+        ...(name === "annexes" ? [{ role: "user", content: "Use these final ranked issues for consistent appendix references: " + JSON.stringify(combined.rankedIssueLedger || []) }] : []),
+      ],
+    }).catch(error => {
+      error.forensicProviderFailure = true;
+      throw error;
+    });
+    rejectRawPromptEcho(raw);
+    const data = extractJson(raw);
+    if (!isPlainObject(data)) throw new Error(`Forensic ${name} section is not a JSON object`);
+    const missing = keys.filter(key => !(key in data));
+    if (missing.length) throw new Error(`Forensic ${name} section missing keys: ${missing.join(", ")}`);
+    for (const key of keys) combined[key] = data[key];
+  }
+  return combined;
+}
+
 async function callAuditForensic({ resilientRequest, payload, messages, section }) {
   return resilientRequest("auditFinalReport", {
     sessionId: payload?.sessionId,
@@ -1941,6 +1980,7 @@ async function callAuditForensic({ resilientRequest, payload, messages, section 
     maxRetries: auditIntegerEnv("AUDIT_AI_MAX_RETRIES", 0),
     retryBaseMs: auditNumberEnv("AUDIT_AI_RETRY_BASE_MS", Number(process.env.AI_RETRY_BASE_MS || 500)),
     response_format: { type: "json_object" },
+    reasoning: false,
     messages,
   });
 }
@@ -1959,44 +1999,27 @@ export async function runSeoAeoGeoAnalysis(payload) {
 
   const evidenceReviews = await reviewAuditEvidence(buildSeoEvidence(payload), resilientRequest);
   const userPrompt = buildUserPrompt(payload, evidenceReviews);
-  const raw = await callAuditForensic({
-    resilientRequest,
-    payload,
-    section: "seo-aeo-geo-forensic",
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
-  });
-
   let draft;
   try {
-    rejectRawPromptEcho(raw);
-    draft = extractJson(raw);
+    draft = await collectForensicSections({ resilientRequest, payload, userPrompt, section: "seo-aeo-geo-forensic" });
     return validateAndNormaliseAnalysisShape(draft, payload);
   } catch (err) {
     const firstError = err;
+    if (err?.forensicProviderFailure) throw err;
     if (err?.code === "AUDIT_AI_PROMPT_ECHO") {
       return buildDeterministicFallback(payload, firstError, new Error("Repair skipped because the provider echoed the prompt/request."));
     }
 
     const validationErrors = err?.validationErrors || [err instanceof Error ? err.message : String(err)];
-    const repairPrompt = buildRepairPrompt({ payload, validationErrors, draft: draft || raw });
+    const repairPrompt = buildRepairPrompt({ payload, validationErrors, draft: draft || {} });
     try {
-      const repairedRaw = await callAuditForensic({
-        resilientRequest,
-        payload,
+      const repaired = await collectForensicSections({
+        resilientRequest, payload, userPrompt: userPrompt + "\n\n" + repairPrompt,
         section: "seo-aeo-geo-forensic-repair",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: repairPrompt },
-        ],
       });
-
-      rejectRawPromptEcho(repairedRaw);
-      const repaired = extractJson(repairedRaw);
       return validateAndNormaliseAnalysisShape(repaired, payload);
     } catch (repairError) {
+      if (repairError?.forensicProviderFailure) throw repairError;
       return buildDeterministicFallback(payload, firstError, repairError);
     }
   }
@@ -2004,6 +2027,8 @@ export async function runSeoAeoGeoAnalysis(payload) {
 
 export const __seoAeoGeoAnalysisTestHooks = {
   buildUserPrompt,
+  collectForensicSections,
+  FINAL_SECTIONS,
   buildRepairPrompt,
   extractJson,
   buildNormalisedPayload,
