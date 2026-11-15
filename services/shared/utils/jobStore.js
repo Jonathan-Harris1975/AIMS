@@ -59,7 +59,12 @@ function isValidPersistedJob(job) {
   return job && typeof job.type === "string" && typeof job.sessionId === "string";
 }
 
-function mergePersistedJobs(persistedJobs = []) {
+function mergePersistedJobs(persistedJobs = [], retired = []) {
+  for (const version of retired) {
+    const key = makeKey(version.type, version.sessionId);
+    const existing = jobs.get(key);
+    if (existing && Date.parse(version.updatedAt) >= (Date.parse(existing.updatedAt) || 0)) jobs.delete(key);
+  }
   for (const job of persistedJobs.filter(isValidPersistedJob)) {
     const key = makeKey(job.type, job.sessionId);
     const incoming = { ...job, error: sanitiseJobError(job.error) };
@@ -210,7 +215,7 @@ export function updateJob(type, sessionId, metadata = {}) {
 export async function refreshJobStoreFromState() {
   const persisted = await readJsonStateFresh(STATE_FILE, { jobs: [] }, { throwOnError: true });
   if (!Array.isArray(persisted?.jobs)) throw new Error("Invalid durable job-store snapshot");
-  mergePersistedJobs(persistedJobsFrom(persisted));
+  mergePersistedJobs(persistedJobsFrom(persisted), persisted.retired || []);
   pruneExpired();
   return true;
 }

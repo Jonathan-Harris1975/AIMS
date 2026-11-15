@@ -96,3 +96,64 @@ test('audit admission hydrates the existing R2 parent before deciding whether to
   });
   assert.match(stdout,/PRESERVED/);
 });
+
+test('expired terminal audits cannot be resurrected by an earlier running snapshot, including later writes',()=>{
+  const completed=job('finished',{status:'completed',updatedAt:'2020-01-02T00:00:00Z'});
+  const stale=job('finished',{updatedAt:'2020-01-01T00:00:00Z'});
+  const first=mergeJobSnapshots({jobs:[completed]},{jobs:[stale]});
+  assert.equal(first.jobs.length,0);
+  assert.equal(first.retired[0].status,'completed');
+  const later=mergeJobSnapshots(first,{jobs:[stale]});
+  assert.equal(later.jobs.length,0);
+  assert.deepEqual(later.retired,first.retired);
+  const retry=mergeJobSnapshots(later,{jobs:[job('finished')]});
+  assert.equal(retry.jobs.length,1);
+  assert.equal(retry.retired,undefined);
+});
+
+test('a duplicate audit request survives an unrelated shared write failure without starting another runner',async()=>{
+  const {execFile}=await import('node:child_process');
+  const {promisify}=await import('node:util');
+  const {mkdtemp}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');
+  const {join}=await import('node:path');
+  const script=`
+    import assert from 'node:assert/strict';
+    import {Readable} from 'node:stream';
+    const r2=await import('./services/shared/utils/r2-client.js');
+    const saved={jobs:[{type:'audit:newsletter:route-run',sessionId:'running-parent',status:'running',updatedAt:new Date().toISOString()},
+      {type:'ordinary',sessionId:'expired',status:'completed',updatedAt:'2020-01-01T00:00:00Z'}]};
+    r2.s3.send=async command=>{
+      if(command.constructor.name==='GetObjectCommand'&&command.input.Key==='state/job-store.json')
+        return {Body:Readable.from([JSON.stringify(saved)]),ETag:'"1"'};
+      if(command.constructor.name==='PutObjectCommand')throw new Error('AccessDenied');
+      throw Object.assign(new Error('missing'),{name:'NoSuchKey'});
+    };
+    const {startAsyncAuditRouteJob}=await import('./audits/utils/asyncAuditRouteJobs.js');
+    const store=await import('./services/shared/utils/jobStore.js');
+    let runs=0;
+    const result=await startAsyncAuditRouteJob({auditType:'newsletter',payload:{sessionId:'running-parent'},runner:async()=>{runs++;}});
+    assert.equal(result.started,false);assert.equal(result.status,'running');assert.equal(runs,0);
+    assert.equal(store.getJob('audit:newsletter:route-run','running-parent').status,'running');
+    console.log('RUNNER_PRESERVED');process.exit(0);
+  `;
+  const {stdout}=await promisify(execFile)(process.execPath,['--input-type=module','-e',script],{
+    cwd:new URL('..',import.meta.url),timeout:15000,
+    env:{...process.env,LOG_LEVEL:'silent',STATE_BACKEND:'r2',R2_ENDPOINT:'https://example.invalid',R2_ACCESS_KEY_ID:'test-access',
+      R2_SECRET_ACCESS_KEY:'test-secret',R2_BUCKET_META_SYSTEM:'metasystem',APP_STATE_DIR:await mkdtemp(join(tmpdir(),'audit-duplicate-'))}
+  });
+  assert.match(stdout,/RUNNER_PRESERVED/);
+});
+
+test('terminal rows with missing timestamps retire safely without poisoning future writes',()=>{
+  for(const updatedAt of [undefined,'invalid']) {
+    const source={jobs:[job('malformed-terminal',{status:'completed',updatedAt})]};
+    const first=mergeJobSnapshots(source,{jobs:[job('unrelated')]});
+    assert.equal(first.jobs.length,1);
+    assert.ok(Number.isFinite(Date.parse(first.retired[0].updatedAt)));
+    assert.equal(first.retired[0].timestampBasis,'terminal_state_observed_without_valid_timestamp');
+    const second=mergeJobSnapshots(first,{jobs:[job('another')]});
+    assert.equal(second.jobs.length,2);
+    assert.equal(second.retired.length,1);
+  }
+});

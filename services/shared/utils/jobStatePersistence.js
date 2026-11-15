@@ -10,15 +10,44 @@ export function retainJob(job, now = Date.now(), ttlMs = 86400000) {
 
 export function mergeJobSnapshots(remote, incoming, {now = Date.now(), ttlMs = 86400000} = {}) {
   if (!Array.isArray(remote?.jobs) || !Array.isArray(incoming?.jobs)) throw new Error('Invalid durable job-store snapshot');
-  const jobs = new Map();
+  const jobs = new Map(), retired = new Map();
+  const identity = row => JSON.stringify([row.type,row.sessionId]);
+  for (const snapshot of [remote,incoming]) {
+    if (snapshot.retired !== undefined && !Array.isArray(snapshot.retired)) throw new Error('Invalid retired job versions');
+    for (const row of snapshot.retired || []) {
+      if (!row || typeof row.type !== 'string' || typeof row.sessionId !== 'string' || !Number.isFinite(Date.parse(row.updatedAt))) {
+        throw new Error('Invalid retired job version');
+      }
+      const key=identity(row), previous=retired.get(key);
+      if (!previous || Date.parse(row.updatedAt) >= Date.parse(previous.updatedAt)) retired.set(key,row);
+    }
+  }
   for (const row of [...remote.jobs,...incoming.jobs]) {
     if (!row || typeof row.type !== 'string' || typeof row.sessionId !== 'string') throw new Error('Invalid durable job identity');
-    if (!retainJob(row,now,ttlMs)) continue;
-    const key = JSON.stringify([row.type,row.sessionId]);
-    const previous = jobs.get(key);
+    const key = identity(row), previous = jobs.get(key);
+    if (String(row.type).startsWith('audit:') && ['completed','failed'].includes(row.status) && !Number.isFinite(Date.parse(row.updatedAt))) {
+      if (!retired.has(key) || Date.parse(retired.get(key).updatedAt) <= now) {
+        retired.set(key,{type:row.type,sessionId:row.sessionId,status:row.status,updatedAt:new Date(now).toISOString(),
+          timestampBasis:'terminal_state_observed_without_valid_timestamp',sourceUpdatedAt:typeof row.updatedAt==='string'?row.updatedAt:null});
+      }
+      continue;
+    }
     if (!previous || (Date.parse(row.updatedAt) || 0) >= (Date.parse(previous.updatedAt) || 0)) jobs.set(key,row);
   }
-  return {jobs:[...jobs.values()]};
+  const retained=[];
+  for (const [key,row] of jobs) {
+    const terminal=retired.get(key);
+    if (terminal && Date.parse(terminal.updatedAt) >= (Date.parse(row.updatedAt) || 0)) continue;
+    if (retainJob(row,now,ttlMs)) {
+      retired.delete(key);
+      retained.push(row);
+    } else if (String(row.type).startsWith('audit:') && ['completed','failed'].includes(row.status)) {
+      // Keep only its terminal version after payload expiry, so an arbitrarily
+      // old process snapshot cannot resurrect a formerly running audit later.
+      retired.set(key,{type:row.type,sessionId:row.sessionId,updatedAt:row.updatedAt,status:row.status});
+    }
+  }
+  return {jobs:retained,...(retired.size?{retired:[...retired.values()]}:{})};
 }
 
 function missing(error) {

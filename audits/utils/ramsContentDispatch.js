@@ -16,7 +16,8 @@ export async function dispatchContentAuditToRams({sessionId,auditJsonKey}){const
               payload=t?JSON.parse(t):{};}catch{payload={raw:t.slice(0,1000)}}if(response.status!==202){const e=new Error(
                 `RAMS content rebuild dispatch returned HTTP ${response.status}`);e.status=response.status;throw e;}info("audit.content-master.rams.dispatched",{sessionId,
                   attempt});if(!/^[A-Za-z0-9._:-]{1,128}$/.test(payload.runId||""))throw new Error("RAMS content dispatch omitted a valid runId");
-                  return {...payload,ok:true,status:"awaiting-remediation",enabled:true,attempt};}catch(e){last=e;warn("audit.content-master.rams.dispatch_retry",{sessionId,
+                  return {...payload,pipeline:"content",auditJsonKey:finalKey,ok:true,status:"awaiting-remediation",enabled:true,attempt};
+                }catch(e){last=e;warn("audit.content-master.rams.dispatch_retry",{sessionId,
                     attempt,maxAttempts:c.maxAttempts,message:e?.message||String(e)});if(attempt<c.maxAttempts)await sleep(500*attempt);}finally{clearTimeout(timer);
                       }}throw last||new Error("RAMS content rebuild dispatch failed");}
 export const __ramsContentDispatchTestHooks={validateKey,boolEnv};
