@@ -130,7 +130,6 @@ jobs:
             RUN_NAME="$(jq -r '.name' <<< "$candidate")"
             RUN_CONCLUSION=failure
             RUN_URL="$(jq -r '.html_url' <<< "$candidate")"
-            HEAD_BRANCH="$DEFAULT_BRANCH"
           fi
 
           # An old/out-of-order completion must not retire or create current repairs.
