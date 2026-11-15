@@ -1,7 +1,9 @@
 import { readRamsRemediationCompletion } from "./ramsRemediationCompletion.js";
 import { getRamsContentDispatchConfig } from "./ramsContentDispatch.js";
 import crypto from "node:crypto";
-import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh, refreshJobStoreFromState, updateJob } from "../../services/shared/utils/jobStore.js";
+import { getAuditBucketName } from "./publishAuditArtifacts.js";
+import { recoverContentAuditJob } from "./contentAuditJobRecovery.js";
+import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh, updateJob } from "../../services/shared/utils/jobStore.js";
 import { info, error as logError } from "../../logger.js";
 
 function trim(value) {
@@ -96,7 +98,10 @@ export async function startAsyncAuditRouteJob({ auditType, payload = {}, runner,
   const payloadWithSession = { ...payload, sessionId };
   const statusUrl = statusUrlFor(req, auditType, sessionId);
 
-  await refreshJobStoreFromState();
+  const existing = await getAsyncAuditRouteJobFresh(auditType, sessionId, req);
+  if (auditType === "content-master" && existing?.result?.reportJsonUrl) {
+    return { ...existing, started: false, duplicateJob: true, accepted: true };
+  }
   const { started, job } = beginJob(jobType, sessionId, {
     auditType,
     statusUrl,
@@ -145,6 +150,13 @@ export function getAsyncAuditRouteJob(auditType, sessionId, req = null) {
 export async function getAsyncAuditRouteJobFresh(auditType, sessionId, req = null) {
   const type = asyncAuditJobType(auditType);
   let job = await getPublicJobFresh(type, sessionId);
+  if (!job && auditType === "content-master" && getAuditBucketName()) {
+    const recovered = await recoverContentAuditJob(sessionId);
+    if (recovered) {
+      job = updateJob(type, sessionId, recovered);
+      await flushJobStoreWrites({ throwOnError: true });
+    }
+  }
   if (auditType === "content-master" && job?.status === "running" && job?.result?.remediationPending) {
     const completion = await readRamsRemediationCompletion({ pipeline: "content", runId: job.result.ramsDispatch?.runId,
       config: getRamsContentDispatchConfig() });
