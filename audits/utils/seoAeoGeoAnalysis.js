@@ -1946,9 +1946,10 @@ const SECTION_OUTPUT_CONTRACT = "\n\nSECTION OUTPUT CONTRACT (overrides the full
   "coverageAssurance, sourceReconciliation or fullUrlCoverageAppendix: the local builder preserves those from original evidence. " +
   "Keep each narrative field under 40 words; use compact JSON. Preserve exact evidence, source targets and verification steps.";
 
-async function collectForensicSections({ resilientRequest, payload, userPrompt, section }) {
-  const combined = {};
+async function collectForensicSections({ resilientRequest, payload, userPrompt, section, previous = {} }) {
+  const combined = { ...previous };
   for (const [name, keys] of FINAL_SECTIONS) {
+    if (keys.every(key => key in combined)) continue;
     const raw = await callAuditForensic({
       resilientRequest, payload, section: `${section}-${name}`,
       messages: [
@@ -1960,12 +1961,17 @@ async function collectForensicSections({ resilientRequest, payload, userPrompt, 
       error.forensicProviderFailure = true;
       throw error;
     });
-    rejectRawPromptEcho(raw);
-    const data = extractJson(raw);
-    if (!isPlainObject(data)) throw new Error(`Forensic ${name} section is not a JSON object`);
-    const missing = keys.filter(key => !(key in data));
-    if (missing.length) throw new Error(`Forensic ${name} section missing keys: ${missing.join(", ")}`);
-    for (const key of keys) combined[key] = data[key];
+    try {
+      rejectRawPromptEcho(raw);
+      const data = extractJson(raw);
+      if (!isPlainObject(data)) throw new Error(`Forensic ${name} section is not a JSON object`);
+      const missing = keys.filter(key => !(key in data));
+      if (missing.length) throw new Error(`Forensic ${name} section missing keys: ${missing.join(", ")}`);
+      for (const key of keys) combined[key] = data[key];
+    } catch (error) {
+      error.forensicPartial = { ...combined };
+      throw error;
+    }
   }
   return combined;
 }
@@ -2016,7 +2022,7 @@ export async function runSeoAeoGeoAnalysis(payload) {
     try {
       const repaired = await collectForensicSections({
         resilientRequest, payload, userPrompt: userPrompt + "\n\n" + repairPrompt,
-        section: "seo-aeo-geo-forensic-repair",
+        section: "seo-aeo-geo-forensic-repair", previous: firstError.forensicPartial || {},
       });
       return validateAndNormaliseAnalysisShape(repaired, payload);
     } catch (repairError) {

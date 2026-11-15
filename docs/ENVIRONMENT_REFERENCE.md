@@ -27,7 +27,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:88 |
 | `AI_MODEL_DEFAULT` | No | scripts/verifyHeadroomProduction.js:17 |
-| `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1982 |
+| `AI_RETRY_BASE_MS` | Yes | audits/utils/seoAeoGeoAnalysis.js:1988 |
 | `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:80 |
 | `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>server.js:201<br>services/shared/middleware/suiteAuth.js:60 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |

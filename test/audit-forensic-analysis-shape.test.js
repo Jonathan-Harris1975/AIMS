@@ -307,3 +307,25 @@ test("missing or truncated sections cannot be accepted as a completed final resp
   await assert.rejects(collectForensicSections({ payload, userPrompt: "evidence", section: "regression",
     resilientRequest: async () => { throw Object.assign(new Error("truncated"), {code:"AI_TRUNCATED_COMPLETION"}); } }), /truncated/);
 });
+
+test("malformed annex repair reuses the accepted judgement without paying for it again", async () => {
+  const { collectForensicSections, FINAL_SECTIONS } = __seoAeoGeoAnalysisTestHooks;
+  const source = {...validAnalysis(),deterministicRemediationLedger:{findings:[]}};
+  let calls=0;
+  let failure;
+  try {
+    await collectForensicSections({payload,userPrompt:'evidence',section:'initial',resilientRequest:async()=>{
+      calls++;
+      return calls===1?JSON.stringify(Object.fromEntries(FINAL_SECTIONS[0][1].map(key=>[key,source[key]]))):'{"broken":true}';
+    }});
+  } catch(error) { failure=error; }
+  assert.ok(failure.forensicPartial.rankedIssueLedger);
+  const repaired=await collectForensicSections({payload,userPrompt:'repair annex',section:'repair',previous:failure.forensicPartial,
+    resilientRequest:async(_route,options)=>{
+      calls++;
+      assert.match(options.section,/annexes$/);
+      return JSON.stringify(Object.fromEntries(FINAL_SECTIONS[1][1].map(key=>[key,source[key]])));
+    }});
+  assert.equal(calls,3);
+  assert.deepEqual(repaired.rankedIssueLedger,source.rankedIssueLedger);
+});
