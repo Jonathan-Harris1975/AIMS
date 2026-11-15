@@ -187,6 +187,34 @@ test("digital growth normaliser accepts nested and aliased model output", () => 
   assert.equal(result.scorecard.trafficGrowth.score, 7);
 });
 
+test("missing measurements remain unscored without promoting incomplete technical evidence", () => {
+  const analysis = __digitalGrowthAnalysisTestHooks.normaliseAnalysis({
+    auditCompletionState: "Incomplete",
+    scorecard: { trafficGrowth: { score: 2, rationale: "Analytics absent" }, llmDiscoverability: { score: 7, rationale: "Observed markup" } },
+    findings: [{ findingId: "DG-1", title: "Missing crawl" }],
+  });
+  const scoped = __digitalGrowthAnalysisTestHooks.applyMeasurementScope(analysis, {
+    measurementAvailability: { analyticsExportSupplied: false, salesDataSupplied: false },
+    coverage: [{ route: "/", status: "failed" }],
+  });
+  assert.equal(scoped.auditCompletionState, "Incomplete");
+  for (const key of ["trafficGrowth", "newsletterSignUpRate", "podcastClickThroughs", "ebookSalesMaximisation"]) assert.equal(scoped.scorecard[key].score, null);
+  assert.equal(scoped.scorecard.llmDiscoverability.score, 7);
+  assert.equal(scoped.assessmentScope.coverage[0].status, "failed");
+});
+
+test("supplied measurements preserve model assessment while retaining source coverage", () => {
+  const analysis = __digitalGrowthAnalysisTestHooks.normaliseAnalysis({
+    auditCompletionState: "Complete", scorecard: { trafficGrowth: { score: 6, rationale: "Supplied metrics" } }, findings: [{ title: "CTA" }],
+  });
+  const scoped = __digitalGrowthAnalysisTestHooks.applyMeasurementScope(analysis, {
+    measurementAvailability: { analyticsExportSupplied: true }, priorityPages: [{ route: "/" }],
+  });
+  assert.equal(scoped.scorecard.trafficGrowth.score, 6);
+  assert.deepEqual(scoped.assessmentScope.reviewedPriorityRoutes, ["/"]);
+  assert.equal(scoped.auditCompletionState, "Complete");
+});
+
 test("digital growth completes deterministically when AI JSON is unusable but retained crawl evidence is substantive", () => {
   const result = __digitalGrowthAnalysisTestHooks.normaliseAnalysis(
     { response: { prose: "No schema" } },
