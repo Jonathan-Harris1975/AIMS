@@ -1,4 +1,4 @@
-import { reviewAuditEvidence, synthesiseAuditSections } from "./stagedAuditReview.js";
+import { reviewAuditEvidence, synthesiseAuditSections, retainAuditSourceFindings } from "./stagedAuditReview.js";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { chromium } from "playwright-core";
@@ -889,7 +889,8 @@ synthesis directly from the retained source ledgers without inventing evidence. 
 export async function runWebsiteAuditCouncil(stageReports) {
   const health = evaluateWebsiteAuditStageHealth(stageReports);
   if (health.failures.length === health.stages.length) {
-    return deterministicFallback(stageReports, "All required source audit stages were incomplete; AI council synthesis was skipped to avoid spending tokens on an evidence-empty report.");
+    return retainAuditSourceFindings(deterministicFallback(stageReports,
+      "All required source audit stages were incomplete; AI council synthesis was skipped to avoid spending tokens on an evidence-empty report."), stageReports);
   }
   try {
     const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../services/shared/utils/ai-service.js");
@@ -918,11 +919,12 @@ export async function runWebsiteAuditCouncil(stageReports) {
     combined.unifiedFindings = arr(combined.masterIssueLedger).map(row => ({...row}));
     const normalised = normaliseCouncil(combined, stageReports);
     if (!councilHasRequiredSubstance(normalised)) {
-      return deterministicFallback(stageReports, "The AI council returned structurally valid JSON without the required verdict, scored evidence and remediation substance.");
+      return retainAuditSourceFindings(deterministicFallback(stageReports,
+        "The AI council returned structurally valid JSON without the required verdict, scored evidence and remediation substance."), stageReports);
     }
-    return normalised;
+    return retainAuditSourceFindings(normalised, stageReports);
   } catch (err) {
-    return deterministicFallback(stageReports, err?.message || String(err));
+    return retainAuditSourceFindings(deterministicFallback(stageReports, err?.message || String(err)), stageReports);
   }
 }
 

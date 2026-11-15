@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { collectMonthlyPublishedContent } from "./monthlyPublishedContent.js";
-import { reviewAuditEvidence, synthesiseAuditSections } from "./stagedAuditReview.js";
+import { reviewAuditEvidence, synthesiseAuditSections, retainAuditSourceFindings } from "./stagedAuditReview.js";
 import { spawnSync } from "node:child_process";
 import { chromium } from "playwright-core";
 import { auditKeyFromPublicUrl, readAuditJson } from "./publishAuditArtifacts.js";
@@ -242,6 +242,7 @@ export async function runContentMasterCouncil(sources, request = null) {
         row.affectedPaths = [];
       }
     }
+    retainAuditSourceFindings(council, Object.fromEntries(Object.entries(evidence).map(([key,bundle])=>[key,bundle.report])));
     council.evidenceReviews = reviews.map(({evidence, review, ...metadata}) => metadata);
     return council;
   } catch (err) { return fallback(sources, err?.message || String(err)); }

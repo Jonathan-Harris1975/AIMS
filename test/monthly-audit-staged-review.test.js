@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evidenceChunks, reviewAuditEvidence, synthesiseAuditSections } from '../audits/utils/stagedAuditReview.js';
+import { evidenceChunks, reviewAuditEvidence, synthesiseAuditSections, retainAuditSourceFindings } from '../audits/utils/stagedAuditReview.js';
 import { collectMonthlyPublishedContent } from '../audits/utils/monthlyPublishedContent.js';
 import { runContentMasterCouncil, CONTENT_MASTER_COUNCIL_MEMBERS, __contentMasterCouncilTestHooks } from '../audits/utils/contentMasterCouncil.js';
 import { __ramsContentDispatchTestHooks } from '../audits/utils/ramsContentDispatch.js';
@@ -130,4 +130,17 @@ test('council sections preserve exact keys, prior findings and one bounded paid 
   await assert.rejects(synthesiseAuditSections(async()=>'{"other":[]}',{
     sections:[['required',['ledger']]],system:'Evidence only',user:'source'
   }),/missing ledger/);
+});
+
+
+test('every original finding survives council aggregation without authorising inferred code edits', () => {
+  const sources={onBrand:{findings:Array.from({length:150},(_,i)=>({findingId:`S-${i}`,title:`Observed defect ${i}`,classification:i===1?'future_guidance':'code_fix'}))}};
+  const report=retainAuditSourceFindings({masterIssueLedger:[{findingId:'C-1',sourceFindingIds:['S-0'],classification:'manual_review'}]},sources);
+  assert.equal(report.masterIssueLedger.length,150);
+  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:150});
+  assert.equal(report.masterIssueLedger[1].classification,'future_guidance');
+  assert.equal(report.masterIssueLedger[2].classification,'manual_review');
+  assert.deepEqual(report.masterIssueLedger[2].affectedPaths,[]);
+  retainAuditSourceFindings(report,sources);
+  assert.equal(report.masterIssueLedger.length,150);
 });
