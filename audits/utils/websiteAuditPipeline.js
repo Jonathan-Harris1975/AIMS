@@ -1190,7 +1190,8 @@ export async function getWebsiteAuditPipelineJobFresh(sessionId) {
   if (job.stageAdmissionError && !job.finalising && job.stages?.[stageDefinition(job.currentStage)?.key]?.status === "completed") {
     const next = WEBSITE_PIPELINE_STAGES[stageIndex(job.currentStage) + 1];
     if (next && !["completed", "failed"].includes(job.stages?.[next.key]?.status)) {
-      await dispatchStage(sessionId, next, job);
+      const dispatched = await dispatchStage(sessionId, next, job);
+      if (!dispatched?.ok && dispatched?.status === "failed") await continueAfterDispatchFailure(sessionId, next.auditType);
       return getPublicJobFresh(WEBSITE_PIPELINE_JOB_TYPE, sessionId);
     }
   }

@@ -144,3 +144,16 @@ test('a duplicate audit request survives an unrelated shared write failure witho
   });
   assert.match(stdout,/RUNNER_PRESERVED/);
 });
+
+test('terminal rows with missing timestamps retire safely without poisoning future writes',()=>{
+  for(const updatedAt of [undefined,'invalid']) {
+    const source={jobs:[job('malformed-terminal',{status:'completed',updatedAt})]};
+    const first=mergeJobSnapshots(source,{jobs:[job('unrelated')]});
+    assert.equal(first.jobs.length,1);
+    assert.ok(Number.isFinite(Date.parse(first.retired[0].updatedAt)));
+    assert.equal(first.retired[0].timestampBasis,'terminal_state_observed_without_valid_timestamp');
+    const second=mergeJobSnapshots(first,{jobs:[job('another')]});
+    assert.equal(second.jobs.length,2);
+    assert.equal(second.retired.length,1);
+  }
+});

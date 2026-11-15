@@ -25,6 +25,13 @@ export function mergeJobSnapshots(remote, incoming, {now = Date.now(), ttlMs = 8
   for (const row of [...remote.jobs,...incoming.jobs]) {
     if (!row || typeof row.type !== 'string' || typeof row.sessionId !== 'string') throw new Error('Invalid durable job identity');
     const key = identity(row), previous = jobs.get(key);
+    if (String(row.type).startsWith('audit:') && ['completed','failed'].includes(row.status) && !Number.isFinite(Date.parse(row.updatedAt))) {
+      if (!retired.has(key) || Date.parse(retired.get(key).updatedAt) <= now) {
+        retired.set(key,{type:row.type,sessionId:row.sessionId,status:row.status,updatedAt:new Date(now).toISOString(),
+          timestampBasis:'terminal_state_observed_without_valid_timestamp',sourceUpdatedAt:typeof row.updatedAt==='string'?row.updatedAt:null});
+      }
+      continue;
+    }
     if (!previous || (Date.parse(row.updatedAt) || 0) >= (Date.parse(previous.updatedAt) || 0)) jobs.set(key,row);
   }
   const retained=[];
