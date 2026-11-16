@@ -23,7 +23,13 @@ ARG SETUPTOOLS_VERSION
 ARG FILELOCK_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
+# Ubuntu 26.04 supplies signed deb822 sources with HTTP URIs by default.
+# CI's hardened egress cannot reach port 80; retain Signed-By and use HTTPS.
+RUN sed -i \
+      -e 's|http://archive.ubuntu.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
+      -e 's|http://security.ubuntu.com/ubuntu/|https://security.ubuntu.com/ubuntu/|g' \
+      /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl pkg-config \
       libbz2-dev libffi-dev libexpat1-dev liblzma-dev libncursesw6 \
@@ -60,7 +66,13 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
 
 FROM ${UBUNTU_IMAGE} AS headroom-runtime
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
+# Ubuntu 26.04 supplies signed deb822 sources with HTTP URIs by default.
+# CI's hardened egress cannot reach port 80; retain Signed-By and use HTTPS.
+RUN sed -i \
+      -e 's|http://archive.ubuntu.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
+      -e 's|http://security.ubuntu.com/ubuntu/|https://security.ubuntu.com/ubuntu/|g' \
+      /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get update \
   && apt-get upgrade -y --no-install-recommends \
       apt libapt-pkg7.0 \
   && apt-get install -y --no-install-recommends \
