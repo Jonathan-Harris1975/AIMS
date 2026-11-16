@@ -156,6 +156,17 @@ test('council sections preserve exact keys, prior findings and one bounded paid 
 });
 
 
+test('staged synthesis failure preserves already-accepted report sections', async () => {
+  let calls=0;
+  await assert.rejects(synthesiseAuditSections(async () => {
+    calls++;
+    if(calls===1)return JSON.stringify({verdict:'Evidence-led'});
+    throw new Error('provider unavailable on next section');
+  }, {sections:[['verdict',['verdict']],['remediation',['ledger']]],system:'Only evidence',user:'Test evidence'}),
+  error=>error.auditSection==='remediation' && error.partialResult?.verdict==='Evidence-led');
+  assert.equal(calls,2);
+});
+
 test('every original finding survives council aggregation without authorising inferred code edits', () => {
   const sources={onBrand:{findings:Array.from({length:150},(_,i)=>({findingId:`S-${i}`,title:`Observed defect ${i}`,classification:i===1?'future_guidance':'code_fix'}))}};
   const report=retainAuditSourceFindings({masterIssueLedger:[{findingId:'C-1',sourceFindingIds:['S-0'],classification:'manual_review'}]},sources);
