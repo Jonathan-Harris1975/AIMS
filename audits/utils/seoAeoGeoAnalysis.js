@@ -2000,9 +2000,11 @@ async function callAuditForensic({ resilientRequest, payload, messages, section 
 }
 
 export function forensicCheckpointDigest(payload, evidence = buildSeoEvidence(payload)) {
-  // The durable checkpoint must also be invalidated when server-owned policy,
-  // skills guidance or output requirements change without a payload change.
-  return createHash("sha256").update(JSON.stringify({payload, evidence, system:SYSTEM_PROMPT, contract:SECTION_OUTPUT_CONTRACT, sections:FINAL_SECTIONS})).digest("hex");
+  // Bind checkpoints to substantive server policy/skill evidence. The skills
+  // baseline observation timestamp changes on every call and is not an input.
+  const stableEvidence = { ...evidence, skillsBaseline: { ...(evidence.skillsBaseline || {}) } };
+  delete stableEvidence.skillsBaseline.generatedAt;
+  return createHash("sha256").update(JSON.stringify({payload, evidence:stableEvidence, system:SYSTEM_PROMPT, contract:SECTION_OUTPUT_CONTRACT, sections:FINAL_SECTIONS})).digest("hex");
 }
 
 export async function runSeoAeoGeoAnalysis(payload, { checkpoint, onCheckpoint = async () => {} } = {}) {
