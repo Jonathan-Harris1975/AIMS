@@ -2036,7 +2036,7 @@ export async function runSeoAeoGeoAnalysis(payload, { checkpoint, onCheckpoint =
     }
 
     const validationErrors = err?.validationErrors || [err instanceof Error ? err.message : String(err)];
-    const repairPrompt = buildRepairPrompt({ payload, validationErrors, draft: draft || {} });
+    const repairPrompt = buildRepairPrompt({ payload, validationErrors, draft: draft || firstError?.forensicPartial || {} });
     try {
       const repaired = await collectForensicSections({
         resilientRequest, payload, userPrompt: userPrompt + "\n\n" + repairPrompt,
