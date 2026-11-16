@@ -13,12 +13,7 @@ ARG MSGPACK_VERSION=1.2.3
 ARG SETUPTOOLS_VERSION=83.0.0
 ARG FILELOCK_VERSION=4.2.1
 
-# A digest-pinned official image supplies the standard CA bundle for bootstrapping
-# Ubuntu's signed HTTPS package repositories without disabling TLS verification.
-FROM node:24.22.2-alpine3.23@sha256:9b69af715c7f9d038150b54ccccbaeffa9064bbc93e2904c29591ca097316af1 AS ca-trust
-
 FROM ${UBUNTU_IMAGE} AS python-build
-COPY --from=ca-trust /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ARG PYTHON_VERSION
 ARG PYTHON_SHA256
 ARG PIP_VERSION
@@ -28,13 +23,9 @@ ARG SETUPTOOLS_VERSION
 ARG FILELOCK_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
-# Ubuntu 26.04 supplies signed deb822 sources with HTTP URIs by default.
-# CI's hardened egress cannot reach port 80; retain Signed-By and use HTTPS.
-RUN sed -i \
-      -e 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
-      -e 's|http://security.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
-      /etc/apt/sources.list.d/ubuntu.sources \
- && apt-get update \
+# Bounded retries absorb transient archive connection failures; fail closed
+# if any signed index cannot be fetched rather than using stale metadata.
+RUN apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl pkg-config \
       libbz2-dev libffi-dev libexpat1-dev liblzma-dev libncursesw6 \
@@ -70,15 +61,10 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
  && rm -rf /usr/local/include /usr/local/share /usr/local/lib/pkgconfig
 
 FROM ${UBUNTU_IMAGE} AS headroom-runtime
-COPY --from=ca-trust /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENV DEBIAN_FRONTEND=noninteractive
-# Ubuntu 26.04 supplies signed deb822 sources with HTTP URIs by default.
-# CI's hardened egress cannot reach port 80; retain Signed-By and use HTTPS.
-RUN sed -i \
-      -e 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
-      -e 's|http://security.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
-      /etc/apt/sources.list.d/ubuntu.sources \
- && apt-get update \
+# Bounded retries absorb transient archive connection failures; fail closed
+# if any signed index cannot be fetched rather than using stale metadata.
+RUN apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
   && apt-get upgrade -y --no-install-recommends \
       apt libapt-pkg7.0 \
   && apt-get install -y --no-install-recommends \
