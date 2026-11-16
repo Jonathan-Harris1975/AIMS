@@ -108,7 +108,9 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build Headroom companion image
-        run: docker build -f headroom/Dockerfile -t aims-headroom:ci .
+        # Use the runner's networking for signed Ubuntu package retrieval;
+        # keep the hard runtime verification and image vulnerability scans.
+        run: docker build --network=host -f headroom/Dockerfile -t aims-headroom:ci .
       - name: Verify Headroom hardened runtime
         run: |
           test "$(docker image inspect aims-headroom:ci --format '{{.Config.User}}')" = "nonroot"
