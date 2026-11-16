@@ -13,7 +13,12 @@ ARG MSGPACK_VERSION=1.2.3
 ARG SETUPTOOLS_VERSION=83.0.0
 ARG FILELOCK_VERSION=4.2.1
 
+# A digest-pinned official image supplies the standard CA bundle for bootstrapping
+# Ubuntu's signed HTTPS package repositories without disabling TLS verification.
+FROM node:24.22.0-bookworm-slim@sha256:91acba91b842bec0bf7ea6f5e09c644c7ccad72c4996ed9616d861d1c7cd60d4 AS ca-trust
+
 FROM ${UBUNTU_IMAGE} AS python-build
+COPY --from=ca-trust /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ARG PYTHON_VERSION
 ARG PYTHON_SHA256
 ARG PIP_VERSION
@@ -65,6 +70,7 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
  && rm -rf /usr/local/include /usr/local/share /usr/local/lib/pkgconfig
 
 FROM ${UBUNTU_IMAGE} AS headroom-runtime
+COPY --from=ca-trust /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENV DEBIAN_FRONTEND=noninteractive
 # Ubuntu 26.04 supplies signed deb822 sources with HTTP URIs by default.
 # CI's hardened egress cannot reach port 80; retain Signed-By and use HTTPS.
