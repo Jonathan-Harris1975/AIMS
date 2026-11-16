@@ -92,30 +92,41 @@ export async function synthesiseAuditSections(request, { sections, system, user,
 // Summary models may aggregate findings, but may never silently drop them.
 // Unrepresented source rows remain traceable, conservatively non-executable.
 export function retainAuditSourceFindings(report, sources) {
-  const rows = report.masterIssueLedger || [];
+  const rows = [...(report.masterIssueLedger || [])];
   const covered = new Set(rows.flatMap(row => row.sourceFindingIds || []));
+  const coveredBeforeRetention = new Set(covered);
   const seen = new Set();
   const visit = (value, source) => {
     if (!value || typeof value !== 'object') return;
     const id = value.findingId || value.issueId || value.groupId;
-    if (!id) { for (const child of Object.values(value)) visit(child, source); return; }
-    seen.add(id);
-    if (covered.has(id)) return;
-    rows.push({
-      findingId:`retained-${rows.length + 1}`,title:value.title || value.rootCause || value.issue || `Source finding ${id}`,
-      severity:value.severity || 'Medium',confidence:value.confidence || 'Needs Verification',
-      classification:value.classification === 'future_guidance' ? 'future_guidance' : 'manual_review',
-      fixClass:'',affectedPaths:[],sourceFindingIds:[id],sourceAudit:source,
-      evidence:value.evidence || value.evidenceObserved || value.exactEvidence || [],
-      exactRemediation:value.exactRemediation || value.requiredOutcome || value.recommendedFix || 'Review the retained original source finding before defining a code change.',
-      owner:value.owner || value.recommendedOwner || 'Audit source owner',
-      acceptanceCriterion:value.acceptanceCriterion || 'Resolve the original source finding and verify against its retained evidence.',
-      verificationMethod:value.verificationMethod || 'Rerun the affected source audit and compare the original finding.',
-    });
-    covered.add(id);
+    if (id) {
+      seen.add(id);
+      if (!covered.has(id)) {
+        rows.push({
+          findingId:`retained-${rows.length + 1}`,title:value.title || value.rootCause || value.issue || `Source finding ${id}`,
+          severity:value.severity || 'Medium',confidence:value.confidence || 'Needs Verification',
+          classification:value.classification === 'future_guidance' ? 'future_guidance' : 'manual_review',
+          fixClass:'',affectedPaths:[],sourceFindingIds:[id],sourceAudit:source,
+          evidence:value.evidence || value.evidenceObserved || value.exactEvidence || [],
+          exactRemediation:value.exactRemediation || value.requiredOutcome || value.recommendedFix || 'Review the retained original source finding before defining a code change.',
+          owner:value.owner || value.recommendedOwner || 'Audit source owner',
+          acceptanceCriterion:value.acceptanceCriterion || 'Resolve the original source finding and verify against its retained evidence.',
+          verificationMethod:value.verificationMethod || 'Rerun the affected source audit and compare the original finding.',
+        });
+        covered.add(id);
+      }
+    }
+    for (const child of Object.values(value)) visit(child, source);
   };
   for (const [source,value] of Object.entries(sources)) visit(value,source);
-  report.masterIssueLedger = rows;
-  report.sourceFindingCoverage = {sourceFindingCount:seen.size,representedFindingCount:[...seen].filter(id=>covered.has(id)).length};
-  return report;
+  const representedFindingCount = [...seen].filter(id => coveredBeforeRetention.has(id)).length;
+  return {
+    ...report,
+    masterIssueLedger: rows,
+    sourceFindingCoverage: {
+      sourceFindingCount: seen.size,
+      representedFindingCount,
+      retainedFindingCount: seen.size - representedFindingCount,
+    },
+  };
 }
