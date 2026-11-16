@@ -31,8 +31,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Ubuntu 26.04 supplies signed deb822 sources with HTTP URIs by default.
 # CI's hardened egress cannot reach port 80; retain Signed-By and use HTTPS.
 RUN sed -i \
-      -e 's|http://archive.ubuntu.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
-      -e 's|http://security.ubuntu.com/ubuntu/|https://security.ubuntu.com/ubuntu/|g' \
+      -e 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
+      -e 's|http://security.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
       /etc/apt/sources.list.d/ubuntu.sources \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -75,8 +75,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Ubuntu 26.04 supplies signed deb822 sources with HTTP URIs by default.
 # CI's hardened egress cannot reach port 80; retain Signed-By and use HTTPS.
 RUN sed -i \
-      -e 's|http://archive.ubuntu.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
-      -e 's|http://security.ubuntu.com/ubuntu/|https://security.ubuntu.com/ubuntu/|g' \
+      -e 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
+      -e 's|http://security.ubuntu.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|g' \
       /etc/apt/sources.list.d/ubuntu.sources \
  && apt-get update \
   && apt-get upgrade -y --no-install-recommends \
