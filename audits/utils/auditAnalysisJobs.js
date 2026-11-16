@@ -1,5 +1,5 @@
-import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh } from "../../services/shared/utils/jobStore.js";
-import { runSeoAeoGeoAnalysis } from "./seoAeoGeoAnalysis.js";
+import { beginJob, completeJob, failJob, flushJobStoreWrites, getPublicJob, getPublicJobFresh, updateJob } from "../../services/shared/utils/jobStore.js";
+import { forensicCheckpointDigest, runSeoAeoGeoAnalysis } from "./seoAeoGeoAnalysis.js";
 import { error as logError, info } from "../../logger.js";
 
 const JOB_TYPE = "audit:seo-aeo-geo:analysis";
@@ -38,10 +38,13 @@ function publicShape(job) {
   };
 }
 
-async function executeAnalysisJob(payload) {
+async function executeAnalysisJob(payload, checkpoint) {
   const sessionId = sessionFromPayload(payload);
   try {
-    const analysis = await runSeoAeoGeoAnalysis(payload);
+    const analysis = await runSeoAeoGeoAnalysis(payload, {checkpoint, onCheckpoint: async analysisCheckpoint => {
+      updateJob(JOB_TYPE, sessionId, {analysisCheckpoint});
+      await flushJobStoreWrites({throwOnError:true});
+    }});
     const completed = completeJob(JOB_TYPE, sessionId, {
       analysis,
       result: { analysis },
@@ -78,17 +81,24 @@ export async function startSeoAeoGeoAnalysisJob(payload) {
   if (!sessionId) throw new Error("Cannot start SEO/AEO/GEO analysis job without sessionId");
 
   const existing = await getPublicJobFresh(JOB_TYPE, sessionId);
+  const evidenceDigest = forensicCheckpointDigest(payload);
+  const previousDigest = existing?.evidenceDigest || existing?.analysisCheckpoint?.evidenceDigest;
+  if (existing && previousDigest && previousDigest !== evidenceDigest) {
+    throw Object.assign(new Error("SEO analysis identity already belongs to different evidence; use a new sessionId"), {status:409});
+  }
   if (existing?.status === "completed" && resolveAnalysisPayload(existing)) {
+    if (!previousDigest) throw Object.assign(new Error("Legacy completed analysis lacks an exact evidence digest; use a new sessionId"), {status:409});
     return publicShape(existing);
   }
 
   const { started, job } = beginJob(JOB_TYPE, sessionId, {
+    evidenceDigest,
     routeCount: payload?.allRoutes?.length ?? 0,
     coverageCount: payload?.coverage?.length ?? 0,
   });
   if (started) {
     Promise.resolve()
-      .then(() => executeAnalysisJob(payload))
+      .then(() => executeAnalysisJob(payload, existing?.analysisCheckpoint))
       .catch((err) => {
         logError("audit.seo-aeo-geo.analysis.unhandled", {
           sessionId,

@@ -197,6 +197,8 @@ Rules:
 - Scores are 0 to 100.
 - Use “Not verified from supplied evidence” instead of guessing.
 - If a source is blocked, say exactly why.
+- Use authoritative sourceCoverage and metadata to determine source availability. Review fragments are parts of one saved evidence bundle. A fragment starting midway through \
+JSON does not mean Zernio, RSS or podcast data was inaccessible; inspect all the supplied reviews. Preserve actual source limitations and sampling limits.
 - If only scheduled Zernio posts are available, do not call them published posts.
 - If podcast transcript discovery is partial, say so.
 - If the RSS feed is accessible but thin, audit the thinness.

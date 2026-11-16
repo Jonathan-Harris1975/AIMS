@@ -411,3 +411,27 @@ test("podcast transcript skill lenses create source-owner gated findings", async
   assert.ok(findings.every((finding) => finding.sourceOwner === "podcast_transcript_pipeline"));
   assert.ok(findings.every((finding) => finding.ramsPolicy?.codePatchAllowed === false));
 });
+
+test('on-brand fallback stays partial and missing editorial scores remain unscored', async () => {
+  const {__testing}=await import('../audits/utils/onBrandAudit.js');
+  const {renderOnBrandReportHtml}=await import('../audits/utils/onBrandReportHtml.js');
+  const result=__testing.normaliseOnBrandReport({auditCompletionState:'Complete',scorecard:{}},{metadata:{},deterministicPreflight:[]});
+  assert.equal(result.auditCompletionState,'Partial');
+  assert.ok(Object.values(result.scorecard).every(value=>value===null));
+  assert.match(renderOnBrandReportHtml(result),/Unscored/);
+});
+
+test('monthly on-brand schema repair repeats only the unfinished section', async () => {
+  const {runMonthlyBrandSections}=await import('../audits/utils/onBrandAudit.js');
+  const calls=[];
+  let broken=false;
+  const result=await runMonthlyBrandSections({sessionId:'test',messages:[{content:'system'},{content:'evidence'}],evidence:{metadata:{}}},async(_route,options)=>{
+    calls.push(options.section);
+    assert.equal(options.maxRetries,0);
+    if(options.section.endsWith('defects')&&!broken){broken=true;return '{broken';}
+    const keys=options.messages[0].content.match(/Produce ONLY these keys for this call: (.*?)\./)[1].split(', ');
+    return JSON.stringify(Object.fromEntries(keys.map(key=>[key,key==='confirmedDefectsLedger'?[]:key==='auditCompletionState'?'Complete':{}])));
+  });
+  assert.deepEqual(calls,['monthly-on-brand-verdict','monthly-on-brand-defects','monthly-on-brand-defects','monthly-on-brand-channels','monthly-on-brand-guardrails']);
+  assert.equal(result.auditCompletionState,'Partial');
+});

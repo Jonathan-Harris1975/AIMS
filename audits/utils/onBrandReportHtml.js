@@ -23,8 +23,9 @@ function evidenceSnippet(value = "", maxChars = 650) {
 }
 
 function score(value) {
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
-  return Number.isFinite(number) ? Math.max(0, Math.min(100, Math.round(number))) : 0;
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, Math.round(number))) : null;
 }
 
 function section(title, body) {
@@ -62,7 +63,7 @@ function renderScorecard(scorecard = {}) {
   ];
   return `<div class="scoregrid">${labels.map(([key, label]) => {
     const value = score(scorecard[key]);
-    return `<div class="score"><span>${escapeHtml(label)}</span><strong>${value}</strong><div class="bar"><i style="width:${value}%"></i></div></div>`;
+    return `<div class="score"><span>${escapeHtml(label)}</span><strong>${value ?? "Unscored"}</strong><div class="bar"><i style="width:${value ?? 0}%"></i></div></div>`;
   }).join("")}</div>`;
 }
 

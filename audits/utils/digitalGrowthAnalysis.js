@@ -30,7 +30,7 @@ Rules:
 - Confidence must be Confirmed, Probable or Needs Verification.
 - Impact must be Very High, High, Medium or Low.
 - Prioritise verified blockers, then high-impact Quick Wins.
-- Scores are 1-10 and must have a one-line evidence rationale.
+- Scores are 1-10 or null when unmeasured, and must have a one-line evidence rationale.
 - The websiteAuditPolicy target of 8.5/10 is an acceptance target, not a score floor. Never inflate a score to meet it.
 - /blog and /transcripts are intentionally excluded from this website audit because their R2 content is audited by dedicated pipelines. Do not penalise this audit for their \
 absence. /podcast remains in scope.
@@ -39,6 +39,14 @@ absence. /podcast remains in scope.
 textual usefulness, internal linking, entity clarity, and structured-data/visible-content alignment.
 - Do not claim checkout, analytics or revenue performance unless it was supplied.
 - If evidence is missing, say what is unverified and define the measurement/event needed.
+- This is a repository/live-markup readiness audit, not a measured performance audit. Complete means the supplied technical and conversion-journey evidence has been reviewed, \
+not that growth targets have been achieved. Missing analytics, Search Console and sales exports must remain explicit measurement limitations; they do not by themselves make \
+the technical review incomplete. Failed or missing required crawl/repository evidence still makes the review Incomplete.
+- Use null, not a low or invented score, for traffic growth, sign-up rate, podcast click-throughs or sales performance when the corresponding measurements were not supplied. \
+Assess observed journey defects separately.
+- Free-review fragments collectively cover the supplied bounded bundle. A fragment boundary is not proof that the original website or its data is missing. Check the \
+authoritative scope and coverage supplied alongside the reviews; genuine sampling/compaction limits remain limitations. Do not infer site-wide defects from aggregate \
+keyword counts, case-insensitive charset spelling, or repeated desktop/mobile navigation without checking the actual context.
 - Return JSON only. Do not return markdown fences, the prompt, private reasoning or chain-of-thought.
 
 Required JSON shape:
@@ -46,11 +54,11 @@ Required JSON shape:
   "auditCompletionState":"Complete|Incomplete",
   "overallVerdict":"...",
   "scorecard":{
-    "trafficGrowth":{"score":1,"rationale":"..."},
-    "newsletterSignUpRate":{"score":1,"rationale":"..."},
-    "podcastClickThroughs":{"score":1,"rationale":"..."},
+    "trafficGrowth":{"score":null,"rationale":"..."},
+    "newsletterSignUpRate":{"score":null,"rationale":"..."},
+    "podcastClickThroughs":{"score":null,"rationale":"..."},
     "llmDiscoverability":{"score":1,"rationale":"..."},
-    "ebookSalesMaximisation":{"score":1,"rationale":"..."}
+    "ebookSalesMaximisation":{"score":null,"rationale":"..."}
   },
   "executiveSummary":{"top10Actions":["..."]},
   "findings":[{
@@ -423,6 +431,37 @@ function retainedRawResponse(value) {
   };
 }
 
+function assessmentContext(evidence) {
+  return {
+    scope: "repository-and-live-markup-readiness",
+    measuredPerformanceVerified: false,
+    measurementAvailability: evidence.measurementAvailability,
+    inventory: evidence.inventory,
+    coverage: evidence.coverage,
+    reviewedPriorityRoutes: arr(evidence.priorityPages).map(page => page.route),
+    evidenceFragments: "All supplied fragments belong to one bounded evidence bundle; fragment boundaries are not missing source data.",
+  };
+}
+
+function applyMeasurementScope(analysis, evidence) {
+  const availability = evidence.measurementAvailability || {};
+  const measurementKeys = {
+    trafficGrowth: "analyticsExportSupplied",
+    newsletterSignUpRate: "analyticsExportSupplied",
+    podcastClickThroughs: "analyticsExportSupplied",
+    ebookSalesMaximisation: "salesDataSupplied",
+  };
+  analysis.assessmentScope = assessmentContext(evidence);
+  for (const [objective, measurement] of Object.entries(measurementKeys)) {
+    if (availability[measurement] === true) continue;
+    const row = analysis.scorecard[objective];
+    row.score = null;
+    row.rationale = `Measured performance is unverified: ${measurement} was not supplied. Technical journey observations: ${row.rationale}`;
+  }
+  // Scope metadata cannot promote an incomplete analysis to Complete.
+  return analysis;
+}
+
 function attachFailureDiagnostics(analysis, { inputCharacters, raw, repairRaw, error, repairError } = {}) {
   const primary = retainedRawResponse(raw);
   const repair = retainedRawResponse(repairRaw);
@@ -467,11 +506,12 @@ export async function runDigitalGrowthAnalysis(payload) {
       temperature: Number(process.env.DIGITAL_GROWTH_AI_TEMPERATURE || 0.15),
       timeoutMs: Number(process.env.DIGITAL_GROWTH_AI_TIMEOUT_MS || 240000),
       maxRetries: Number(process.env.DIGITAL_GROWTH_AI_MAX_RETRIES || 0),
-      reasoning: false,
+      reasoning: { effort: "none", exclude: true },
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Analyse this verified evidence bundle. Return only the required JSON.\n${JSON.stringify(evidenceReviews)}` },
+        { role: "user", content: `Authoritative assessment scope and coverage:\n${JSON.stringify(assessmentContext(evidence))}\n` +
+          `Analyse these evidence reviews. Return only the required JSON.\n${JSON.stringify(evidenceReviews)}` },
       ],
     });
 
@@ -484,7 +524,7 @@ export async function runDigitalGrowthAnalysis(payload) {
         inputCharacters,
         rawResponseCharacters: String(raw || "").length,
       };
-      return analysis;
+      return applyMeasurementScope(analysis, evidence);
     } catch (validationError) {
       try {
         const retained = retainedRawResponse(raw);
@@ -495,7 +535,7 @@ export async function runDigitalGrowthAnalysis(payload) {
           temperature: 0,
           timeoutMs: Number(process.env.DIGITAL_GROWTH_AI_REPAIR_TIMEOUT_MS || 120000),
           maxRetries: 0,
-          reasoning: false,
+          reasoning: { effort: "none", exclude: true },
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: REPAIR_SYSTEM_PROMPT },
@@ -512,7 +552,7 @@ export async function runDigitalGrowthAnalysis(payload) {
           rawResponseCharacters: String(raw || "").length,
           repairResponseCharacters: String(repairRaw || "").length,
         };
-        return repaired;
+        return applyMeasurementScope(repaired, evidence);
       } catch (repairError) {
         return attachFailureDiagnostics(
           deterministicAnalysisFallback(payload, `Digital growth AI response could not be validated or repaired: ${trim(repairError?.message || repairError)}`),
@@ -537,6 +577,8 @@ export const __digitalGrowthAnalysisTestHooks = {
   deterministicAnalysisFallback,
   retainedRawResponse,
   attachFailureDiagnostics,
+  assessmentContext,
+  applyMeasurementScope,
   SYSTEM_PROMPT,
   REPAIR_SYSTEM_PROMPT,
   OBJECTIVES,

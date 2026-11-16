@@ -24,6 +24,16 @@ test('bounded chunks preserve every evidence character and run sequentially', as
   assert.equal(reviews.length, chunks.length);
 });
 
+test('later evidence fragments retain authoritative source availability and sampling limits', async () => {
+  const source={sourceType:'podcast_transcript',status:'complete',items:[{text:'x'.repeat(50000)}],limitations:['Excerpt only']};
+  const chunks=evidenceChunks({podcast:source});
+  assert.ok(chunks.length>1);
+  for (const chunk of chunks) assert.deepEqual(chunk.context,{sourceType:'podcast_transcript',status:'complete',itemCount:1,limitations:['Excerpt only']});
+  const reviews=await reviewAuditEvidence({podcast:source},async()=>{throw new Error('free provider unavailable');});
+  assert.deepEqual(reviews.at(-1).context,chunks.at(-1).context);
+  assert.equal(reviews.map(row=>row.evidence).join(''),JSON.stringify(source));
+});
+
 test('free capacity failure retains exact original evidence for the paid final pass', async () => {
   const source = { findingId: 'P-1', affectedPaths: ['services/podcast/index.js'] };
   const reviews = await reviewAuditEvidence({ podcast: source }, async () => { throw new Error('429'); });
@@ -111,6 +121,36 @@ test('content council reads saved captions and episode metadata rather than only
   } finally { if(previousBucket===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=previousBucket; }
 });
 
+test('saved evidence read failure remains explicit instead of being treated as empty evidence', async () => {
+  const {loadContentMasterSourceBundle,publishedContentSources}=await import('../audits/utils/contentMasterCouncil.js');
+  const prev=process.env.R2_BUCKET_AUDITS;
+  process.env.R2_BUCKET_AUDITS='audits';
+  try {
+    const bundle=await loadContentMasterSourceBundle('onBrand','audits/on-brand/latest.json',async key=>{
+      if(key==='audits/on-brand/latest.json')return {ok:true,value:{reportJsonUrl:'r2://audits/audits/on-brand/run/report.json',evidenceUrl:'r2://audits/audits/on-brand/run/evidence.json'}};
+      if(key.endsWith('/report.json'))return {ok:true,value:{findings:[]}};
+      return {ok:false,error:'R2 evidence read failed',value:null};
+    });
+    assert.equal(bundle.evidence,null);
+    assert.equal(bundle.evidenceStatus,'unavailable');
+    assert.equal(bundle.evidenceError,'R2 evidence read failed');
+    assert.ok(publishedContentSources(bundle).publishedSocial.errors.includes('R2 evidence read failed'));
+  } finally {if(prev===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=prev;}
+});
+
+test('partial source reports cannot enter the master council as complete bundles', async () => {
+  const { loadContentMasterSourceBundle } = await import('../audits/utils/contentMasterCouncil.js');
+  const previousBucket=process.env.R2_BUCKET_AUDITS;
+  process.env.R2_BUCKET_AUDITS='audits';
+  try {
+    for (const [latestPartial, completion, expected] of [[false,'Partial','partial'],[true,'Complete','partial'],[false,'Complete','complete']]) {
+      const bundle=await loadContentMasterSourceBundle('onBrand','latest',async key=>({ok:true,value:key==='latest'
+        ?{partial:latestPartial,reportJsonUrl:'r2://audits/audits/on-brand/run/report.json'}:{auditCompletionState:completion}}));
+      assert.equal(bundle.status,expected);
+    }
+  } finally { if(previousBucket===undefined)delete process.env.R2_BUCKET_AUDITS;else process.env.R2_BUCKET_AUDITS=previousBucket; }
+});
+
 test('council sections preserve exact keys, prior findings and one bounded paid call per section', async () => {
   const calls=[];
   let active=0;
@@ -126,21 +166,63 @@ test('council sections preserve exact keys, prior findings and one bounded paid 
   },{sections:[['verdict',['verdict']],['remediation',['ledger']]],system:'Evidence only',user:'Observed S-1',options:{max_tokens:9000}});
   assert.deepEqual(result,{verdict:'Evidence-led',ledger:[{sourceFindingIds:['S-1']}]});
   assert.equal(calls.length,2);
-  assert.match(calls[1].messages.at(-1).content,/Evidence-led/);
+  assert.equal(calls[1].messages.length,2);
+  assert.doesNotMatch(JSON.stringify(calls[1].messages),/Evidence-led/);
   await assert.rejects(synthesiseAuditSections(async()=>'{"other":[]}',{
     sections:[['required',['ledger']]],system:'Evidence only',user:'source'
   }),/missing ledger/);
 });
 
 
+test('staged synthesis failure preserves already-accepted report sections', async () => {
+  let calls=0;
+  await assert.rejects(synthesiseAuditSections(async () => {
+    calls++;
+    if(calls===1)return JSON.stringify({verdict:'Evidence-led'});
+    throw new Error('provider unavailable on next section');
+  }, {sections:[['verdict',['verdict']],['remediation',['ledger']]],system:'Only evidence',user:'Test evidence'}),
+  error=>error.auditSection==='remediation' && error.partialResult?.verdict==='Evidence-led');
+  assert.equal(calls,2);
+});
+
+test('incomplete council fallback retains a previously accepted section', async () => {
+  let calls=0;
+  const result=await runContentMasterCouncil({},async route=>{
+    if(route==='auditEvidenceReview')return {content:'{"summary":"No source evidence","findings":[],"limitations":[]}'};
+    if(++calls===1)return JSON.stringify(validReport());
+    throw new Error('remediation request failed');
+  });
+  assert.equal(result.synthesisState,'Incomplete');
+  assert.equal(result.partialSynthesis.executiveSummary,'Evidence reviewed');
+});
+
+test('content council fallback retains original source findings after synthesis failure', async () => {
+  const sources={onBrand:{status:'complete',report:{findings:[{findingId:'SOURCE-1',title:'Observed source finding'}]},errors:[]}};
+  const result=await runContentMasterCouncil(sources,async()=>{throw new Error('synthesis unavailable')});
+  assert.equal(result.synthesisState,'Incomplete');
+  assert.ok(result.masterIssueLedger.some(row=>row.sourceFindingIds?.includes('SOURCE-1')));
+  assert.deepEqual(result.sourceFindingCoverage,{sourceFindingCount:1,representedFindingCount:0,retainedFindingCount:1});
+});
+
 test('every original finding survives council aggregation without authorising inferred code edits', () => {
   const sources={onBrand:{findings:Array.from({length:150},(_,i)=>({findingId:`S-${i}`,title:`Observed defect ${i}`,classification:i===1?'future_guidance':'code_fix'}))}};
   const report=retainAuditSourceFindings({masterIssueLedger:[{findingId:'C-1',sourceFindingIds:['S-0'],classification:'manual_review'}]},sources);
   assert.equal(report.masterIssueLedger.length,150);
-  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:150});
+  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:1,retainedFindingCount:149});
   assert.equal(report.masterIssueLedger[1].classification,'future_guidance');
   assert.equal(report.masterIssueLedger[2].classification,'manual_review');
   assert.deepEqual(report.masterIssueLedger[2].affectedPaths,[]);
-  retainAuditSourceFindings(report,sources);
-  assert.equal(report.masterIssueLedger.length,150);
+  const idempotent=retainAuditSourceFindings(report,sources);
+  assert.equal(idempotent.masterIssueLedger.length,150);
+  assert.deepEqual(idempotent.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:150,retainedFindingCount:0});
+});
+
+
+test('nested source findings remain represented and non-executable when synthesis fails', () => {
+  const sources={onBrand:{items:[{findingId:'PARENT',title:'Parent',details:{findingId:'CHILD',title:'Child',classification:'code_fix'}}]}};
+  const report=retainAuditSourceFindings({masterIssueLedger:[],synthesisState:'Incomplete'},sources);
+  assert.equal(report.sourceFindingCoverage.sourceFindingCount,2);
+  assert.equal(report.sourceFindingCoverage.retainedFindingCount,2);
+  assert.deepEqual(report.masterIssueLedger.flatMap(row=>row.sourceFindingIds),['PARENT','CHILD']);
+  assert.ok(report.masterIssueLedger.every(row=>row.classification==='manual_review' && row.affectedPaths.length===0));
 });

@@ -290,8 +290,8 @@ test("economy final sections are sequential and rebuild full coverage without mo
       // An unsolicited model appendix must never replace the original ledger.
       return JSON.stringify({ ...Object.fromEntries(keys.map(key => [key, source[key]])), fullUrlCoverageAppendix: [{url:"invented"}] });
     } });
-  assert.equal(calls.length, 2);
-  assert.match(calls[1].messages.at(-1).content, /JH-SEO-001/);
+  assert.equal(calls.length, FINAL_SECTIONS.length);
+  assert.match(calls[2].messages.at(-1).content, /JH-SEO-001/);
   assert.equal(Object.hasOwn(draft, "fullUrlCoverageAppendix"), false);
   const report = validateAndNormaliseAnalysisShape(draft, payload);
   assert.deepEqual(report.fullUrlCoverageAppendix.map(row => row.url), payload.allRoutes.map(row => row.url));
@@ -316,16 +316,60 @@ test("malformed annex repair reuses the accepted judgement without paying for it
   try {
     await collectForensicSections({payload,userPrompt:'evidence',section:'initial',resilientRequest:async()=>{
       calls++;
-      return calls===1?JSON.stringify(Object.fromEntries(FINAL_SECTIONS[0][1].map(key=>[key,source[key]]))):'{"broken":true}';
+      return calls<=2?JSON.stringify(Object.fromEntries(FINAL_SECTIONS[calls-1][1].map(key=>[key,source[key]]))):'{"broken":true}';
     }});
   } catch(error) { failure=error; }
   assert.ok(failure.forensicPartial.rankedIssueLedger);
   const repaired=await collectForensicSections({payload,userPrompt:'repair annex',section:'repair',previous:failure.forensicPartial,
     resilientRequest:async(_route,options)=>{
       calls++;
-      assert.match(options.section,/annexes$/);
-      return JSON.stringify(Object.fromEntries(FINAL_SECTIONS[1][1].map(key=>[key,source[key]])));
+      const [name, keys]=FINAL_SECTIONS[calls-2];
+      assert.ok(options.section.endsWith(name));
+      return JSON.stringify(Object.fromEntries(keys.map(key=>[key,source[key]])));
     }});
-  assert.equal(calls,3);
+  assert.equal(calls,FINAL_SECTIONS.length+1);
   assert.deepEqual(repaired.rankedIssueLedger,source.rankedIssueLedger);
+});
+
+test('provider truncation checkpoints accepted sections and identifies the failed section', async () => {
+  const { collectForensicSections, FINAL_SECTIONS } = __seoAeoGeoAnalysisTestHooks;
+  const source={...validAnalysis(),deterministicRemediationLedger:{findings:[]}};
+  const saved=[];
+  let count=0;
+  await assert.rejects(collectForensicSections({payload,userPrompt:'evidence',section:'test',
+    onSection:async value=>saved.push(structuredClone(value)),
+    resilientRequest:async()=>{
+      if(count===2)throw Object.assign(new Error('truncated'),{code:'AI_TRUNCATED_COMPLETION'});
+      const keys=FINAL_SECTIONS[count++][1];return JSON.stringify(Object.fromEntries(keys.map(key=>[key,source[key]])));
+    }}),error=>error.forensicProviderFailure && /section remediation/.test(error.message) && Boolean(error.forensicPartial.rankedIssueLedger));
+  assert.equal(saved.length,2);
+  assert.deepEqual(saved.at(-1).rankedIssueLedger,source.rankedIssueLedger);
+  await assert.rejects(collectForensicSections({payload,userPrompt:'evidence',section:'test',
+    onSection:async()=>{throw new Error('durability unavailable');},
+    resilientRequest:async()=>JSON.stringify(Object.fromEntries(FINAL_SECTIONS[0][1].map(key=>[key,source[key]])))}),
+    error=>error.forensicCheckpointFailure && /durability unavailable/.test(error.message));
+});
+
+test('volatile skill observation timestamps cannot invalidate identical retry evidence', async () => {
+  const {forensicCheckpointDigest,__seoAeoGeoAnalysisTestHooks}=await import('../audits/utils/seoAeoGeoAnalysis.js');
+  const first=__seoAeoGeoAnalysisTestHooks.buildSeoEvidence(payload);
+  const second=structuredClone(first);
+  second.skillsBaseline.generatedAt='2099-01-01T00:00:00.000Z';
+  assert.equal(forensicCheckpointDigest(payload,first),forensicCheckpointDigest(payload,second));
+});
+
+test('forensic checkpoints invalidate when server-owned website policy changes', async () => {
+  const { forensicCheckpointDigest, __seoAeoGeoAnalysisTestHooks } = await import('../audits/utils/seoAeoGeoAnalysis.js');
+  const evidence = __seoAeoGeoAnalysisTestHooks.buildSeoEvidence(payload);
+  const updated = structuredClone(evidence);
+  updated.websiteAuditPolicy.minimumTargetScore = Number(evidence.websiteAuditPolicy.minimumTargetScore) + 0.5;
+  assert.equal(forensicCheckpointDigest(payload, evidence), forensicCheckpointDigest(structuredClone(payload), evidence));
+  assert.notEqual(forensicCheckpointDigest(payload, evidence), forensicCheckpointDigest(payload, updated));
+});
+
+test('forensic checkpoints are bound to the exact evidence and output contract', async () => {
+  const {forensicCheckpointDigest}=await import('../audits/utils/seoAeoGeoAnalysis.js');
+  assert.equal(forensicCheckpointDigest(payload),forensicCheckpointDigest(structuredClone(payload)));
+  assert.notEqual(forensicCheckpointDigest(payload),forensicCheckpointDigest({...payload,generatedAt:'changed'}));
+  assert.notEqual(forensicCheckpointDigest(payload),forensicCheckpointDigest({...payload,allRoutes:[]}));
 });

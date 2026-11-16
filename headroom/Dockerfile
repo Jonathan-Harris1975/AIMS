@@ -23,7 +23,9 @@ ARG SETUPTOOLS_VERSION
 ARG FILELOCK_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
+# Bounded retries absorb transient archive connection failures; fail closed
+# if any signed index cannot be fetched rather than using stale metadata.
+RUN apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl pkg-config \
       libbz2-dev libffi-dev libexpat1-dev liblzma-dev libncursesw6 \
@@ -60,7 +62,9 @@ RUN /usr/local/bin/python3.14 -m venv /opt/headroom \
 
 FROM ${UBUNTU_IMAGE} AS headroom-runtime
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
+# Bounded retries absorb transient archive connection failures; fail closed
+# if any signed index cannot be fetched rather than using stale metadata.
+RUN apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
   && apt-get upgrade -y --no-install-recommends \
       apt libapt-pkg7.0 \
   && apt-get install -y --no-install-recommends \
