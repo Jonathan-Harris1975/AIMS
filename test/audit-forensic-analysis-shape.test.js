@@ -350,6 +350,15 @@ test('provider truncation checkpoints accepted sections and identifies the faile
     error=>error.forensicCheckpointFailure && /durability unavailable/.test(error.message));
 });
 
+test('forensic checkpoints invalidate when server-owned website policy changes', async () => {
+  const { forensicCheckpointDigest, __seoAeoGeoAnalysisTestHooks } = await import('../audits/utils/seoAeoGeoAnalysis.js');
+  const evidence = __seoAeoGeoAnalysisTestHooks.buildSeoEvidence(payload);
+  const updated = structuredClone(evidence);
+  updated.websiteAuditPolicy.minimumTargetScore = Number(evidence.websiteAuditPolicy.minimumTargetScore) + 0.5;
+  assert.equal(forensicCheckpointDigest(payload, evidence), forensicCheckpointDigest(structuredClone(payload), evidence));
+  assert.notEqual(forensicCheckpointDigest(payload, evidence), forensicCheckpointDigest(payload, updated));
+});
+
 test('forensic checkpoints are bound to the exact evidence and output contract', async () => {
   const {forensicCheckpointDigest}=await import('../audits/utils/seoAeoGeoAnalysis.js');
   assert.equal(forensicCheckpointDigest(payload),forensicCheckpointDigest(structuredClone(payload)));
