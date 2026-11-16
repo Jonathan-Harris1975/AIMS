@@ -4,16 +4,16 @@ export const PRINT_FORMATS = Object.freeze({
   paperback: { minimumPages: 24 },
   hardcover: { minimumPages: 75, maximumPages: 550 },
 });
-export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 10;
-// Target three existing-catalogue titles per format Mon-Wed; the default weekly cap leaves one for Thu.
-export const PRINT_DAILY_TARGET_TITLES = 3;
+export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 2;
+// KDP permits only two new titles created and two first submissions per format per UTC week.
+export const PRINT_DAILY_TARGET_TITLES = 2;
 export const PRINT_ROLLOUT_WEEKDAYS = Object.freeze(["monday", "tuesday", "wednesday", "thursday"]);
 
 export function parsePrintWeeklyLimit(configuredLimit) {
   const normalized = typeof configuredLimit === "string" ? configuredLimit.trim() : "";
   if (!/^\d+$/.test(normalized)) return PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT;
   const parsed = Number(normalized);
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 100
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT
     ? parsed : PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT;
 }
 
@@ -81,8 +81,8 @@ export function buildPrintPreflight(books, { observedAt = new Date().toISOString
 
 /**
  * Return planning capacity, not permission to publish. Amazon currently documents
- * a 10-title weekly creation limit per format. Only an independently authorised
- * higher allowance should be configured by KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT.
+ * a two-title weekly creation and first-submission limit per format.
+ * Configuration must never raise this cap.
  *
  * KDP resets weekly quotas at Sunday 00:00 UTC. MAST is the sole run clock and
  * schedules these slots on Monday–Thursday in Europe/London.
@@ -91,7 +91,7 @@ export function getPrintRolloutCapacity({
   observedAt = new Date().toISOString(),
   weeklyLimit = PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT,
 } = {}) {
-  if (!Number.isInteger(weeklyLimit) || weeklyLimit < 1 || weeklyLimit > 100) {
+  if (!Number.isInteger(weeklyLimit) || weeklyLimit < 1 || weeklyLimit > PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT) {
     throw new RangeError("Print weekly limit must be an integer between 1 and 100.");
   }
   const when = new Date(observedAt);
@@ -103,8 +103,8 @@ export function getPrintRolloutCapacity({
   const alreadyAllocated = dayIndex === -1 ? 0 : Math.min(weeklyLimit, dayIndex * PRINT_DAILY_TARGET_TITLES);
   const slotsPerFormat = dayIndex === -1
     ? 0 : Math.min(PRINT_DAILY_TARGET_TITLES, Math.max(0, weeklyLimit - alreadyAllocated));
-  // The baseline allowance means three slots Mon/Tue/Wed, one Thu. At a
-  // documented account-specific 12/week allowance this becomes 3 each day.
+  // A Monday allocation consumes the maximum weekly planning capacity; later
+  // days remain available only if the live quota reconciliation finds unused slots.
   // Date.UTC normalises negative days across month boundaries as intended.
   const sundayUtc = new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate() - when.getUTCDay()));
   return {

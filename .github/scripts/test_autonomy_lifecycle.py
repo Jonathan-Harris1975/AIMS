@@ -2,6 +2,8 @@
 import copy
 import json
 import inspect
+import io
+import urllib.error
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
@@ -15,6 +17,66 @@ os.environ.setdefault("GITHUB_REPOSITORY", "owner/repo")
 import branch_pr_automation as branch_controller  # noqa: E402
 import trusted_automation as automation  # noqa: E402
 import autonomy_admission_check as admission_check  # noqa: E402
+
+
+class BranchReconciliationHttpRetryTests(unittest.TestCase):
+    def test_temporary_compare_500_get_is_retried(self):
+        class Response:
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def read(self):
+                return b'{"ahead_by":1}'
+        err = urllib.error.HTTPError("https://api.github.com/test", 500, "Server Error", {}, io.BytesIO(b"compare temporarily unavailable"))
+        with patch.object(branch_controller.urllib.request, "urlopen", side_effect=[err, Response()]) as opened, patch.object(branch_controller.time, "sleep") as sleep:
+            self.assertEqual(branch_controller.get("/repos/owner/repo/compare/main...fix/branch")["ahead_by"], 1)
+        self.assertEqual(opened.call_count, 2)
+        sleep.assert_called_once_with(1)
+
+    def test_primary_rate_limit_does_not_spin(self):
+        err = urllib.error.HTTPError("https://api.github.com/test", 429, "Too Many Requests", {"X-RateLimit-Remaining":"0"}, io.BytesIO(b"rate limited"))
+        with patch.object(branch_controller.urllib.request, "urlopen", side_effect=err) as opened, patch.object(branch_controller.time, "sleep") as sleep:
+            with self.assertRaises(branch_controller.ApiError) as caught:
+                branch_controller.get("/repos/owner/repo/compare/main...fix/change")
+        self.assertEqual(caught.exception.status, 429)
+        self.assertEqual(opened.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_exhausted_transport_errors_use_api_error_contract(self):
+        errors = [urllib.error.URLError("temporary connection failure") for _ in range(4)]
+        with patch.object(branch_controller.urllib.request, "urlopen", side_effect=errors) as opened, patch.object(branch_controller.time, "sleep") as sleep:
+            with self.assertRaises(branch_controller.ApiError) as caught:
+                branch_controller.get("/repos/owner/repo/compare/main...fix/change")
+        self.assertEqual(caught.exception.status, 0)
+        self.assertEqual(opened.call_count, 4)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4])
+
+    def test_permanent_get_error_does_not_retry(self):
+        err = urllib.error.HTTPError("https://api.github.com/test", 404, "Not Found", {}, io.BytesIO(b"missing"))
+        with patch.object(branch_controller.urllib.request, "urlopen", side_effect=err) as opened, patch.object(branch_controller.time, "sleep") as sleep:
+            with self.assertRaises(branch_controller.ApiError):
+                branch_controller.get("/repos/owner/repo/branches/missing")
+        self.assertEqual(opened.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_mutation_500_does_not_replay_write(self):
+        err = urllib.error.HTTPError("https://api.github.com/test", 500, "Server Error", {}, io.BytesIO(b"failed"))
+        with patch.object(branch_controller.urllib.request, "urlopen", side_effect=err) as opened, patch.object(branch_controller.time, "sleep") as sleep:
+            with self.assertRaises(branch_controller.ApiError):
+                branch_controller.post("/repos/owner/repo/pulls", {"title":"test"})
+        self.assertEqual(opened.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_repeated_temporary_error_exhausts_bounded_retry(self):
+        def err():
+            return urllib.error.HTTPError("https://api.github.com/test", 503, "Unavailable", {}, io.BytesIO(b"temporary"))
+        with patch.object(branch_controller.urllib.request, "urlopen", side_effect=[err() for _ in range(4)]) as opened, patch.object(branch_controller.time, "sleep") as sleep:
+            with self.assertRaises(branch_controller.ApiError):
+                branch_controller.get("/repos/owner/repo/compare/main...fix/branch")
+        self.assertEqual(opened.call_count, 4)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4])
 
 
 class RoutineUnitTestRiskClassificationTests(unittest.TestCase):
