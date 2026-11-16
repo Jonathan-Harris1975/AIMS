@@ -15,7 +15,7 @@ ARG FILELOCK_VERSION=4.2.1
 
 # A digest-pinned official image supplies the standard CA bundle for bootstrapping
 # Ubuntu's signed HTTPS package repositories without disabling TLS verification.
-FROM node:24.22.0-bookworm-slim@sha256:91acba91b842bec0bf7ea6f5e09c644c7ccad72c4996ed9616d861d1c7cd60d4 AS ca-trust
+FROM node:24.22.2-alpine3.23@sha256:9b69af715c7f9d038150b54ccccbaeffa9064bbc93e2904c29591ca097316af1 AS ca-trust
 
 FROM ${UBUNTU_IMAGE} AS python-build
 COPY --from=ca-trust /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
