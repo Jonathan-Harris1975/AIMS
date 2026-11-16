@@ -350,6 +350,14 @@ test('provider truncation checkpoints accepted sections and identifies the faile
     error=>error.forensicCheckpointFailure && /durability unavailable/.test(error.message));
 });
 
+test('volatile skill observation timestamps cannot invalidate identical retry evidence', async () => {
+  const {forensicCheckpointDigest,__seoAeoGeoAnalysisTestHooks}=await import('../audits/utils/seoAeoGeoAnalysis.js');
+  const first=__seoAeoGeoAnalysisTestHooks.buildSeoEvidence(payload);
+  const second=structuredClone(first);
+  second.skillsBaseline.generatedAt='2099-01-01T00:00:00.000Z';
+  assert.equal(forensicCheckpointDigest(payload,first),forensicCheckpointDigest(payload,second));
+});
+
 test('forensic checkpoints invalidate when server-owned website policy changes', async () => {
   const { forensicCheckpointDigest, __seoAeoGeoAnalysisTestHooks } = await import('../audits/utils/seoAeoGeoAnalysis.js');
   const evidence = __seoAeoGeoAnalysisTestHooks.buildSeoEvidence(payload);
