@@ -97,7 +97,9 @@ jobs:
           scanners: vuln,secret
   headroom:
     name: Build and scan Headroom companion image
-    runs-on: ubuntu-latest
+    # GitHub's ubuntu-26.04 migration currently has Ubuntu mirror/network failures.
+    # Preserve the hardened runner, pinned runtime image and all image checks.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Harden runner
