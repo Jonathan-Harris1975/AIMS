@@ -72,7 +72,6 @@ export async function synthesiseAuditSections(request, { sections, system, user,
           '. Other report sections are produced separately. Keep narrative fields below 40 words and prioritisation tables to 8 aggregated rows. ' +
           'Preserve all required specialist seats. Group repeated defects by root cause with every relevant source finding ID. Return compact JSON.'},
         {role:'user',content:user},
-        ...(Object.keys(combined).length ? [{role:'user',content:'Previously accepted report sections; preserve their priorities and finding references: ' + JSON.stringify(combined)}] : []),
       ],
     });
     const value = parse(raw);
