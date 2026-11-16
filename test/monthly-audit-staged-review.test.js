@@ -160,10 +160,21 @@ test('every original finding survives council aggregation without authorising in
   const sources={onBrand:{findings:Array.from({length:150},(_,i)=>({findingId:`S-${i}`,title:`Observed defect ${i}`,classification:i===1?'future_guidance':'code_fix'}))}};
   const report=retainAuditSourceFindings({masterIssueLedger:[{findingId:'C-1',sourceFindingIds:['S-0'],classification:'manual_review'}]},sources);
   assert.equal(report.masterIssueLedger.length,150);
-  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:150});
+  assert.deepEqual(report.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:1,retainedFindingCount:149});
   assert.equal(report.masterIssueLedger[1].classification,'future_guidance');
   assert.equal(report.masterIssueLedger[2].classification,'manual_review');
   assert.deepEqual(report.masterIssueLedger[2].affectedPaths,[]);
-  retainAuditSourceFindings(report,sources);
-  assert.equal(report.masterIssueLedger.length,150);
+  const idempotent=retainAuditSourceFindings(report,sources);
+  assert.equal(idempotent.masterIssueLedger.length,150);
+  assert.deepEqual(idempotent.sourceFindingCoverage,{sourceFindingCount:150,representedFindingCount:150,retainedFindingCount:0});
+});
+
+
+test('nested source findings remain represented and non-executable when synthesis fails', () => {
+  const sources={onBrand:{items:[{findingId:'PARENT',title:'Parent',details:{findingId:'CHILD',title:'Child',classification:'code_fix'}}]}};
+  const report=retainAuditSourceFindings({masterIssueLedger:[],synthesisState:'Incomplete'},sources);
+  assert.equal(report.sourceFindingCoverage.sourceFindingCount,2);
+  assert.equal(report.sourceFindingCoverage.retainedFindingCount,2);
+  assert.deepEqual(report.masterIssueLedger.flatMap(row=>row.sourceFindingIds),['PARENT','CHILD']);
+  assert.ok(report.masterIssueLedger.every(row=>row.classification==='manual_review' && row.affectedPaths.length===0));
 });
