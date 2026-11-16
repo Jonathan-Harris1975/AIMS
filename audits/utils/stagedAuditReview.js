@@ -82,6 +82,7 @@ export async function synthesiseAuditSections(request, { sections, system, user,
     for (const key of keys) combined[key] = value[key];
     } catch (error) {
       error.auditPartial = { ...combined };
+      error.partialResult = { ...combined };
       error.auditSection = name;
       throw error;
     }
