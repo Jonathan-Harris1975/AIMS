@@ -230,6 +230,11 @@ router.post(
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioMiniSeriesBodySchema, req.body);
     if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
+    // A keyed MAST request must never degrade into untracked synchronous
+    // provider work when asynchronous scheduling is disabled.
+    if (getRequestIdempotencyKey(req) && !shouldRunAsyncServiceRoute(req)) {
+      return res.status(503).json({ ok: false, error: "zernio-scheduled-async-route-required" });
+    }
 
     if (shouldRunAsyncServiceRoute(req)) {
       const job = await startAsyncServiceRouteJob({
@@ -260,6 +265,9 @@ router.post(
     if (!["monday", "wednesday", "friday"].includes(weekday)) {
       return res.status(400).json({ ok: false, error: "weekday must be monday, wednesday or friday" });
     }
+    if (getRequestIdempotencyKey(req) && !shouldRunAsyncServiceRoute(req)) {
+      return res.status(503).json({ ok: false, error: "zernio-scheduled-async-route-required" });
+    }
     if (shouldRunAsyncServiceRoute(req)) {
       const job = await startAsyncServiceRouteJob({
         service: "zernio", lane: "newsletter-promo",
@@ -279,6 +287,9 @@ router.post(
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioPodcastPromoBodySchema, req.body);
     if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
+    if (getRequestIdempotencyKey(req) && !shouldRunAsyncServiceRoute(req)) {
+      return res.status(503).json({ ok: false, error: "zernio-scheduled-async-route-required" });
+    }
 
     if (shouldRunAsyncServiceRoute(req)) {
       const job = await startAsyncServiceRouteJob({
