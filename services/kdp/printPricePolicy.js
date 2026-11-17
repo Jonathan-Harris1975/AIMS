@@ -9,6 +9,22 @@ export const KDP_PRINT_COST_SOURCES = Object.freeze({
 });
 export const KDP_UK_PRINT_MIN_ROYALTY = 4.50;
 export const KDP_US_PRINT_MIN_ROYALTY = 6;
+// Price positioning: 10% headroom above the minimum viable list price,
+// rounded UP to a reader-friendly .99; never sacrifice the royalty floor.
+export const KDP_PRINT_RETAIL_HEADROOM = 1.10;
+export const KDP_PRINT_RETAIL_CEILINGS = Object.freeze({
+  GBP: Object.freeze({ paperback: 19.99, hardcover: 27.99 }),
+  USD: Object.freeze({ paperback: 29.99, hardcover: 39.99 }),
+});
+export const KDP_PRINT_PRICING_POLICY_VERSION = "2026-11-17-v2";
+
+function charmPriceAtOrAbove(value) {
+  if (!Number.isFinite(value) || value <= 0) throw new RangeError("Invalid print price.");
+  const floorPounds = Math.floor(value);
+  const candidate = floorPounds + .99;
+  return Number((candidate + 1e-9 >= value ? candidate : floorPounds + 1.99).toFixed(2));
+}
+
 
 export function calculatePrintPrice(format, pages, market) {
   if (!["paperback", "hardcover"].includes(format) ||
@@ -29,13 +45,19 @@ export function calculatePrintPrice(format, pages, market) {
   // At/above £7.99 / $9.99 KDP direct sales carry a 60% print royalty
   // before manufacturing. Never apply the Kindle 70% rate to print editions.
   const bracketFloor = market === "GBP" ? 7.99 : 9.99;
-  const price = Math.max(bracketFloor, Math.ceil((printCost + profitFloor) / .60 * 100) / 100);
+  const minimumViablePrice = Math.max(bracketFloor, (printCost + profitFloor) / .60);
+  const ceiling = KDP_PRINT_RETAIL_CEILINGS[market][format];
+  const price = charmPriceAtOrAbove(minimumViablePrice * KDP_PRINT_RETAIL_HEADROOM);
   const royalty = Math.round((.60 * price - printCost) * 100) / 100;
-  if (price > 250 || royalty + 0.001 < profitFloor) throw new Error("Print list price cannot preserve the royalty floor.");
+  if (price > ceiling || royalty + 0.001 < profitFloor) {
+    throw new Error("Print list price would exceed the sensible retail ceiling or violate the minimum royalty.");
+  }
   return {
     market, format, pages, printCost: Math.round(printCost * 1000) / 1000,
     price: price.toFixed(2), estimatedRoyalty: royalty,
-    royaltyRate: .60, calculatedAt: new Date().toISOString(),
+    royaltyRate: .60, minimumViablePrice: Math.ceil(minimumViablePrice * 100) / 100,
+    sensibleRetailCeiling: ceiling, pricingPolicyVersion: KDP_PRINT_PRICING_POLICY_VERSION,
+    retailHeadroom: KDP_PRINT_RETAIL_HEADROOM, calculatedAt: new Date().toISOString(),
     rulesReviewedAt: KDP_PRINT_COST_REVIEWED_AT,
     source: KDP_PRINT_COST_SOURCES[format],
     requiresActualKdpPricingConfirmation: true,

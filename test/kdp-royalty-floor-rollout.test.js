@@ -45,14 +45,14 @@ test('KDP pricing parser reads the selected 70% radio but never infers 70% from 
   assert.equal(parsePricing('', 'invalid').royaltyPlan, '');
 });
 
-test('royalty-floor plan matches the complete D1 catalogue and calculates penny-safe corrections', () => {
+test('royalty-floor plan matches the complete D1 catalogue and calculates consumer-friendly royalty-safe corrections', () => {
   const plan = buildRoyaltyFloorPlan(snapshot(), catalogue());
   assert.equal(plan.total, 1);
   assert.equal(plan.belowFloor, 1);
   assert.equal(plan.unverifiedPlan, 0);
   assert.equal(plan.rows[0].priceMinor, 499);
-  assert.equal(plan.rows[0].floorMinor, 647);
-  assert.equal(buildRoyaltyFloorPlan(snapshot([book({ prices: { UK: '6.47' } })]), catalogue()).belowFloor, 0);
+  assert.equal(plan.rows[0].floorMinor, 699);
+  assert.equal(buildRoyaltyFloorPlan(snapshot([book({ prices: { UK: '6.99' } })]), catalogue()).belowFloor, 0);
   assert.equal(buildRoyaltyFloorPlan(snapshot([book({ royaltyPlan: '' })]), catalogue()).unverifiedPlan, 1);
   assert.throws(() => buildRoyaltyFloorPlan(snapshot(), []), /catalogue/);
   assert.throws(() => buildRoyaltyFloorPlan({ syncedAt: '2026-01-01', books: [book()] }, catalogue()), /stale/);
@@ -73,7 +73,7 @@ function harness({ current = book(), publishResult = { published: true, errors: 
     sync: async () => current,
     publish: async (request) => { events.push('publish'); return typeof publishResult === 'function' ? publishResult(request) : publishResult; },
     audit: async () => ({ listings: [{ publicListing: {
-      status: 'captured', data: { asin, priceSource: 'kindle_price_element', price: '£6.47' },
+      status: 'captured', data: { asin, priceSource: 'kindle_price_element', price: '£6.99' },
     } }] }),
   };
   return { deps, events, saved, advance: (milliseconds) => { currentTime += milliseconds; }, setSync: (bookValue) => { deps.sync = async () => bookValue; } };
@@ -94,7 +94,7 @@ test('live run saves an exact-title intent before a single UK price submission',
   const report = await reconcileRoyaltyFloor({ ...h.deps, dryRun: false });
   assert.equal(report.kdpWritesPerformed, true);
   assert.equal(report.results[0].status, 'submitted');
-  assert.equal(report.results[0].targetMinor, 647);
+  assert.equal(report.results[0].targetMinor, 699);
   assert.ok(h.events.indexOf('save:pricing/royalty-floor/ledger.json') < h.events.indexOf('publish'));
   const ledger = h.saved.get('pricing/royalty-floor/ledger.json');
   assert.equal(ledger.entries[titleId].status, 'submitted');
@@ -122,7 +122,7 @@ test('signed-in and public UK price verification completes a submitted correctio
   const h = harness();
   await reconcileRoyaltyFloor({ ...h.deps, dryRun: false });
   h.advance(5 * 3600000);
-  h.setSync(book({ prices: { UK: '6.47' } }));
+  h.setSync(book({ prices: { UK: '6.99' } }));
   const checked = await reconcileRoyaltyFloor({ ...h.deps, dryRun: false });
   assert.equal(checked.results[0].status, 'verified');
   assert.equal(checked.completed, 1);

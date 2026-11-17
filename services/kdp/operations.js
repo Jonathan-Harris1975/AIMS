@@ -32,6 +32,7 @@ import {
 
 import { runOptimisationUpdates } from "./optimisationUpdates.js";
 import { reconcileRoyaltyFloor } from "./royaltyFloorRollout.js";
+import { reconcilePrintPricing } from "./printPricingRollout.js";
 import { buildPrintPreflight, getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { inspectPrintSourcePdf } from "./printSourceAudit.js";
 import { runPrintProduction } from "./printProduction.js";
@@ -633,6 +634,16 @@ router.get("/audit/pricing/royalty-floor", asyncRoute(async (_req, res) => {
 router.post("/audit/pricing/royalty-floor/run", requestDedupe("kdp:royalty-floor-rollout"), asyncRoute(async (req, res) =>
   startJob(req, res, "audit-royalty-floor", () =>
     reconcileRoyaltyFloor({ dryRun: req.body?.dryRun !== false })),
+));
+
+// Price-only reconciliation of live-verified paperback and hardcover editions.
+// A read-only GET exposes inventory; MAST explicitly requests live price updates.
+router.get("/audit/pricing/print", asyncRoute(async (_req, res) => {
+  res.json(await reconcilePrintPricing({ dryRun: true }));
+}));
+router.post("/audit/pricing/print/run", requestDedupe("kdp:print-pricing-rollout"), asyncRoute(async (req, res) =>
+  startJob(req, res, "audit-print-pricing", () =>
+    reconcilePrintPricing({ dryRun: req.body?.dryRun !== false })),
 ));
 
 router.post("/audit/pricing/update", requestDedupe("kdp:pricing-update"), asyncRoute(async (req, res) => startJob(req, res, "audit-pricing-update", async () => {
