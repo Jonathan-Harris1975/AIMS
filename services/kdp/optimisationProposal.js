@@ -114,6 +114,11 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
     }
     const configuredFloor = Number((marketplace === 'US' ? process.env.KDP_RESEARCH_PRICE_FLOOR_USD_MINOR : process.env.KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR) || (marketplace === 'US' ? 499 : 643));
     const floorMinor = marketplace === 'UK' ? Math.max(configuredFloor, ukMinimumMinor) : configuredFloor;
+    if (marketplace === 'UK' && floorMinor > ukRange.maximumMinor) {
+      prices[marketplace] = { status: 'blocked', reason: 'configured_price_floor_exceeds_book_maximum',
+        priceRange: ukRange };
+      continue;
+    }
     const proposed = priceFromComparables({ marketplace, floorMinor, ownAsin: book.asin, observedAt: now, comparables: observations.map((row) => ({
       ...row, currency, format: 'kindle', comparable: true, promotional: false, priceMinor: parseKdpPriceMinorUnits(row.price),
     })) });
