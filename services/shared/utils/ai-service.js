@@ -8,7 +8,7 @@ import { prepareRepairRequest } from "./repairHistory.js";
 
 import aiConfig from "./ai-config.js";
 import { safeRouteLog } from "../../../logger.js";
-import { info, error as logError } from "../../../logger.js";
+import { info, warn, error as logError } from "../../../logger.js";
 import { recordProviderOutcome } from "./operationalExcellence.js";
 import { compressForOpenRouter } from "./headroom.js";
 
