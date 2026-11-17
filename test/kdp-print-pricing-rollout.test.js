@@ -21,6 +21,11 @@ test("six-by-nine print price policy preserves the direct-sale floor with sensib
   assert.equal(hardcover.price, "21.99");
   assert.equal(paperback.estimatedRoyalty, 5.74);
   assert.equal(hardcover.estimatedRoyalty, 6.04);
+  assert.equal(paperback.minimumPrice, "15.99");
+  assert.equal(paperback.maximumPrice, "19.99");
+  assert.equal(hardcover.minimumPrice, "21.99");
+  assert.equal(hardcover.maximumPrice, "26.99");
+  assert.match(hardcover.priceRationale, /300 final PDF pages/);
   assert.ok(paperback.estimatedRoyalty >= 4.50);
   assert.ok(hardcover.estimatedRoyalty >= 4.50);
   assert.equal(paperback.sensibleRetailCeiling, 19.99);
@@ -31,6 +36,10 @@ test("six-by-nine print price policy preserves the direct-sale floor with sensib
         const entry = calculatePrintPrice(format, pages, market);
         assert.ok(entry.price.endsWith(".99"));
         assert.ok(Number(entry.price) <= entry.sensibleRetailCeiling);
+        assert.ok(Number(entry.maximumPrice) >= Number(entry.minimumPrice));
+        assert.ok(Number(entry.maximumPrice) <= entry.sensibleRetailCeiling);
+        assert.ok(entry.estimatedRoyaltyAtMaximum >= entry.estimatedRoyalty);
+        assert.match(entry.priceRationale, new RegExp(String(pages) + " final PDF pages"));
         assert.ok(entry.estimatedRoyalty >= (market === "GBP" ? 4.50 : 6));
         assert.equal(entry.pricingPolicyVersion, KDP_PRINT_PRICING_POLICY_VERSION);
       }
@@ -43,6 +52,7 @@ test("print repricer raises insufficient prices and reduces prices only beyond r
   const plan = planPublishedPrintPrice(book, job, manifest, signedIn);
   assert.deepEqual(plan.changes, { GBP: "15.99", USD: "19.99" });
   assert.deepEqual(plan.observedPrices, { GBP: "11.99", USD: "14.99" });
+  assert.deepEqual(plan.maximumPrices, { GBP: "19.99", USD: "23.99" });
   const healthy = planPublishedPrintPrice(book, job, manifest, {
     ...signedIn, prices: { GBP: "17.99", USD: "21.99" },
   });
@@ -50,7 +60,7 @@ test("print repricer raises insufficient prices and reduces prices only beyond r
   const over = planPublishedPrintPrice(book, job, manifest, {
     ...signedIn, prices: { GBP: "35.00", USD: "45.00" },
   });
-  assert.deepEqual(over.changes, { GBP: "19.99", USD: "29.99" });
+  assert.deepEqual(over.changes, { GBP: "19.99", USD: "23.99" });
   assert.throws(() => planPublishedPrintPrice(book, job, manifest, {
     ...signedIn, isbn: "9781111111111" }), /identity/);
   assert.throws(() => planPublishedPrintPrice(book, job, {
@@ -130,4 +140,19 @@ test("unverifiable print assets cannot trigger any KDP write", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.results[0].status, "blocked");
   assert.equal(h.published.length, 0);
+});
+
+
+test("different final page counts set different automatic print maximums", () => {
+  const shorter = calculatePrintPrice("paperback", 185, "GBP");
+  const longer = calculatePrintPrice("paperback", 300, "GBP");
+  assert.equal(shorter.minimumPrice, "13.99");
+  assert.equal(shorter.maximumPrice, "16.99");
+  assert.equal(longer.maximumPrice, "19.99");
+  assert.ok(Number(shorter.maximumPrice) < Number(longer.maximumPrice));
+  const plan = planPublishedPrintPrice(book, job, { ...manifest, finalPageCount: 185 }, {
+    ...signedIn, prices: { GBP: "18.99", USD: "25.99" },
+  });
+  assert.deepEqual(plan.changes, { GBP: "16.99", USD: "19.99" });
+  assert.match(plan.priceExplanations.GBP, /185 final PDF pages/);
 });
