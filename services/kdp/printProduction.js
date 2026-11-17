@@ -14,7 +14,7 @@ import { createTitle, publishBook } from "./engine/kdpPublish.ts";
 import { listBookshelf, syncBookMetadata } from "./engine/kdpMetadata.ts";
 
 const MAX_BOOKS = 2;
-const MAX_FORMAT_START_MINUTE = 23 * 60 + 10;
+const MAX_FORMAT_START_MINUTE = 22 * 60 + 50;
 const SPECIAL_FIRST_BOOK = 7;
 const STORAGE_ROOT = "print/production/reports/";
 
@@ -207,9 +207,15 @@ export async function runPrintProduction({
     let writes = false;
     for (const book of eligible) {
       if (booksTried >= MAX_BOOKS || !printWindowAllowsAction(now(), { start: true })) break;
+      // Completed, submitted and uncertain titles cannot consume every future
+      // scheduling slot. Skip them so the 40-book queue actually advances.
+      const actionable = await Promise.all(["paperback","hardcover"].map(async format =>
+        ({ format, allowed: canAttemptPrintJob(await getPrintJob(book.ebookId, format)) })));
+      if (!actionable.some(row => row.allowed)) continue;
       booksTried++;
-      for (const format of ["paperback", "hardcover"]) {
+      for (const { format, allowed } of actionable) {
         if (!printWindowAllowsAction(now(), { start: true })) break;
+        if (!allowed) continue;
         const item = await produceOne(book, format, shelf, {
           now, prepare, create: async f => { writes = true; return create(f); },
           publish: async request => { writes = true; return publish(request); },
