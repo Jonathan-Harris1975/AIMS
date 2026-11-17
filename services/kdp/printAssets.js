@@ -113,7 +113,7 @@ async function reflowTextPdf(text, file) {
     "@page:left{margin-left:.62in;margin-right:.82in}" +
     "@page:right{margin-left:.82in;margin-right:.62in}" +
     "html,body{padding:0;margin:0}body{font-family:'DejaVu Serif',serif;" +
-    "font-size:10.25pt;line-height:1.42;color:#151515;hyphens:auto}" +
+    "font-size:10.25pt;line-height:1.42;color:#151515;hyphens:none}" +
     "p{margin:0 0 .65em 0;text-align:justify;orphans:3;widows:3;overflow-wrap:break-word}" +
     "</style></head><body>" + textHtml(text) + "</body></html>";
   await renderPdf(html, file, W, H);
@@ -243,8 +243,8 @@ export async function createPrintAssets(book, format, options = {}) {
       createdAt: new Date().toISOString(),
     };
     if (!options.dryRun) {
-      await uploadPrivateBuffer("kdp", interiorKey, interiorBytes, "application/pdf", { ifNoneMatch: "*" });
-      await uploadPrivateBuffer("kdp", coverKey, coverBytes, "application/pdf", { ifNoneMatch: "*" });
+      await uploadPrivateBuffer("kdp", interiorKey, interiorBytes, "application/pdf");
+      await uploadPrivateBuffer("kdp", coverKey, coverBytes, "application/pdf");
       await putPrivateJson("kdp", root + "manifest.json", manifest);
     }
     return { manifest, interiorPath: interior, coverPath: cover, cleanup: async () => fs.rm(work, { recursive: true, force: true }) };
