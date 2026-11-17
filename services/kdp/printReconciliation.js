@@ -66,12 +66,16 @@ export async function reconcileInterruptedPrintJobs(books, shelf, {
       const remote = await read(matched.titleId, job.format);
       const isbn = String(remote?.isbn || "").replace(/[-\s]/g, "");
       const priorIsbn = String(job.isbn || "").replace(/[-\s]/g, "");
+      const outcome = classifyKdpPrintOutcome(remote?.publishingStatus);
+      // Drafts created before the ISBN step can be recovered and finished.
+      // Submitted books must have the real KDP-assigned print ISBN.
       if (normaliseTitle(remote?.title) !== normaliseTitle(book.title) ||
-          (priorIsbn && priorIsbn !== isbn) || !/^(?:97[89])\d{10}$/.test(isbn)) {
+          (priorIsbn && priorIsbn !== isbn) ||
+          (isbn && !/^(?:97[89])\d{10}$/.test(isbn)) ||
+          (outcome === "submitted" && !isbn)) {
         results.push({ ...result, status: "remote_identity_or_isbn_unverified" });
         continue;
       }
-      const outcome = classifyKdpPrintOutcome(remote.publishingStatus);
       if (outcome === "submitted") {
         await save(job.ebookId, job.format, { state: "submitted", titleId: matched.titleId, isbn });
         await write(job.ebookId, job.format, "submitted", isbn);
@@ -84,8 +88,8 @@ export async function reconcileInterruptedPrintJobs(books, shelf, {
         }
         // No blind re-create. A uniquely verified title remains a reusable KDP
         // draft; submission can be reserved again only after quota resets.
-        await save(job.ebookId, job.format, { state: "draft", titleId: matched.titleId, isbn });
-        await write(job.ebookId, job.format, "draft", isbn);
+        await save(job.ebookId, job.format, { state: "draft", titleId: matched.titleId, isbn: isbn || null });
+        await write(job.ebookId, job.format, "draft", isbn || null);
         results.push({ ...result, status: "saved_draft_recovered", titleId: matched.titleId });
       } else {
         results.push({ ...result, status: "remote_status_unverified" });
