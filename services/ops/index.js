@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
 import { collectPodcastGrowthSnapshot, readLatestPodcastGrowthSnapshot, podcastGrowthReadiness } from "../podcast-growth/organicDiscovery.js";
+import { getBookSalesEvidence } from "../podcast-growth/bookSalesEvidence.js";
 import { assessAsyncTaskOutcome, extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
 import {
@@ -49,6 +50,12 @@ router.get("/podcast-growth/latest", async (_req, res) => {
   const snapshot = await readLatestPodcastGrowthSnapshot();
   if (!snapshot) return res.status(404).json({ ok: false, status: "unavailable", reason: "no-persisted-podcast-growth-snapshot" });
   return res.json({ ok: true, snapshot });
+});
+
+router.get("/podcast-growth/book-sales-evidence", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  const evidence = await getBookSalesEvidence();
+  return res.json({ ok: true, evidence });
 });
 
 router.post("/podcast-growth/snapshot", async (_req, res) => {
