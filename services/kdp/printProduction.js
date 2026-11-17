@@ -58,6 +58,21 @@ export function choosePrintCandidates(books) {
   }).sort((a,b) => (a.ebookId === SPECIAL_FIRST_BOOK ? -1 : b.ebookId === SPECIAL_FIRST_BOOK ? 1 : a.ebookId - b.ebookId));
 }
 
+export function categorySpecsFromKindle(categories = []) {
+  const specs = [];
+  for (const entry of categories || []) {
+    const path = String(entry).split(/\s*›\s*/).map(x => x.trim()).filter(Boolean);
+    if (path[0] !== "Books" || path.length < 3) continue;
+    const nodes = path.slice(1).filter(x => x !== "Books").slice(0,4);
+    if (nodes.length >= 2) specs.push({ path:nodes });
+    if (specs.length >= 3) break;
+  }
+  // Use an evidence-grounded category path only. A Kindle-only taxonomy
+  // cannot be blindly translated into the physical Books hierarchy.
+  if (!specs.length) throw new Error("Existing Kindle print-compatible categories cannot be verified.");
+  return specs;
+}
+
 function bookMetadata(book) {
   const names = book.author.trim().split(/\s+/);
   return {
@@ -106,6 +121,12 @@ async function produceOne(book, format, shelf, options) {
     const sourceRefs = shelf.refs.filter(ref => ref.format === "kindle" &&
       String(ref.asin || "").toUpperCase() === String(book.asin || "").toUpperCase());
     if (sourceRefs.length !== 1) throw new Error("Existing Kindle KDP title identity could not be uniquely verified.");
+    const kindle = await options.readKindle(sourceRefs[0].titleId, "kindle");
+    if (cleanTitle(kindle?.title) !== cleanTitle(book.title) ||
+      String(kindle.asin || "").toUpperCase() !== String(book.asin || "").toUpperCase()) {
+      throw new Error("Signed-in Kindle source title or ASIN does not match the private catalogue.");
+    }
+    const categories = categorySpecsFromKindle(kindle.categories);
     const aiDisclosure = await options.aiDisclosure(sourceRefs[0].titleId);
     assets = await options.prepare(book, format);
     const manifest = assets.manifest;
@@ -146,7 +167,7 @@ async function produceOne(book, format, shelf, options) {
     await savePrintJob(book.ebookId, format, { state: "submitting", titleId: job.titleId, manifestKey });
     const request = {
       format, titleId: job.titleId, create: false, dryRun: false, publish: true,
-      details: bookMetadata(book),
+      details: bookMetadata(book), categories,
       content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath, printSettings: printSettings(aiDisclosure) },
       pricing: plan.pricing,
     };
@@ -188,7 +209,8 @@ export async function runPrintProduction({
   dryRun = false, ebookId = null, now = () => new Date(),
   listBooks = listKdpEbooks, inspectBookshelf = listBookshelf,
   prepare = createPrintAssets, create = createTitle, publish = publishBook,
-  aiDisclosure = readKindleAiDeclaration, reconcileListings = reconcileLivePrintListings,
+  aiDisclosure = readKindleAiDeclaration, readKindle = syncBookMetadata,
+  reconcileListings = reconcileLivePrintListings,
   claimLease = claimDurableLease, releaseLease = releaseDurableLease,
 } = {}) {
   if (dryRun) return { ok: true, dryRun: true, kdpWritesPerformed: false,
@@ -245,7 +267,7 @@ export async function runPrintProduction({
         if (!printWindowAllowsAction(now(), { start: true })) break;
         if (!allowed) continue;
         const item = await produceOne(book, format, shelf, {
-          now, prepare, aiDisclosure, create: async f => { writes = true; return create(f); },
+          now, prepare, aiDisclosure, readKindle, create: async f => { writes = true; return create(f); },
           publish: async request => { writes = true; return publish(request); },
           weeklyLimit: weekLimit,
         });
