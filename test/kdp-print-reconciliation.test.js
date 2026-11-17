@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { classifyKdpPrintOutcome, resolveInterruptedPrintTitle,
   reconcileInterruptedPrintJobs } from "../services/kdp/printReconciliation.js";
 import { existingPrintMatches } from "../services/kdp/printProduction.js";
+import { requiredPrintOptionNames } from "../services/kdp/engine/kdpContentUpdate.ts";
 
 const book = { ebookId: 7, title: "The Artificial Intelligence Revolution" };
 const shelf = {
@@ -70,7 +71,7 @@ test("KDP draft is resumed only after the 36-hour remote-grace period", async ()
   const writes = [];
   const options = {
     list: async () => [job()],
-    read: async () => remote({ publishingStatus:"Draft" }),
+    read: async () => remote({ publishingStatus:"Draft", isbn:"" }),
     save: async (...args) => { writes.push(args); },
     write: async () => {},
   };
@@ -95,4 +96,17 @@ test("unverified print identity or contradictory ISBN never clears uncertain sta
   assert.equal(outcome.pending, 1);
   assert.equal(outcome.results[0].status, "remote_identity_or_isbn_unverified");
   assert.equal(mutations, 0);
+});
+
+test("NO-AI print books do not require non-existent AI text/image tool selections", () => {
+  const no = requiredPrintOptionNames({ containsAiContent: false });
+  assert.ok(no.has("containsAiContent"));
+  assert.ok(!no.has("aiTextAmount"));
+  assert.ok(!no.has("aiTextTool"));
+  const yes = requiredPrintOptionNames({
+    containsAiContent: true, aiTextAmount: "some", aiImagesAmount: "none",
+  });
+  assert.ok(yes.has("aiTextAmount"));
+  assert.ok(yes.has("aiTextTool"));
+  assert.ok(!yes.has("aiImagesTool"));
 });
