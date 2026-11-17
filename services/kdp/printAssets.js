@@ -204,7 +204,17 @@ export async function createPrintAssets(book, format, options = {}) {
       converted = true;
       await reflowTextPdf(sourceText.plain, interior);
     }
-    const info = await pdfInfo(interior);
+    let info = await pdfInfo(interior);
+    // Print manufacturing counts physical leaves, so pad an odd interior
+    // with one genuinely blank final verso, then recheck the actual PDF.
+    if (info.pages % 2 !== 0) {
+      const blank = path.join(work, "blank-verso.pdf");
+      const even = path.join(work, "even-interior.pdf");
+      await renderPdf("<html><head><style>@page{size:6in 9in;margin:0}body{margin:0}</style></head><body></body></html>", blank, W, H);
+      await runBin("pdfunite", [interior, blank, even]);
+      await fs.rename(even, interior);
+      info = await pdfInfo(interior);
+    }
     validCount(format, info.pages);
     if (Math.abs(info.widthPt - W * IN) > 0.25 || Math.abs(info.heightPt - H * IN) > 0.25) {
       throw new Error("Rendered print interior has the wrong trim dimensions.");
