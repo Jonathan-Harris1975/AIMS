@@ -17,8 +17,14 @@ export function parsePrintWeeklyLimit(configuredLimit) {
     ? parsed : PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT;
 }
 
-export function buildPrintPreflight(books, { observedAt = new Date().toISOString() } = {}) {
+export function buildPrintPreflight(books, {
+  observedAt = new Date().toISOString(),
+  existingSourceKeys = null,
+} = {}) {
   if (!Array.isArray(books)) throw new TypeError("KDP catalogue must be an array.");
+  if (existingSourceKeys !== null && !(existingSourceKeys instanceof Set)) {
+    throw new TypeError("existingSourceKeys must be a Set populated from private KDP R2.");
+  }
   const ids = new Set();
   const asinCounts = new Map();
   for (const book of books) {
@@ -39,17 +45,24 @@ export function buildPrintPreflight(books, { observedAt = new Date().toISOString
       && book.manuscriptFormat === "PDF"
       && String(book.manuscriptR2Key || "").startsWith("Manuscripts pdf format/")
       && String(book.manuscriptR2Key || "").toLowerCase().endsWith(".pdf");
+    // An R2 key with a valid shape is not proof that the private source exists.
+    // When the runtime supplies its authoritative object inventory, missing PDFs
+    // block preparation rather than failing later in the KDP browser wizard.
+    const sourcePdfPresent = existingSourceKeys === null
+      ? null : manuscriptRefValid && existingSourceKeys.has(book.manuscriptR2Key);
     for (const [format, limits] of Object.entries(PRINT_FORMATS)) {
       const blockers = [];
       if (!String(book.title || "").trim() || !String(book.author || "").trim()) blockers.push("missing_title_or_author");
       if (!asin || duplicateAsin) blockers.push(duplicateAsin ? "duplicate_kindle_asin" : "missing_kindle_asin");
       if (!manuscriptRefValid) blockers.push("missing_private_source_pdf");
+      else if (sourcePdfPresent === false) blockers.push("missing_private_source_pdf_object");
       if (pages === null) blockers.push("unverified_catalogue_page_count");
       else if (pages < limits.minimumPages) blockers.push("catalogue_page_count_below_print_minimum");
       else if (limits.maximumPages && pages > limits.maximumPages) blockers.push("catalogue_page_count_above_print_maximum");
       records.push({
         ebookId, slug: String(book.slug || ""), title: String(book.title || ""),
         kindleAsin: asin, format, cataloguePages: pages,
+        sourcePdfPresent,
         state: blockers.length ? "catalogue_blocked" : "source_pdf_review_required",
         blockers,
         // Print layout, cover QA, rights, distinct ISBN and actual KDP costs still need verification.
@@ -74,6 +87,9 @@ export function buildPrintPreflight(books, { observedAt = new Date().toISOString
   return {
     ok: true, schemaVersion: "kdp-print-preflight/v1", observedAt,
     catalogueCount: books.length, editionCount: records.length,
+    sourceObjectExistenceChecked: existingSourceKeys !== null,
+    missingSourceObjects: existingSourceKeys === null ? null
+      : new Set(records.filter((r) => r.sourcePdfPresent === false).map((r) => r.ebookId)).size,
     byFormat, records, kdpWritesPerformed: false,
     message: "Preparation-only inventory. Catalogue page counts are not verified PDF print counts. No KDP title creation or publishing is authorised by this report.",
   };
@@ -92,7 +108,7 @@ export function getPrintRolloutCapacity({
   weeklyLimit = PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT,
 } = {}) {
   if (!Number.isInteger(weeklyLimit) || weeklyLimit < 1 || weeklyLimit > PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT) {
-    throw new RangeError("Print weekly limit must be an integer between 1 and 100.");
+    throw new RangeError("Print weekly limit must be an integer between 1 and the official per-format maximum.");
   }
   const when = new Date(observedAt);
   if (!Number.isFinite(when.getTime())) throw new TypeError("Invalid print rollout observedAt.");
