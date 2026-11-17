@@ -337,6 +337,9 @@ async function completePrintContentOnce(
     }
   }
 
+  // A preview approval obtained before replacement interior/cover uploads is
+  // stale. New files require a fresh KDP previewer approval.
+  if (uploadedInteriorThisRun || uploadedCoverThisRun) previewApprovedThisRun = false
   const approved = await approveManuscriptIfNeeded(page)
   if (approved) previewApprovedThisRun = true
   if (!previewApprovedThisRun) {

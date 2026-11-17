@@ -34,6 +34,7 @@ import { runOptimisationUpdates } from "./optimisationUpdates.js";
 import { reconcileRoyaltyFloor } from "./royaltyFloorRollout.js";
 import { buildPrintPreflight, getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { inspectPrintSourcePdf } from "./printSourceAudit.js";
+import { runPrintProduction } from "./printProduction.js";
 
 const router = express.Router();
 const ASYNC_STATUS_BASE = "/kdp/jobs";
@@ -210,6 +211,14 @@ router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), 
     await putPrivateJson("kdp", key, report);
     return { ...report, reportRef: { bucket: "kdp", key } };
   })));
+
+// Live print edition creation and submission. Reuses the existing KDP login/browser
+// and durable D1/R2 state; never counts a planning report as a publication.
+router.post("/print/production/run", requestDedupe("kdp:print-production"), asyncRoute(async (req, res) =>
+  startJob(req, res, "print-production", () => runPrintProduction({
+    dryRun: req.body?.dryRun === true,
+    ebookId: req.body?.ebookId ?? null,
+  }))));
 
 router.post("/research/updates/run", asyncRoute(async (req, res) =>
   startJob(req, res, "weekly-update-verification", () => runOptimisationUpdates()),

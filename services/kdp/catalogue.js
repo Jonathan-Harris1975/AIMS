@@ -173,3 +173,8 @@ export async function updateKdpEbookMetadata(intent, { readBook = getKdpEbookByI
   return { status: persisted.asin.toUpperCase() === asin && persisted.description === description &&
     JSON.stringify(persisted.keywords) === JSON.stringify(keywords) ? "already_updated" : "conflict" };
 }
+
+/** Internal D1 write API for the print pipeline. Never expose raw SQL over HTTP. */
+export function queryKdpD1(sql, params = []) {
+  return getKdpD1Client().query(sql, params);
+}
