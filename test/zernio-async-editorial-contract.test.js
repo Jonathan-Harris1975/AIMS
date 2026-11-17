@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { stableZernioAsyncPayload } from "../services/zernio/utils/asyncJobIdentity.js";
 import { startAsyncServiceRouteJob } from "../services/shared/utils/asyncServiceRouteJobs.js";
 import { asyncServiceJobType } from "../services/shared/utils/asyncServiceRouteJobs.js";
-import { completeJob, getPublicJob } from "../services/shared/utils/jobStore.js";
+import { completeJob, getPublicJob, flushJobStoreWrites } from "../services/shared/utils/jobStore.js";
 
 test("MAST retries use an opaque, stable, route-scoped Zernio session identity", () => {
   const trigger = "zernio-newsletter-promo-monday:Europe/London:2026-11-16:11:15";
@@ -25,6 +25,7 @@ test("terminal Zernio async replay returns the existing pollable job rather than
   completeJob(asyncServiceJobType("zernio", lane), sessionId, {
     result: { ok: false, error: "source delivery not confirmed" },
   });
+  await flushJobStoreWrites({ throwOnError: true });
   let calls = 0;
   const receipt = await startAsyncServiceRouteJob({
     service: "zernio", lane, payload: { sessionId, weekday: "monday" },
