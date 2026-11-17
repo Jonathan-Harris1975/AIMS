@@ -167,7 +167,8 @@ async function produceOne(book, format, shelf, options) {
       format, ...(isNewTitle ? { create: true } : { create: false, titleId: job.titleId }),
       dryRun: false, publish: true,
       details: bookMetadata(book), categories,
-      content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath, printSettings: printSettings(aiDisclosure) },
+      content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath,
+        forceReplaceFiles: true, printSettings: printSettings(aiDisclosure) },
       pricing: plan.pricing,
     };
     const result = await options.publish(request);
