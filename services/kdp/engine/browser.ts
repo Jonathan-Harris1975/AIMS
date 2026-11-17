@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { chromium, type Browser, type BrowserContext } from 'playwright-core'
 import { sessionFilePath } from './session.ts'
 import { ensureKdpLogin } from './login.ts'
+import { claimDurableLease, releaseDurableLease } from '../../shared/utils/durableLease.js'
 
 const executablePath = () =>
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || process.env.CHROMIUM_PATH || '/usr/bin/chromium'
@@ -29,9 +30,27 @@ export async function withKdpBrowserContext<T>(
   browserQueue = new Promise<void>((resolve) => { release = resolve })
   await previous
 
+  // All authenticated KDP jobs (print, Kindle prices, metadata, research and
+  // manual publishing) share this one account-level R2 lease. Local
+  // browserQueue alone cannot protect multiple Koyeb workers or instances.
+  let lease: Awaited<ReturnType<typeof claimDurableLease>> | undefined
   try {
+    lease = await claimDurableLease({
+      namespace: 'kdp-account', key: 'browser-session',
+      pendingTtlMs: 30 * 60_000, completedTtlMs: 5_000,
+      metadata: { purpose: 'exclusive authenticated KDP browser transaction' },
+    })
+    if (!lease.claimed || !lease.lease) {
+      throw new Error('KDP account session is busy in another production worker; retry after its lease releases.')
+    }
+    if (process.env.NODE_ENV === 'production' && lease.lease.backend !== 'r2') {
+      throw new Error('Live KDP browser operations require the distributed R2 account-session lock.')
+    }
     return await withKdpBrowserContextOnce(fn, { autoLogin, retryExpired, headless, viewport })
   } finally {
+    if (lease?.claimed && lease.lease) {
+      await releaseDurableLease(lease.lease).catch(() => {})
+    }
     release()
   }
 }
