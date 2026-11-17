@@ -8,6 +8,7 @@ import { listKdpEbooks } from "./catalogue.js";
 import { createPrintAssets } from "./printAssets.js";
 import { readKindleAiDeclaration } from "./printAiDisclosure.js";
 import { reconcileLivePrintListings } from "./printVerification.js";
+import { reconcileInterruptedPrintJobs } from "./printReconciliation.js";
 import { planPrintPrices } from "./printPricePolicy.js";
 import { getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, listKnownPrintJobs, markPrintQuota,
@@ -223,6 +224,7 @@ export async function runPrintProduction({
   prepare = createPrintAssets, publish = publishBook,
   aiDisclosure = readKindleAiDeclaration, readKindle = syncBookMetadata,
   reconcileListings = reconcileLivePrintListings,
+  reconcileInterrupted = reconcileInterruptedPrintJobs,
   claimLease = claimDurableLease, releaseLease = releaseDurableLease,
 } = {}) {
   if (dryRun) return { ok: true, dryRun: true, kdpWritesPerformed: false,
@@ -259,6 +261,7 @@ export async function runPrintProduction({
         ref.title = meta.title;
       }
     }
+    const interruptedReconciliation = await reconcileInterrupted(books, shelf, { now });
     const weekLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ observedAt: now().toISOString(), weeklyLimit: weekLimit });
     const listingsReconciled = await reconcileListings(books, { limit: 12 });
@@ -293,7 +296,7 @@ export async function runPrintProduction({
       ].includes(x.status)),
       schemaVersion: 1, checkedAt: now().toISOString(), weekUtc: utcPrintWeek(now()),
       kdpWritesPerformed: writes, maxBooksPerRun: MAX_BOOKS, capacity,
-      booksConsidered: booksTried, results: outcomes, listingsReconciled,
+      booksConsidered: booksTried, results: outcomes, listingsReconciled, interruptedReconciliation,
       submitted: outcomes.filter(x => x.status === "submitted_to_kdp_review").length,
       blocked: outcomes.filter(x => ["blocked","uncertain","submission_unverified"].includes(x.status)).length,
       publicPurchaseAvailabilityVerified: listingsReconciled.some(x => x.status === "live_verified"),
