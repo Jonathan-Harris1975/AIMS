@@ -38,9 +38,15 @@ RUN echo "[build] runtime packages" \
     dumb-init \
     ffmpeg \
     chromium \
+    poppler-utils \
+    ttf-dejavu \
  && command -v chromium >/dev/null \
  && command -v ffmpeg >/dev/null \
  && command -v ffprobe >/dev/null \
+ && command -v pdfinfo >/dev/null \
+ && command -v pdftotext >/dev/null \
+ && command -v pdffonts >/dev/null \
+ && command -v pdfimages >/dev/null \
  && command -v dumb-init >/dev/null
 
 # Install production dependencies before copying the app for better build caching.
