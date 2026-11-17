@@ -382,7 +382,7 @@ export async function fetchBookMetadata(
         return { plan, bytes }
       })()`) as { plan: string; bytes: string }
       if (/^(?:35|70)(?:_PERCENT)?$/.test(rendered.plan)) pricing.royaltyPlan = rendered.plan
-      if (/^\\d+$/.test(rendered.bytes) && Number.isSafeInteger(Number(rendered.bytes))) {
+      if (/^\d+$/.test(rendered.bytes) && Number.isSafeInteger(Number(rendered.bytes))) {
         pricing.fileSizeKb = String(Math.ceil(Number(rendered.bytes) / 1024))
       }
     }
