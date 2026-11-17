@@ -105,7 +105,7 @@ async function recordRun(data) {
 
 async function produceOne(book, format, shelf, options) {
   let job = await getPrintJob(book.ebookId, format);
-  if (!canAttemptPrintJob(job)) {
+  if (!canAttemptPrintJob(job, options.now())) {
     return { ebookId: book.ebookId, format, status: "already_in_progress_or_submitted", state: job?.state };
   }
   if (!printWindowAllowsAction(options.now(), { start: true })) {
@@ -276,7 +276,7 @@ export async function runPrintProduction({
       // Completed, submitted and uncertain titles cannot consume every future
       // scheduling slot. Skip them so the 40-book queue actually advances.
       const actionable = await Promise.all(["paperback","hardcover"].map(async format =>
-        ({ format, allowed: canAttemptPrintJob(await getPrintJob(book.ebookId, format)) })));
+        ({ format, allowed: canAttemptPrintJob(await getPrintJob(book.ebookId, format), now()) })));
       if (!actionable.some(row => row.allowed)) continue;
       booksTried++;
       for (const { format, allowed } of actionable) {
