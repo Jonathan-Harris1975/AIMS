@@ -138,7 +138,8 @@ Prices target comparable medians with average prices retained in the evidence.
 `KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` defaults to 499 and
 `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` defaults to 643, both in pennies/cents;
 the UK effective minimum is always the greater of its configured floor and
-`ceil(£4.50 / 0.70)` plus verified KDP delivery cost. Existing lower GBP
+`ceil(£4.50 / 0.70)` plus verified KDP delivery cost, rounded UP to .99.
+Existing lower GBP
 environment overrides cannot defeat that rule. When signed-in delivery size or
 70% plan cannot be verified, UK price changes are blocked rather than guessed.
 At least three fresh unique Kindle comparisons are needed, with explicit local currency and no visible promotion.
@@ -182,7 +183,7 @@ The AIMS operator target is **ten existing books per UTC week**, creating and fi
 
 ### Pricing policy across Kindle, paperback and hardback
 
-**Kindle** continues to use the existing authenticated 70% plan, actual delivery-size floor and market-researched price updates: MAST already runs the royalty correction at 16:35, 18:35 and 21:00 Europe/London, Monday–Thursday. The UK floor is a minimum **£4.50 estimated royalty for an eligible direct Kindle purchase**, not a claim about all territories, KDP Select reads or promotions. Do not substitute the print royalty rate for Kindle.
+**Kindle** continues to use the existing authenticated 70% plan, actual delivery-size floor and market-researched price updates (currently a £6.99 UK policy minimum for the signed-in catalogue's modest delivery sizes): MAST already runs the royalty correction at 16:35, 18:35 and 21:00 Europe/London, Monday–Thursday. The UK floor is a minimum **£4.50 estimated royalty for an eligible direct Kindle purchase**, not a claim about all territories, KDP Select reads or promotions. Do not substitute the print royalty rate for Kindle.
 
 **Paperback and hardcover** use separate KDP direct-Amazon royalty calculations at 60% of the marketplace-specific list price **minus local printing cost**, based on the actual final 6x9 black-ink/white-paper PDF page count in the private print-asset manifest. The operator floor is £4.50 in Amazon UK and $6 in Amazon US. To avoid awkward retail prices such as £13.92, the policy applies 10% headroom above the minimum viable price and rounds *up* to a .99 price. A hard retail ceiling of **£19.99/$29.99 paperback** and **£27.99/$39.99 hardcover** prevents raising a price to an unreasonable level merely to hit the royalty objective. If print costs or final pages make both floor and ceiling impossible, the worker blocks publication or repricing and flags the exact issue; it never silently undercuts the floor.
 
