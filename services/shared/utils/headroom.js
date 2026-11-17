@@ -64,7 +64,7 @@ const DEFAULT_ROUTES = Object.freeze([
 ]);
 
 // KDP draft grounding uses exact quotations from the supplied book and source text.
-const HARD_BYPASS_ROUTES = new Set(["artworkVisualQa", "blotatoVisualQa", "artworkImage", "kdpResearchDraft"]);
+const HARD_BYPASS_ROUTES = new Set(["artworkVisualQa", "blotatoVisualQa", "artworkImage", "kdpResearchDraft", "kdpResearchPaidFallback"]);
 let warnedMissingBaseUrl = false;
 let consecutiveFailures = 0;
 let circuitOpenUntil = 0;
