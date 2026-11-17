@@ -391,7 +391,9 @@ export async function completePrintContentOnPage(
     { step: 'content' },
     () => completePrintContentOnce(page, titleId, format, spec),
     {
-      maxAttempts: 5,
+      // A KDP upload timeout may mean the remote write succeeded. Never replay an
+      // uncertain upload without reconciliation against its draft and filenames.
+      maxAttempts: 1,
       verify: async (r) => {
         const coverOk = !spec.coverPath || r.coverUploaded
         const interiorOk = !spec.interiorPath || r.interiorUploaded
