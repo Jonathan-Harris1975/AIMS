@@ -95,12 +95,26 @@ async function executeServiceJob({ service, lane, sessionId, payload, runner, me
   }
 }
 
-export async function startAsyncServiceRouteJob({ service, lane, payload = {}, runner, req = null, statusBasePath = "", metadata = {} }) {
+export async function startAsyncServiceRouteJob({ service, lane, payload = {}, runner, req = null, statusBasePath = "", metadata = {}, reuseTerminal = false }) {
   if (typeof runner !== "function") throw new Error("Async service route runner must be a function");
   const sessionId = asyncServiceSessionId(service, lane, payload);
   const jobType = asyncServiceJobType(service, lane);
   const statusUrl = statusUrlFor(req, service, lane, sessionId, statusBasePath);
   const payloadWithSession = { ...payload, sessionId };
+  // An idempotent scheduled retry must return the original terminal job
+  // receipt, including its sessionId and actual result, not start fresh paid
+  // content generation. Keep the existing default for routes that allow an
+  // explicit retry after a terminal failure.
+  if (reuseTerminal) {
+    const previous = await getPublicJobFresh(jobType, sessionId);
+    if (previous && ["completed", "failed"].includes(previous.status)) {
+      return {
+        ...publicShape(service, lane, previous, req, statusBasePath),
+        started: false, duplicateJob: true, accepted: false,
+        message: "Original service job has already settled; inspect its terminal status.",
+      };
+    }
+  }
   const { started, job } = beginJob(jobType, sessionId, {
     service,
     lane,
