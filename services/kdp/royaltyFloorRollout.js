@@ -34,7 +34,10 @@ export function buildRoyaltyFloorPlan(snapshot, catalogue) {
   const map = new Map();
   for (const row of catalogue) {
     const asin = String(row.asin || '').toUpperCase();
-    if (!ASIN.test(asin) || map.has(asin)) throw new Error('D1 contains a missing or duplicate KDP ASIN.');
+    // New-book drafts can exist in D1 before Amazon assigns an ASIN.
+    // Never let an unrelated unpublished draft stop existing-book remediation.
+    if (!asin) continue;
+    if (!ASIN.test(asin) || map.has(asin)) throw new Error('D1 contains an invalid or duplicate KDP ASIN.');
     map.set(asin, row);
   }
   const titles = new Set();
