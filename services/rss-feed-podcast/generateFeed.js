@@ -12,6 +12,10 @@ import { info, warn } from "../../logger.js";
 const PODCAST_SHOW_COVER_URL = "https://podcast-coverart.jonathan-harris.online/cover-art-2026-11-13-3000.png";
 const LEGACY_PODCAST_SHOW_COVER_URL = "https://podcast-coverart.jonathan-harris.online/cover-art.png";
 
+// PodSEO hopr.fm counts podcast downloads by redirecting RSS audio enclosures.
+// Keep the original R2 audio URL in episode metadata; only published RSS is prefixed.
+const PODSEO_HOPR_PREFIX = "https://hopr.fm/k/e4dxbwh0/";
+
 export function podcastChannelImageUrl(env = process.env) {
   const configured = String(env.PODCAST_IMAGE_URL || "").trim().replace(/^"+|"+$/g, "");
   if (!configured || configured === LEGACY_PODCAST_SHOW_COVER_URL) return PODCAST_SHOW_COVER_URL;
@@ -196,6 +200,18 @@ analysis for people who would rather not swallow the vendor confetti.";
   return buildRssXml(channel, items);
 }
 
+export function podseoEnclosureUrl(podcastUrl) {
+  const original = stripQuotes(podcastUrl);
+  if (!/^https:\/\//i.test(original)) {
+    throw new Error("Podcast enclosure audio URL must use HTTPS.");
+  }
+  if (original.startsWith(PODSEO_HOPR_PREFIX)) return original;
+  if (/^https:\/\/hopr\.fm\/k\//i.test(original)) {
+    throw new Error("Podcast enclosure already uses a different hopr.fm tracking key.");
+  }
+  return `${PODSEO_HOPR_PREFIX}${original}`;
+}
+
 export function mapMetaToEpisode(meta, channelDiscovery = {}) {
   const sessionId = meta.sessionId || meta.session?.sessionId || null;
   const {
@@ -278,7 +294,7 @@ export function mapMetaToEpisode(meta, channelDiscovery = {}) {
     guidIsPermaLink: false,
     pubDate: pubDateStr,
     link,
-    enclosureUrl: podcastUrl,
+    enclosureUrl: podseoEnclosureUrl(podcastUrl),
     enclosureLength: fileSize || 0,
     durationSeconds:
       typeof meta.actualDurationSeconds === "number"
