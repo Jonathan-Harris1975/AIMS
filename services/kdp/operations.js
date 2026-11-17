@@ -124,21 +124,32 @@ function startJob(req, res, lane, runner, payload = {}) {
   }).then((job) => res.status(202).json(job)).catch((error) => sendError(res, error, `Could not start KDP ${lane} job.`));
 }
 
+// A D1 source-PDF reference alone does not establish that the private R2
+// object still exists. List R2 keys once for each preflight or planning run;
+// R2 errors fail closed instead of silently treating all records as eligible.
+async function buildR2CheckedPrintPreflight(books, options = {}) {
+  const { listKeys } = await import("../shared/utils/r2-client.js");
+  const keys = await listKeys("kdp", "Manuscripts pdf format/");
+  return buildPrintPreflight(books, { ...options, existingSourceKeys: new Set(keys) });
+}
+
 // Preparation-only MAST checkpoint. All KDP account mutations remain separate.
 router.get("/print/preflight", asyncRoute(async (_req, res) => {
   res.set("Cache-Control", "no-store");
-  return res.json(buildPrintPreflight(await listKdpEbooks()));
+  return res.json(await buildR2CheckedPrintPreflight(await listKdpEbooks()));
 }));
 
 router.post("/print/preflight/run", requestDedupe("kdp:print-preflight"), asyncRoute(async (req, res) =>
   startJob(req, res, "print-preflight", async () => {
-    const report = buildPrintPreflight(await listKdpEbooks());
+    const report = await buildR2CheckedPrintPreflight(await listKdpEbooks());
     const { putPrivateJson } = await import("../shared/utils/r2-client.js");
     const day = report.observedAt.slice(0, 10);
     const key = "print/preflight/" + day + ".json";
     await putPrivateJson("kdp", key, report);
     return { ok: true, catalogueCount: report.catalogueCount,
       editionCount: report.editionCount, byFormat: report.byFormat,
+      sourceObjectExistenceChecked: report.sourceObjectExistenceChecked,
+      missingSourceObjects: report.missingSourceObjects,
       kdpWritesPerformed: false, reportRef: { bucket: "kdp", key } };
   })));
 
@@ -150,7 +161,7 @@ router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), 
   startJob(req, res, "print-rollout-plan", async () => {
     const weeklyLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ weeklyLimit });
-    const inventory = buildPrintPreflight(await listKdpEbooks(), { observedAt: capacity.observedAt });
+    const inventory = await buildR2CheckedPrintPreflight(await listKdpEbooks(), { observedAt: capacity.observedAt });
     const byFormat = Object.fromEntries(Object.entries(inventory.byFormat).map(([format, record]) => [
       format, {
         total: record.total,
@@ -165,6 +176,8 @@ router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), 
       ok: true, schemaVersion: "kdp-print-rollout-plan/v1",
       ...capacity, catalogueCount: inventory.catalogueCount,
       editionCount: inventory.editionCount, byFormat,
+      sourceObjectExistenceChecked: inventory.sourceObjectExistenceChecked,
+      missingSourceObjects: inventory.missingSourceObjects,
       kdpWritesPerformed: false,
       blockedReason: "Print-specific interiors, wraparound covers, ISBNs, royalties, and QA must be verified before KDP submission.",
     };
