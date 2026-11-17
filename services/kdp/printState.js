@@ -2,6 +2,7 @@
 // first-submission reservations. D1 conditional updates are the quota authority;
 // an interrupted remote KDP write remains uncertain, never silently reissued.
 import { queryKdpD1 } from "./catalogue.js";
+import { PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT } from "./printPreflight.js";
 
 const FORMAT = new Set(["paperback", "hardcover"]);
 const STATES = new Set(["queued", "assets_ready", "creating", "draft", "submitting",
@@ -63,6 +64,17 @@ export async function ensurePrintStateTables() {
       "action TEXT NOT NULL CHECK(action IN ('create','submit'))," +
       "reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved BETWEEN 0 AND 2)," +
       "PRIMARY KEY(week_utc,format,action))");
+    // The legacy counter carries a 0..2 CHECK which SQLite cannot relax in
+    // place. Keep it intact, create a 0..10 ledger and import earlier claims.
+    // Never reset or overwrite v2 reservations on subsequent worker starts.
+    await queryKdpD1("CREATE TABLE IF NOT EXISTS kdp_print_quota_counters_v2 (" +
+      "week_utc TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('paperback','hardcover'))," +
+      "action TEXT NOT NULL CHECK(action IN ('create','submit'))," +
+      "reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved BETWEEN 0 AND 10)," +
+      "PRIMARY KEY(week_utc,format,action))");
+    await queryKdpD1("INSERT OR IGNORE INTO kdp_print_quota_counters_v2" +
+      " (week_utc,format,action,reserved)" +
+      " SELECT week_utc,format,action,reserved FROM kdp_print_quota_counters");
     await queryKdpD1("CREATE TABLE IF NOT EXISTS kdp_print_quota_events (" +
       "week_utc TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('paperback','hardcover'))," +
       "action TEXT NOT NULL CHECK(action IN ('create','submit'))," +
@@ -116,10 +128,10 @@ export async function savePrintJob(ebookId, format, updates = {}) {
   return getPrintJob(ebookId, format);
 }
 
-export async function reservePrintQuota(ebookId, format, action, { week = utcPrintWeek(), limit = 2 } = {}) {
+export async function reservePrintQuota(ebookId, format, action, { week = utcPrintWeek(), limit = PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT } = {}) {
   requirePrintFormat(format);
   if (!["create", "submit"].includes(action) || !/^\d{4}-\d{2}-\d{2}$/.test(week) ||
-      !Number.isInteger(limit) || limit < 1 || limit > 2) throw new TypeError("Invalid KDP print quota reservation.");
+      !Number.isInteger(limit) || limit < 1 || limit > PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT) throw new TypeError("Invalid KDP print quota reservation.");
   await ensurePrintStateTables();
   // Claim the unique edition+format+week event FIRST. If two workers race
   // for the same title, only one can proceed to increment the counter.
@@ -128,15 +140,32 @@ export async function reservePrintQuota(ebookId, format, action, { week = utcPri
   if (Number(event.meta?.changes) !== 1) return { reserved: false, reason: "already_reserved" };
   // Crash between event claim and counter increment burns this edition slot
   // conservatively; it never authorises an additional KDP write.
-  await queryKdpD1("INSERT OR IGNORE INTO kdp_print_quota_counters" +
+  await queryKdpD1("INSERT OR IGNORE INTO kdp_print_quota_counters_v2" +
     " (week_utc,format,action,reserved) VALUES (?,?,?,0)", [week,format,action]);
-  const update = await queryKdpD1("UPDATE kdp_print_quota_counters SET reserved=reserved+1" +
+  const update = await queryKdpD1("UPDATE kdp_print_quota_counters_v2 SET reserved=reserved+1" +
     " WHERE week_utc=? AND format=? AND action=? AND reserved<?", [week,format,action,limit]);
   if (Number(update.meta?.changes) !== 1) {
     await markPrintQuota(ebookId,format,action,"blocked",week);
     return { reserved: false, reason: "weekly_quota_exhausted" };
   }
   return { reserved: true, week, action, format };
+}
+
+export async function getPrintQuotaUsage(week = utcPrintWeek()) {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(week)) throw new TypeError("Invalid print quota week.");
+  await ensurePrintStateTables();
+  const response = await queryKdpD1(
+    "SELECT format,action,reserved FROM kdp_print_quota_counters_v2 WHERE week_utc=?", [week]);
+  const perFormat = {
+    paperback: { create: 0, submit: 0 },
+    hardcover: { create: 0, submit: 0 },
+  };
+  for (const row of response.results || []) {
+    requirePrintFormat(row.format);
+    if (!["create","submit"].includes(row.action)) throw new Error("Unrecognised print quota action.");
+    perFormat[row.format][row.action] = Number(row.reserved);
+  }
+  return { weekUtc: week, weeklyLimitPerFormat: PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT, perFormat };
 }
 
 export async function markPrintQuota(ebookId, format, action, state, week = utcPrintWeek()) {
