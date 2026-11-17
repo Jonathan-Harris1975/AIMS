@@ -16,8 +16,8 @@ export function calculatePrintPrice(format, pages, market) {
       !["GBP", "USD"].includes(market)) {
     throw new TypeError("Unsupported print format, page count or market.");
   }
-  if (format === "hardcover" && (pages < 75 || pages > 550)) {
-    throw new RangeError("Hardcover requires 75–550 final pages.");
+  if (format === "hardcover" && (pages < 76 || pages > 550)) {
+    throw new RangeError("Hardcover requires 76–550 final pages.");
   }
   const short = pages <= (format === "paperback" ? 110 : 108);
   const printCost = market === "GBP"
