@@ -3,6 +3,7 @@ import { buildContentMasterHtml, loadContentMasterSources, renderContentMasterPd
 import { runOnBrandAudit } from "./onBrandAudit.js";
 import { runZernioSocialPerformanceReport } from "./zernioSocialPerformance.js";
 import { runNewsletterAudit } from "./newsletterAudit.js";
+import { collectMonthlyGrowthEvidence, renderMonthlyGrowthAppendix } from "../../services/podcast-growth/monthlyEvidence.js";
 import { dispatchContentAuditToRams } from "./ramsContentDispatch.js";
 import { info } from "../../logger.js";
 
@@ -85,7 +86,14 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
   const sourceSessions = assertFreshSources(sources, refreshed);
 
   const council = await runContentMasterCouncil(sources);
-  const html = buildContentMasterHtml({ sessionId, generatedAt, council });
+  // Supplemental read-only evidence: never participates in the hard source-freshness
+  // or editorial-quality gate and never initiates provider or KDP write operations.
+  const podcastGrowth = await collectMonthlyGrowthEvidence();
+  const sourceHtml = buildContentMasterHtml({ sessionId, generatedAt, council });
+  const appendix = renderMonthlyGrowthAppendix(podcastGrowth);
+  const html = sourceHtml.includes("</body>")
+    ? sourceHtml.replace("</body>", appendix + "</body>")
+    : sourceHtml + appendix;
   const pdfBuffer = await renderContentMasterPdf(html);
   const keys = {
     pdf: `${reportPrefix}/content-audit.pdf`,
@@ -114,6 +122,7 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
     retentionPolicy: "final-pdf-html-json-only",
     sourceRefresh,
     council,
+    podcastGrowth,
     reportSet: {
       pdf: { key: pdf.key, url: pdf.url },
       html: { key: htmlReport.key, url: htmlReport.url },
@@ -163,6 +172,7 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
       reportJsonUrl: json.url,
       retentionPolicy: "final-pdf-html-json-only",
       sourceRefresh,
+      podcastGrowth: { discoveryStatus: podcastGrowth.discovery.status, bookSalesStatus: podcastGrowth.bookSales.status },
       ramsDispatch,
       synthesisState: council.synthesisState,
     },
