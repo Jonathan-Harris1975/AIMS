@@ -8,7 +8,7 @@ import { listKdpEbooks } from "./catalogue.js";
 import { createPrintAssets } from "./printAssets.js";
 import { planPrintPrices } from "./printPricePolicy.js";
 import { getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
-import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, markPrintQuota,
+import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, listKnownPrintJobs, markPrintQuota,
   reservePrintQuota, savePrintJob, utcPrintWeek, writePrintEditionState } from "./printState.js";
 import { createTitle, publishBook } from "./engine/kdpPublish.ts";
 import { listBookshelf, syncBookMetadata } from "./engine/kdpMetadata.ts";
@@ -197,6 +197,24 @@ export async function runPrintProduction({
     const books = choosePrintCandidates(await listBooks());
     if (shelf.refs.length < books.length) {
       throw new Error("Signed-in KDP Bookshelf scan is smaller than the catalogue; completeness is not verified.");
+    }
+    // Bookshelf scan gives exact setup IDs but not reliable title labels. Read
+    // existing known title IDs from D1, then interrogate any foreign print
+    // draft's signed-in setup before allowing another creation.
+    const knownRefs = await listKnownPrintJobs();
+    for (const ref of shelf.refs.filter(item => item.format !== "kindle")) {
+      const known = knownRefs.find(item => item.format === ref.format && item.titleId === ref.titleId);
+      if (known) {
+        const match = books.find(item => item.ebookId === known.ebookId);
+        if (!match) throw new Error("KDP print draft references an unknown catalogue title.");
+        ref.title = match.title;
+      } else {
+        const meta = await syncBookMetadata(ref.titleId, ref.format);
+        if (!meta?.title || meta.title === "(untitled)") {
+          throw new Error("Existing KDP print listing identity could not be reconciled.");
+        }
+        ref.title = meta.title;
+      }
     }
     const weekLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ observedAt: now().toISOString(), weeklyLimit: weekLimit });
