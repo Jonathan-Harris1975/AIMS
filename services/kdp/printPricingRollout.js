@@ -34,7 +34,9 @@ function assertVerifiedPrintIdentity(book, job, signedIn) {
       String(signedIn.titleId || "") !== job.titleId || signedIn.format !== job.format ||
       normalise(signedIn.title) !== normalise(book.title) ||
       String(signedIn.isbn || "").replace(/[\s-]/g, "") !== String(job.isbn).replace(/[\s-]/g, "") ||
+      !/^[A-Z0-9]{10}$/.test(String(signedIn.asin || "").toUpperCase()) ||
       String(signedIn.asin || "").toUpperCase() === String(book.asin || "").toUpperCase() ||
+      !/^(97[89])\d{10}$/.test(String(job.isbn).replace(/[\s-]/g, "")) ||
       !/^(live|published)$/i.test(String(signedIn.publishingStatus || ""))) {
     throw new Error("Published print format identity and current KDP status are not verified.");
   }
@@ -117,7 +119,7 @@ export async function reconcilePrintPricing({
   const lease = await claim({
     namespace: "kdp-research", key: "weekly-update-worker", pendingTtlMs: 60 * 60000,
   });
-  if (!lease.claimed) return { ok: true, status: "already_running",
+  if (!lease.claimed) return { ok: true, schemaVersion: 1, status: "already_running",
     kdpWritesPerformed: false, publishedPrintEditions: live.length };
   try {
     if (lease.lease.backend !== "r2") {
