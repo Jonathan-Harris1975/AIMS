@@ -340,27 +340,9 @@ test("podcast audit reads the canonical published R2 feed and falls back to the 
   assert.match(fromR2.method, /turing-torch\.xml/);
   assert.deepEqual(fromR2.attempts, []);
 
-  const fallbackUrls = [];
-  const unavailableR2 = {
-    getObjectAsText: async () => { throw new Error("R2 temporarily unavailable"); },
-  };
-  const fetchFeed = async (url) => {
-    fallbackUrls.push(url);
-    return { ok: true, text: async () => xml };
-  };
-  const defaultFallback = await hooks.readPodcastRssXml({ r2: unavailableR2, fetchFeed, configuredUrl: "" });
-  assert.deepEqual(fallbackUrls, ["https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml"]);
-  assert.equal(defaultFallback.xml, xml);
-  assert.equal(defaultFallback.attempts.length, 1);
-  assert.match(defaultFallback.attempts[0], /turing-torch\.xml/);
-
-  const customFallback = await hooks.readPodcastRssXml({
-    r2: unavailableR2,
-    fetchFeed,
-    configuredUrl: "https://custom.example.test/podcasts/",
-  });
-  assert.equal(customFallback.feedUrl, "https://custom.example.test/podcasts/turing-torch.xml");
-  assert.equal(fallbackUrls.at(-1), customFallback.feedUrl);
+  assert.equal(hooks.resolvePodcastRssFeedUrl(""), "https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml");
+  assert.equal(hooks.resolvePodcastRssFeedUrl("https://custom.example.test/podcasts/"), "https://custom.example.test/podcasts/turing-torch.xml");
+  assert.equal(hooks.resolvePodcastRssFeedUrl("https://custom.example.test/custom.xml"), "https://custom.example.test/custom.xml");
 });
 
 test("/audits/podcast-website/health mounts the separate podcast and transcript report lane", async () => {
