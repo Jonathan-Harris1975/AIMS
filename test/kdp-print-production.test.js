@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { calculatePrintCover, parsePdfInfo, validatePrintSourceText } from "../services/kdp/printAssets.js";
 import { calculatePrintPrice, planPrintPrices } from "../services/kdp/printPricePolicy.js";
 import { utcPrintWeek, canAttemptPrintJob } from "../services/kdp/printState.js";
-import { existingPrintMatches, choosePrintCandidates, printWindowAllowsAction,
+import { categorySpecsFromKindle, existingPrintMatches, choosePrintCandidates, printWindowAllowsAction,
   runPrintProduction } from "../services/kdp/printProduction.js";
 import { normalizeAiDeclaration } from "../services/kdp/printAiDisclosure.js";
 import { publicPurchaseControls, verifyPrintIdentity } from "../services/kdp/printVerification.js";
@@ -98,4 +98,21 @@ test("dry-run never starts KDP login, D1 reservations or title creation", async 
     inspectBookshelf:async()=>{throw new Error("Must not access KDP");}});
   assert.equal(result.ok,true);
   assert.equal(result.kdpWritesPerformed,false);
+});
+
+
+test("print categories fall back only for evidence-matched AI books and verified marketplaces", () => {
+  const book = { title: "The Dumbening", summary: "Artificial intelligence is changing human thinking." };
+  assert.deepEqual(categorySpecsFromKindle([], book, "Amazon.com"),
+    [{ path: ["Computers & Technology", "Computer Science", "AI & Machine Learning"] }]);
+  assert.deepEqual(categorySpecsFromKindle([], book, "Amazon.co.uk"),
+    [{ path: ["Computing & Internet", "Computer Science", "Artificial Intelligence"] }]);
+  assert.deepEqual(categorySpecsFromKindle(
+    ["Books › Computers & Technology › Computer Science › AI & Machine Learning"],
+    book, "Amazon.com"),
+    [{ path: ["Computers & Technology", "Computer Science", "AI & Machine Learning"] }]);
+  assert.throws(() => categorySpecsFromKindle([], null, "Amazon.com"), /cannot be verified/);
+  assert.throws(() => categorySpecsFromKindle([], { title: "Cooking for Beginners" }, "Amazon.com"),
+    /cannot be verified/);
+  assert.throws(() => categorySpecsFromKindle([], book, ""), /Unknown Kindle home marketplace/);
 });
