@@ -32,7 +32,7 @@ test("Google Vertex repair retains authorised model and Headroom and cannot recu
 test("a real Zernio mini-series request retries the same model once outside Google Vertex", async () => {
   const { testCredential } = await import("./helpers/testCredentials.js");
   const names = ["OPENROUTER_API_KEY", "OPENROUTER_API_BASE", "AI_MODEL_AUDIT",
-    "AI_MODEL_HIGH_QUALITY", "HEADROOM_ENABLED", "OPENROUTER_PROVIDER_IGNORE",
+    "AI_MODEL_HIGH_QUALITY", "OPENROUTER_CLAUDE_SONNET_5", "HEADROOM_ENABLED", "OPENROUTER_PROVIDER_IGNORE",
     "OPENROUTER_PROVIDER_ONLY", "OPENROUTER_ENABLE_FALLBACKS"];
   const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
   const originalFetch = globalThis.fetch;
@@ -41,6 +41,7 @@ test("a real Zernio mini-series request retries the same model once outside Goog
     OPENROUTER_API_KEY: testCredential("openrouter"),
     OPENROUTER_API_BASE: "https://openrouter.example/api/v1",
     AI_MODEL_AUDIT: "anthropic/claude-sonnet-test",
+    OPENROUTER_CLAUDE_SONNET_5: "anthropic/claude-sonnet-test",
     HEADROOM_ENABLED: "false",
   });
   delete process.env.OPENROUTER_PROVIDER_IGNORE;
