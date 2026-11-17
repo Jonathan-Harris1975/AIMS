@@ -44,8 +44,8 @@
     document.querySelector('input[name="data[digital][royalty_rate]-radio"]:checked')?.value ||
     document.querySelector('input[name="data[digital][royalty_plan]"]:checked')?.value ||
     document.querySelector('input[name="data[digital][royalty_rate]"]:checked')?.value ||
-    readHidden('data[digital][royalty_rate]') ||
-    readHidden('data[digital][royalty_plan]')
+    document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() ||
+    document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim()
   const royaltyPlan = /^(?:70|70_PERCENT|35|35_PERCENT)$/.test(selectedPlan)
     ? selectedPlan : ''
 
