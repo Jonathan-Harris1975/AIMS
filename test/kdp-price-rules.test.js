@@ -87,7 +87,7 @@ test('price changes cannot set a Kindle marketplace price below the 70% floor', 
     validateKdpPriceChanges('kindle', { prices: { GB: '1.77' } }).join(' '),
     /delivery file size/,
   )
-  assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GB: '6.53' }, royaltyPlan: '70_PERCENT' }, undefined, '1024'), [])
+  assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GB: '6.99' }, royaltyPlan: '70_PERCENT' }, undefined, '1024'), [])
   assert.deepEqual(validateKdpPriceChanges('paperback', { prices: { USD: '0.99' } }), [])
 })
 
@@ -114,15 +114,15 @@ test('70% plan updates also respect the marketplace upper price band', () => {
   )
 })
 
-test('UK 70% pricing floors target at least £4.50 after KDP delivery', () => {
-  assert.equal(uk70RoyaltyFloorMinor('1024'), 653)
-  assert.equal(uk70RoyaltyFloorMinor('2048'), 663)
-  assert.equal(uk70RoyaltyFloorMinor('3072'), 673)
-  assert.equal(uk70RoyaltyFloorMinor('5120'), 693)
+test('UK 70% pricing floors round up to .99 above £4.50 after KDP delivery', () => {
+  assert.equal(uk70RoyaltyFloorMinor('1024'), 699)
+  assert.equal(uk70RoyaltyFloorMinor('2048'), 699)
+  assert.equal(uk70RoyaltyFloorMinor('3072'), 699)
+  assert.equal(uk70RoyaltyFloorMinor('5120'), 699)
   assert.equal(uk70RoyaltyFloorMinor(''), null)
   assert.equal(uk70RoyaltyFloorMinor('-1'), null)
   assert.equal(uk70RoyaltyFloorMinor('1.5'), null)
-  for (const [fileSizeKb, floorMinor] of [['1024', 653], ['5120', 693]]) {
+  for (const [fileSizeKb, floorMinor] of [['1024', 699], ['5120', 699]]) {
     const low = ((floorMinor - 1) / 100).toFixed(2)
     assert.match(
       validateKdpPriceChanges('kindle', { prices: { UK: low }, royaltyPlan: '70_PERCENT' }, undefined, fileSizeKb).join(' '),
@@ -145,7 +145,7 @@ test('signed-in KDP audit reports a UK royalty shortfall or unverifiable cost', 
   const low = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.52' } })])
   assert.equal(low.belowMinimumCount, 1)
   assert.equal(low.issues[0].code, 'below_target_royalty')
-  assert.equal(low.issues[0].recommendedPrice, 6.53)
+  assert.equal(low.issues[0].recommendedPrice, 6.99)
   assert.equal(analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.53' } })]).issueCount, 0)
   const unknown = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', prices: { GB: '6.99' } })])
   assert.equal(unknown.issues[0].code, 'target_royalty_unverifiable')
