@@ -7,6 +7,7 @@
 import { warn } from "../../../logger.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { resolveFeaturedBookForEbooks } from "../../zernio/utils/featuredBook.js";
+import { tagOwnedWebsiteUrl } from "../../podcast-growth/campaignLinks.js";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,7 +34,9 @@ async function resolveTuesdayBook(profile, { retries = THRESHOLDS.newsletter.fea
           featuredBook.whyItMatters ||
           featuredBook.summary ||
           "This week's featured book from Jonathan Harris.",
-        url: featuredBook.bookUrl,
+        url: tagOwnedWebsiteUrl(featuredBook.bookUrl, {
+          source: "ai_edge", medium: "email", campaign: "featured_book_tuesday",
+        }),
         imageUrl: featuredBook.coverArtUrl || "",
         ctaLabel: "Explore the book",
         warnings,
@@ -61,7 +64,9 @@ function resolveThursdayPodcast(profile) {
     blurb:
       podcast.blurb ||
       "A new Turing's Torch episode lands Friday. Expect the week's important AI developments, stripped of vendor confetti and given a proper reality check.",
-    url: podcast.url || "https://jonathan-harris.online/podcast/",
+    url: tagOwnedWebsiteUrl(podcast.url || "https://jonathan-harris.online/podcast/", {
+      source: "ai_edge", medium: "email", campaign: "podcast_thursday_preview",
+    }),
     imageUrl: podcast.imageUrl || "",
     ctaLabel: podcast.ctaLabel || "Follow Turing's Torch",
   };
