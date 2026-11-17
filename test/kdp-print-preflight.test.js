@@ -57,12 +57,14 @@ test("every record sharing a normalized Kindle ASIN is blocked from preparation"
 
 test("print rollout capacity never exceeds two new titles per format per UTC week", () => {
   const dates = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"];
-  const expected = [2, 0, 0, 0, 0];
+  // A read-only Monday plan does not create a book or spend weekly quota.
+  const expected = [2, 2, 2, 2, 0];
   for (let i = 0; i < dates.length; i++) {
     const plan = getPrintRolloutCapacity({ observedAt: dates[i] + "T17:10:00Z" });
     assert.equal(plan.scheduledSlotsPerFormatToday, expected[i]);
     assert.equal(plan.scheduledSlotsTodayTotal, expected[i] * 2);
     assert.equal(plan.authorisesKdpWrites, false);
+    assert.equal(plan.scheduledSlotsAreUnreconciledUpperBounds, true);
   }
 });
 

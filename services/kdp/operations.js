@@ -33,6 +33,7 @@ import {
 import { runOptimisationUpdates } from "./optimisationUpdates.js";
 import { reconcileRoyaltyFloor } from "./royaltyFloorRollout.js";
 import { buildPrintPreflight, getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
+import { inspectPrintSourcePdf } from "./printSourceAudit.js";
 
 const router = express.Router();
 const ASYNC_STATUS_BASE = "/kdp/jobs";
@@ -125,13 +126,29 @@ function startJob(req, res, lane, runner, payload = {}) {
   }).then((job) => res.status(202).json(job)).catch((error) => sendError(res, error, `Could not start KDP ${lane} job.`));
 }
 
-// A D1 source-PDF reference alone does not establish that the private R2
-// object still exists. List R2 keys once for each preflight or planning run;
-// R2 errors fail closed instead of silently treating all records as eligible.
+// Source-object existence and PDF geometry are separate gates. Read actual PDF
+// bytes, bounded to 20 MiB per title; any failed read stays blocked. A PDF in R2
+// alone is never sufficient evidence for creating a new print edition.
 async function buildR2CheckedPrintPreflight(books, options = {}) {
-  const { listKeys } = await import("../shared/utils/r2-client.js");
-  const keys = await listKeys("kdp", "Manuscripts pdf format/");
-  return buildPrintPreflight(books, { ...options, existingSourceKeys: new Set(keys) });
+  const { listKeys, getObjectAsBuffer } = await import("../shared/utils/r2-client.js");
+  const keys = new Set(await listKeys("kdp", "Manuscripts pdf format/"));
+  const sourcePdfInspections = new Map();
+  const candidates = books.filter((book) => keys.has(book.manuscriptR2Key) &&
+    book.manuscriptR2Key.startsWith("Manuscripts pdf format/"));
+  let cursor = 0;
+  async function inspectNext() {
+    while (cursor < candidates.length) {
+      const book = candidates[cursor++];
+      try {
+        const contents = await getObjectAsBuffer("kdp", book.manuscriptR2Key, { maxBytes: 20 * 1024 * 1024 });
+        sourcePdfInspections.set(book.ebookId, inspectPrintSourcePdf(contents));
+      } catch {
+        sourcePdfInspections.set(book.ebookId, { ok: false, reason: "source_pdf_read_failed" });
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(candidates.length, 4) }, inspectNext));
+  return buildPrintPreflight(books, { ...options, existingSourceKeys: keys, sourcePdfInspections });
 }
 
 // Preparation-only MAST checkpoint. All KDP account mutations remain separate.
@@ -151,6 +168,9 @@ router.post("/print/preflight/run", requestDedupe("kdp:print-preflight"), asyncR
       editionCount: report.editionCount, byFormat: report.byFormat,
       sourceObjectExistenceChecked: report.sourceObjectExistenceChecked,
       missingSourceObjects: report.missingSourceObjects,
+      sourcePdfGeometryInspected: report.sourcePdfGeometryInspected,
+      sourcePdfReflowRequired: report.sourcePdfReflowRequired,
+      sourcePdfCataloguePageMismatches: report.sourcePdfCataloguePageMismatches,
       kdpWritesPerformed: false, reportRef: { bucket: "kdp", key } };
   })));
 
@@ -179,6 +199,9 @@ router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), 
       editionCount: inventory.editionCount, byFormat,
       sourceObjectExistenceChecked: inventory.sourceObjectExistenceChecked,
       missingSourceObjects: inventory.missingSourceObjects,
+      sourcePdfGeometryInspected: inventory.sourcePdfGeometryInspected,
+      sourcePdfReflowRequired: inventory.sourcePdfReflowRequired,
+      sourcePdfCataloguePageMismatches: inventory.sourcePdfCataloguePageMismatches,
       kdpWritesPerformed: false,
       blockedReason: "Print-specific interiors, wraparound covers, ISBNs, royalties, and QA must be verified before KDP submission.",
     };

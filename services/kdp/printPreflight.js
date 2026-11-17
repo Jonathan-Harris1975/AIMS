@@ -20,10 +20,14 @@ export function parsePrintWeeklyLimit(configuredLimit) {
 export function buildPrintPreflight(books, {
   observedAt = new Date().toISOString(),
   existingSourceKeys = null,
+  sourcePdfInspections = null,
 } = {}) {
   if (!Array.isArray(books)) throw new TypeError("KDP catalogue must be an array.");
   if (existingSourceKeys !== null && !(existingSourceKeys instanceof Set)) {
     throw new TypeError("existingSourceKeys must be a Set populated from private KDP R2.");
+  }
+  if (sourcePdfInspections !== null && !(sourcePdfInspections instanceof Map)) {
+    throw new TypeError("sourcePdfInspections must be a Map of source PDF inspection results.");
   }
   const ids = new Set();
   const asinCounts = new Map();
@@ -40,7 +44,9 @@ export function buildPrintPreflight(books, {
     ids.add(ebookId);
     const asin = String(book.asin || "").trim().toUpperCase();
     const duplicateAsin = !!asin && asinCounts.get(asin) > 1;
-    const pages = Number.isSafeInteger(book.pageCount) && book.pageCount > 0 ? book.pageCount : null;
+    const cataloguePages = Number.isSafeInteger(book.pageCount) && book.pageCount > 0 ? book.pageCount : null;
+    const sourcePdf = sourcePdfInspections?.get(ebookId) ?? null;
+    const pages = sourcePdf?.ok ? sourcePdf.observedPageCount : cataloguePages;
     const manuscriptRefValid = book.storageBucket === "kdp"
       && book.manuscriptFormat === "PDF"
       && String(book.manuscriptR2Key || "").startsWith("Manuscripts pdf format/")
@@ -56,12 +62,19 @@ export function buildPrintPreflight(books, {
       if (!asin || duplicateAsin) blockers.push(duplicateAsin ? "duplicate_kindle_asin" : "missing_kindle_asin");
       if (!manuscriptRefValid) blockers.push("missing_private_source_pdf");
       else if (sourcePdfPresent === false) blockers.push("missing_private_source_pdf_object");
+      if (sourcePdfInspections !== null && sourcePdf?.ok !== true) blockers.push("source_pdf_inspection_missing_or_failed");
+      if (sourcePdf?.ok && sourcePdf.requiresReflow) blockers.push("source_pdf_requires_print_reflow");
       if (pages === null) blockers.push("unverified_catalogue_page_count");
       else if (pages < limits.minimumPages) blockers.push("catalogue_page_count_below_print_minimum");
       else if (limits.maximumPages && pages > limits.maximumPages) blockers.push("catalogue_page_count_above_print_maximum");
       records.push({
         ebookId, slug: String(book.slug || ""), title: String(book.title || ""),
-        kindleAsin: asin, format, cataloguePages: pages,
+        kindleAsin: asin, format, cataloguePages,
+        sourcePdfPagesObserved: sourcePdf?.ok ? sourcePdf.observedPageCount : null,
+        sourcePdfPageWidthPt: sourcePdf?.ok ? sourcePdf.pageWidthPt : null,
+        sourcePdfPageHeightPt: sourcePdf?.ok ? sourcePdf.pageHeightPt : null,
+        sourcePdfRequiresReflow: sourcePdf?.ok ? sourcePdf.requiresReflow : null,
+        cataloguePdfPageMismatch: sourcePdf?.ok ? cataloguePages !== sourcePdf.observedPageCount : null,
         sourcePdfPresent,
         state: blockers.length ? "catalogue_blocked" : "source_pdf_review_required",
         blockers,
@@ -88,10 +101,16 @@ export function buildPrintPreflight(books, {
     ok: true, schemaVersion: "kdp-print-preflight/v1", observedAt,
     catalogueCount: books.length, editionCount: records.length,
     sourceObjectExistenceChecked: existingSourceKeys !== null,
+    sourcePdfGeometryInspected: sourcePdfInspections !== null,
+    sourcePdfReflowRequired: sourcePdfInspections === null ? null :
+      new Set(records.filter((r) => r.sourcePdfRequiresReflow).map((r) => r.ebookId)).size,
+    sourcePdfCataloguePageMismatches: sourcePdfInspections === null ? null :
+      new Set(records.filter((r) => r.cataloguePdfPageMismatch).map((r) => r.ebookId)).size,
     missingSourceObjects: existingSourceKeys === null ? null
       : new Set(records.filter((r) => r.sourcePdfPresent === false).map((r) => r.ebookId)).size,
     byFormat, records, kdpWritesPerformed: false,
-    message: "Preparation-only inventory. Catalogue page counts are not verified PDF print counts. No KDP title creation or publishing is authorised by this report.",
+    message: "Preparation-only inventory. Observed PDF geometry is not final print QA. " +
+      "Non-6x9 PDFs need proper reflow. KDP title creation and publishing remain unauthorised.",
   };
 }
 
@@ -116,11 +135,10 @@ export function getPrintRolloutCapacity({
     timeZone: "Europe/London", weekday: "long",
   }).format(when).toLowerCase();
   const dayIndex = PRINT_ROLLOUT_WEEKDAYS.indexOf(weekday);
-  const alreadyAllocated = dayIndex === -1 ? 0 : Math.min(weeklyLimit, dayIndex * PRINT_DAILY_TARGET_TITLES);
-  const slotsPerFormat = dayIndex === -1
-    ? 0 : Math.min(PRINT_DAILY_TARGET_TITLES, Math.max(0, weeklyLimit - alreadyAllocated));
-  // A Monday allocation consumes the maximum weekly planning capacity; later
-  // days remain available only if the live quota reconciliation finds unused slots.
+  // A scheduled read-only plan does NOT consume a KDP creation or submission
+  // slot. Never decrement Tuesday–Thursday capacity based on Monday's plan;
+  // only exact signed-in KDP reconciliation and durable writes determine usage.
+  const slotsPerFormat = dayIndex === -1 ? 0 : Math.min(PRINT_DAILY_TARGET_TITLES, weeklyLimit);
   // Date.UTC normalises negative days across month boundaries as intended.
   const sundayUtc = new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate() - when.getUTCDay()));
   return {
@@ -131,6 +149,7 @@ export function getPrintRolloutCapacity({
     scheduledWeekdays: PRINT_ROLLOUT_WEEKDAYS,
     scheduledSlotsPerFormatToday: slotsPerFormat,
     scheduledSlotsTodayTotal: slotsPerFormat * Object.keys(PRINT_FORMATS).length,
+    scheduledSlotsAreUnreconciledUpperBounds: true,
     fridayReservedForNewBooks: true,
     // Creation and first submission are independently metered by KDP;
     // actual usage must be reconciled before any live write.
