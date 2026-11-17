@@ -13,7 +13,7 @@ Search results are leads only, not verified Kindle prices, comparable-title asse
 
 The research job also attempts to capture up to five candidate product pages per market. It records page identity, title, description, page count, price and whether the price came from an explicit Kindle element. Comparability and promotion status remain unknown. If Amazon blocks a request, the job stops and preserves the search leads for a later retry without spending additional search credits.
 
-When a fresh signed-in metadata snapshot uniquely matches the catalogue ASIN, an ASIN-verified live product page was captured in the Monday audit, and dated topic sources exist, the research job can create a first-pass optimisation draft using the configured free OpenRouter model. It filters keywords against the live listing and source snippets and only retains description sentences already present on the live listing. The draft is recorded in the research result and is not submitted to KDP. Price changes remain blocked until comparability and promotion status can be verified. Missing identity, dated sources or model availability is recorded as a blocked reason.
+When a fresh signed-in metadata snapshot uniquely matches the catalogue ASIN, an ASIN-verified live product page was captured in the Monday audit, and dated topic sources exist, research can draft evidence-grounded metadata improvements. The writer and separate reviewer use free-first OpenRouter routes and at most one economy-model fallback on error or malformed output. Every proposed description sentence needs an exact supporting book-content quote; keywords need both book and source evidence. Approved changes are durably queued for the existing authenticated KDP update worker, which is invoked again in the same permitted submission window. Technical failures are retried once, checkpointed with safe error codes and surfaced as a failed scheduled job rather than silently accepted.
 
 The optional `mode: "kdp"` audit includes a per-market Kindle eBook price-band check and reports its rule review date and source. For UK Kindle prices it also checks the commercial floor needed to yield at least £4.50 on an eligible 70% royalty sale, after Amazon's file-size-dependent delivery cost. Signed-in KDP file size and 70% plan verification are required; otherwise the audit reports that the target is unverified. A price below a minimum is reported with the correction, while a price above a 70% band maximum is flagged. The audit never changes prices. UK pricing updates fail closed when the royalty plan, delivery size or price is insufficient.
 
@@ -121,13 +121,15 @@ This rollout changes only the UK Kindle list price. It does not change other mar
 MAST remains the sole clock: public D1/ASIN listing audit Monday 12:00 London,
 setup metadata refresh Monday 12:15, rotating research batches Tuesday–Thursday
 12:00. `KDP_RESEARCH_BATCH_SIZE` defaults to 15. Each research tick processes one
-book, and pauses five minutes before continuing. The research never substitutes
+book, and pauses 60 seconds before continuing. The research never substitutes
 KDP search results for the public audit.
 
 Research combines captured Amazon recommendations with Tavily candidates and
-recent dated sources. A free-only drafter and separate critic use
-`kdpResearchDraft` with no application retries. Both must accept the evidence;
-there is no paid fallback. Competitor private keyword fields are not available.
+recent dated sources. A free-first drafter and independently routed critic use the
+`kdpResearchDraft` and `kdpResearchCritic` routes with distinct provider priorities. If inference fails
+or returns malformed JSON, each stage permits at most one attempt with the
+economy-model `kdpResearchPaidFallback` route; no premium council, no retry
+loops. Competitor private keyword fields are not available.
 Public wording informs suggestions, and every accepted keyword requires book and
 source quotes. Proposed descriptions require supporting quotes for every sentence.
 Two distinct source domains are required; a news mention is not search-volume data.
@@ -146,7 +148,10 @@ been discounted. Changes over 25% are withheld, and confirmed prices have a
 
 Private R2 `research/updates/<week>/<ebookId>.json` records preserve proposals,
 previous D1/KDP values, submission state and confirmation. Prepared records expire
-after 48 hours. A crash or timeout after entering `submitting` never automatically
+after 48 hours to avoid submitting stale comparisons. The research tick also
+reconciles a freshly prepared intent immediately within Tuesday–Thursday
+12:00–15:00; all previously queued intents are retried by the independent
+MAST daily update-verification schedule. A crash or timeout after entering `submitting` never automatically
 replays Publish. Verification checks fresh signed-in identity, Live status and
 keywords, then both UK/US public listings. Unconfirmed submissions require attention
 after five days. `KDP_UPDATE_DELAY_MINUTES` defaults to five (minimum five).
@@ -164,7 +169,7 @@ other-marketplace manual/automatic conversion settings in KDP.
 
 Deploy AIMS before enabling its companion MAST schedules. Production acceptance
 still requires a fresh signed-in snapshot with unique ASIN associations, a live
-Tavily/free-model request, configured D1 write/cache-purge/rebuild credentials,
+Tavily/free-or-economy-model request, configured D1 write/cache-purge/rebuild credentials,
 and one confirmed KDP-to-website update. Local mocks and CI do not establish those
 production facts. Inspect `GET /kdp/research/weekly` and private update records for
 blocked/uncertain states; never classify a saved draft or button click as live.

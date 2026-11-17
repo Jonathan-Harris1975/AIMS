@@ -43,9 +43,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:400 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:10 |
-| `APP_TITLE` | Yes | ai-config.js:360<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:337 |
+| `APP_TITLE` | Yes | ai-config.js:362<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:337 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:308<br>services/shared/utils/stateFile.js:11<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:359<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:336<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:361<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:336<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:192 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -281,8 +281,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
 | `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
 | `KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT` | No | services/kdp/operations.js:163 |
-| `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` | No | services/kdp/optimisationProposal.js:82 |
-| `KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` | No | services/kdp/optimisationProposal.js:82 |
+| `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` | No | services/kdp/optimisationProposal.js:114 |
+| `KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` | No | services/kdp/optimisationProposal.js:114 |
 | `KDP_UPDATE_DELAY_MINUTES` | No | services/kdp/optimisationUpdates.js:15 |
 | `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
 | `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1384<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:104<br>services/shared/utils/operationalExcellence.js:139 |
@@ -312,7 +312,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:360<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:337 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:362<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:337 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:213 |
 | `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:199 |
@@ -323,7 +323,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:202 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:203 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:225 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:359<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:336 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:361<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:336 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:185 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
