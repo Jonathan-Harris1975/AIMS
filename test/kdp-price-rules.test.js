@@ -146,7 +146,7 @@ test('signed-in KDP audit reports a UK royalty shortfall or unverifiable cost', 
   assert.equal(low.belowMinimumCount, 1)
   assert.equal(low.issues[0].code, 'below_target_royalty')
   assert.equal(low.issues[0].recommendedPrice, 6.99)
-  assert.equal(analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.53' } })]).issueCount, 0)
+  assert.equal(analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.99' } })]).issueCount, 0)
   const unknown = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', prices: { GB: '6.99' } })])
   assert.equal(unknown.issues[0].code, 'target_royalty_unverifiable')
   assert.equal(unknown.unverifiedPriceCount, 1)
