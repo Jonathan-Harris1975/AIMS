@@ -26,6 +26,18 @@ let readyPromise;
 export async function ensurePrintStateTables() {
   if (readyPromise) return readyPromise;
   readyPromise = (async () => {
+    // Mirror the existing website-backed print-editions migration for new
+    // environments, preserving its live_verified identity constraints.
+    await queryKdpD1("CREATE TABLE IF NOT EXISTS kdp_print_editions (" +
+      "ebook_id INTEGER NOT NULL REFERENCES ebooks(ebook_id)," +
+      "format TEXT NOT NULL CHECK(format IN ('paperback','hardcover'))," +
+      "state TEXT NOT NULL DEFAULT 'prepared' CHECK(state IN (" +
+      "'prepared','qa_passed','draft','submitted','uncertain','blocked','live_verified','unavailable'))," +
+      "isbn TEXT,print_asin TEXT,purchase_url TEXT,verified_at TEXT," +
+      "updated_at TEXT NOT NULL DEFAULT (datetime('now'))," +
+      "PRIMARY KEY(ebook_id,format)," +
+      "CHECK(state <> 'live_verified' OR " +
+      "(isbn IS NOT NULL AND print_asin IS NOT NULL AND purchase_url IS NOT NULL AND verified_at IS NOT NULL)))");
     await queryKdpD1("CREATE TABLE IF NOT EXISTS kdp_print_automation (" +
       "ebook_id INTEGER NOT NULL, format TEXT NOT NULL CHECK(format IN ('paperback','hardcover'))," +
       "state TEXT NOT NULL DEFAULT 'queued', title_id TEXT, manifest_key TEXT," +
@@ -124,6 +136,7 @@ export async function markPrintQuota(ebookId, format, action, state, week = utcP
 
 export async function writePrintEditionState(ebookId, format, state, isbn = null) {
   requirePrintFormat(format);
+  await ensurePrintStateTables();
   if (!["qa_passed","draft","submitted","uncertain","blocked"].includes(state)) {
     throw new TypeError("Only independently verified public listings may be marked live_verified.");
   }
