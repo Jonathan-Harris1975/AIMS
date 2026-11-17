@@ -131,16 +131,22 @@ async function selectCategoryPathInModal(page: Page, path: string[]): Promise<st
       matched = await select.evaluate((el, wanted) => {
       const selectEl = el as HTMLSelectElement
       const wantedLower = String(wanted).toLowerCase()
+      // A verified print-category fallback must not silently drift into a
+      // different placement through fuzzy partial-word matching.
+      const strictPrintLabel = [
+        'computers & technology', 'computing & internet', 'computer science',
+        'ai & machine learning', 'artificial intelligence',
+      ].includes(wantedLower)
       let best: HTMLOptionElement | null = null
       let bestScore = 0
       for (const opt of selectEl.options) {
         const text = opt.text.trim().toLowerCase()
         let score = 0
         if (text === wantedLower) score = 4
-        else if (text.startsWith(wantedLower)) score = 3
-        else if (text.includes(wantedLower)) score = 2
-        else if (wantedLower.includes(text) && text.length > 3) score = 1
-        else {
+        else if (!strictPrintLabel && text.startsWith(wantedLower)) score = 3
+        else if (!strictPrintLabel && text.includes(wantedLower)) score = 2
+        else if (!strictPrintLabel && wantedLower.includes(text) && text.length > 3) score = 1
+        else if (!strictPrintLabel) {
           const firstWord = wantedLower.split(/\s+/)[0]
           if (firstWord && firstWord.length > 3 && text.includes(firstWord)) score = 1
         }
