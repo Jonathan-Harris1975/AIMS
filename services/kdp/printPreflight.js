@@ -4,9 +4,10 @@ export const PRINT_FORMATS = Object.freeze({
   paperback: { minimumPages: 24 },
   hardcover: { minimumPages: 76, maximumPages: 550 },
 });
-export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 2;
-// KDP permits only two new titles created and two first submissions per format per UTC week.
-export const PRINT_DAILY_TARGET_TITLES = 2;
+export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 10;
+// Operator-approved rollout ceiling. KDP can impose a lower account-level
+// limit: the live worker must stop on any observed platform quota rejection.
+export const PRINT_DAILY_TARGET_TITLES = 3;
 export const PRINT_ROLLOUT_WEEKDAYS = Object.freeze(["monday", "tuesday", "wednesday", "thursday"]);
 
 export function parsePrintWeeklyLimit(configuredLimit) {
@@ -116,8 +117,9 @@ export function buildPrintPreflight(books, {
 
 /**
  * Return planning capacity, not permission to publish. Amazon currently documents
- * a two-title weekly creation and first-submission limit per format.
- * Configuration must never raise this cap.
+ * independent weekly creation and first-submission limits per format.
+ * Configuration must not exceed the operator's ten-title ceiling; KDP may
+ * enforce a lower limit and live platform rejections are terminal.
  *
  * KDP resets weekly quotas at Sunday 00:00 UTC. MAST is the sole run clock and
  * schedules these slots on Monday–Thursday in Europe/London.
@@ -127,7 +129,7 @@ export function getPrintRolloutCapacity({
   weeklyLimit = PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT,
 } = {}) {
   if (!Number.isInteger(weeklyLimit) || weeklyLimit < 1 || weeklyLimit > PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT) {
-    throw new RangeError("Print weekly limit must be an integer between 1 and the official per-format maximum.");
+    throw new RangeError("Print weekly limit must be an integer between 1 and the configured operational maximum.");
   }
   const when = new Date(observedAt);
   if (!Number.isFinite(when.getTime())) throw new TypeError("Invalid print rollout observedAt.");
