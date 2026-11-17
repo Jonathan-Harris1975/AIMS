@@ -281,8 +281,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
 | `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
 | `KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT` | No | services/kdp/operations.js:185<br>services/kdp/printProduction.js:305 |
-| `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` | No | services/kdp/optimisationProposal.js:114 |
-| `KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` | No | services/kdp/optimisationProposal.js:114 |
+| `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` | No | services/kdp/optimisationProposal.js:115 |
+| `KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` | No | services/kdp/optimisationProposal.js:115 |
 | `KDP_UPDATE_DELAY_MINUTES` | No | services/kdp/optimisationUpdates.js:15 |
 | `KDP_USERNAME` | Yes | services/kdp/index.js:15 |
 | `KOYEB_GIT_SHA` | No | scripts/startupCheck.js:54<br>services/comms-hub/routes/index.js:1384<br>services/ops/koyebMonitor.js:32<br>services/ops/koyebMonitor.js:104<br>services/shared/utils/operationalExcellence.js:139 |
