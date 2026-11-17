@@ -48,3 +48,42 @@ test("drafts require the ASIN-verified live product page, not cached catalogue t
   const wrong = { publicListing: { status: "captured", data: { asin: "B099999999" } } };
   assert.equal((await draftOptimisation(book, research, metadata, { now, liveListing: wrong })).reason, "live_listing_unverified");
 });
+
+test("malformed free response uses a single economy-model fallback, then a separate review", async () => {
+  const calls = [];
+  const twoSources = { trendSources: { US: [research.trendSources.US[0],
+    { ...research.trendSources.US[0], url: "https://another.org/research" }] } };
+  const request = async (route) => {
+    calls.push(route);
+    if (calls.length === 1) return { content: 'NOT VALID JSON', model: 'free' };
+    if (route === 'kdpResearchPaidFallback') return { content: JSON.stringify({
+      reason: 'Relevant reader searches are supported by book content.',
+      description: '', descriptionClaims: [],
+      keywords: [{ phrase: 'machine learning grid', bookQuote: 'Machine learning supports grid operations.',
+        sourceUrl: 'https://example.org/story', sourceQuote: 'Machine learning supports grid operations' }],
+      comparables: [],
+    }), model: 'economy' };
+    return { content: JSON.stringify({ approved: true,
+      reason: 'All proposed search phrases are supported by evidence.' }), model: 'free' };
+  };
+  const result = await draftOptimisation(book, twoSources, metadata, { now, liveListing, request });
+  assert.equal(result.status, 'approved');
+  assert.deepEqual(result.keywords, ['machine learning grid']);
+  assert.deepEqual(calls, ['kdpResearchDraft', 'kdpResearchPaidFallback', 'kdpResearchDraft']);
+  assert.equal(result.council.paidFallbackUsed, true);
+  assert.equal(result.council.calls, 3);
+});
+
+test("free and economy failure both propagate a bounded diagnostic, never a fictitious approval", async () => {
+  const twoSources = { trendSources: { US: [research.trendSources.US[0],
+    { ...research.trendSources.US[0], url: 'https://another.org/research' }] } };
+  const calls = [];
+  await assert.rejects(draftOptimisation(book, twoSources, metadata, {
+    now, liveListing, request: async (route) => {
+      calls.push(route);
+      throw Object.assign(new Error('provider unavailable'), { code: 'OPENROUTER_TIMEOUT' });
+    },
+  }), (error) => error.code === 'KDP_RESEARCH_INFERENCE_UNAVAILABLE' &&
+    error.freeFailure === 'OPENROUTER_TIMEOUT' && error.paidFailure === 'OPENROUTER_TIMEOUT');
+  assert.deepEqual(calls, ['kdpResearchDraft', 'kdpResearchPaidFallback']);
+});
