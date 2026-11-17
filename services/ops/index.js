@@ -3,6 +3,7 @@ import { managementKey } from "./openrouterSpend.js";
 import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
+import { collectPodcastGrowthSnapshot, readLatestPodcastGrowthSnapshot, podcastGrowthReadiness } from "../podcast-growth/organicDiscovery.js";
 import { assessAsyncTaskOutcome, extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
 import { getWebsiteAuditReadiness } from "../../audits/utils/websiteAuditReadiness.js";
 import {
@@ -34,6 +35,31 @@ router.get("/spend/openrouter/daily", async (req, res) => {
   } catch (error) {
     if (/date|YYYY-MM-DD/i.test(error.message)) return res.status(400).json({ ok: false, error: "Invalid report date" });
     return res.status(503).json({ ok: false, status: "storage-unavailable" });
+  }
+});
+
+// Deterministic free discovery monitoring; suite bearer guard is upstream.
+router.get("/podcast-growth/status", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json(podcastGrowthReadiness());
+});
+
+router.get("/podcast-growth/latest", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  const snapshot = await readLatestPodcastGrowthSnapshot();
+  if (!snapshot) return res.status(404).json({ ok: false, status: "unavailable", reason: "no-persisted-podcast-growth-snapshot" });
+  return res.json({ ok: true, snapshot });
+});
+
+router.post("/podcast-growth/snapshot", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const snapshot = await collectPodcastGrowthSnapshot();
+    return res.status(snapshot.status === "unavailable" || snapshot.persisted === false ? 503 : 200)
+      .json({ ok: snapshot.status !== "unavailable" && snapshot.persisted !== false, snapshot });
+  } catch (error) {
+    warn("ops.podcast_growth.failed", { message: error.message });
+    return res.status(503).json({ ok: false, status: "unavailable", reason: "podcast-growth-snapshot-failed" });
   }
 });
 
