@@ -19,7 +19,11 @@ test("Thursday carries the Turing's Torch promotion", async () => {
   const promo = await resolveIssuePromotion(profile, { now: new Date("2026-07-30T10:00:00Z") });
   assert.equal(promo.type, "podcast");
   assert.match(promo.title, /Turing's Torch/);
-  assert.equal(promo.url, "https://jonathan-harris.online/podcast/");
+  const destination = new URL(promo.url);
+  assert.equal(destination.origin + destination.pathname, "https://jonathan-harris.online/podcast/");
+  assert.equal(destination.searchParams.get("utm_source"), "ai_edge");
+  assert.equal(destination.searchParams.get("utm_medium"), "email");
+  assert.equal(destination.searchParams.get("utm_campaign"), "podcast_thursday_preview");
 });
 
 test("non-Tuesday/Thursday issues do not inject a house promotion", async () => {
