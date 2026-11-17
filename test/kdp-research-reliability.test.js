@@ -97,3 +97,24 @@ test('failure records sanitise provider error metadata, never store raw bodies',
     stage: 'proposal', code: 'badmodelerror', httpStatus: 429,
   });
 });
+
+test('the next week resumes unfinished titles and bounded technical failures before new titles', async () => {
+  const previous = { week: '2026-11-09', cursor: 1, completed: false,
+    pending: [{ ebookId: 2, asin: 'B012345679' }],
+    results: [{ ebookId: 1, optimisation: { technical: true, reason: 'technical_failure' } }] };
+  let initialPlan = null;
+  const titles = [1, 2, 3].map((ebookId) => ({
+    ebookId, asin: 'B0' + String(ebookId).padStart(8, '0'),
+  }));
+  const h = setup({
+    getBooks: async () => titles, readState: async () => structuredClone(previous),
+    writeState: async (state) => {
+      if (state.week === '2026-11-16' && state.results?.length === 0 && !initialPlan) {
+        initialPlan = state.pending.map((row) => row.ebookId);
+      }
+    },
+    draft: async () => ({ status: 'blocked', reason: 'no_grounded_proposal' }),
+  });
+  await runResearchTick({ ...h.options, env: { ...env, KDP_RESEARCH_BATCH_SIZE: '3' } });
+  assert.deepEqual(initialPlan, [2, 1, 3]);
+});
