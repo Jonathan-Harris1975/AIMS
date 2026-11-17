@@ -78,7 +78,10 @@ const MAX_TECHNICAL_ATTEMPTS_PER_BOOK = 2;
 export function researchFailureDetail(error, stage) {
   const code = String(error?.code || error?.name || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || 'unknown';
   const status = Number(error?.statusCode ?? error?.status);
-  return { stage, code, ...(Number.isInteger(status) && status >= 100 && status <= 599 ? { httpStatus: status } : {}) };
+  const sanitise = (value) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+  return { stage, code, ...(Number.isInteger(status) && status >= 100 && status <= 599 ? { httpStatus: status } : {}),
+    ...(error?.freeFailure ? { freeFailure: sanitise(error.freeFailure) } : {}),
+    ...(error?.paidFailure ? { paidFailure: sanitise(error.paidFailure) } : {}) };
 }
 
 export function countTechnicalFailures(results = []) {
@@ -172,7 +175,15 @@ export async function runResearchTick({
       let result = state.inProgress;
       if (!result || result.ebookId !== book.ebookId) {
         try { result = await discover(book, { apiKey: env.TAVILY_SEARCH_API, now, beforeRequest }); }
-        catch (error) { return recordFailure("discovery", error); }
+        catch (error) {
+          if (error?.code === 'research_monthly_limit') {
+            state.lastTechnicalFailure = { ebookId: book.ebookId,
+              ...researchFailureDetail(error, "discovery"), at: now().toISOString() };
+            await writeState(state);
+            return { status: 'research_monthly_limit', week, ebookId: book.ebookId };
+          }
+          return recordFailure("discovery", error);
+        }
         state.inProgress = result;
         await writeState(state);
       }
@@ -240,7 +251,7 @@ function countProposals(results = []) {
 export async function runResearchBatch({ tick = runResearchTick, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   for (;;) {
     const result = await tick();
-    if (result.status === "pending") { await pause(5 * 60_000); continue; }
+    if (result.status === "pending") { await pause(60_000); continue; }
     if (["complete", "already_complete"].includes(result.status)) return {
       ...result, ok: !(result.technicalFailures > 0),
     };
