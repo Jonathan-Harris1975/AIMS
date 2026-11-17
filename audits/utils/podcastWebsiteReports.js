@@ -191,18 +191,28 @@ function normaliseEpisodeItem(item = {}, index = 0) {
   };
 }
 
-async function readPodcastRssXml() {
+const PODCAST_RSS_KEY = "turing-torch.xml";
+const DEFAULT_PODCAST_RSS_FEED_URL = "https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml";
+
+function resolvePodcastRssFeedUrl(configuredUrl = "") {
+  return configuredUrl && /\.xml($|[?#])/i.test(configuredUrl)
+    ? configuredUrl
+    : configuredUrl ? joinUrl(configuredUrl, PODCAST_RSS_KEY) : DEFAULT_PODCAST_RSS_FEED_URL;
+}
+
+async function readPodcastRssXml({
+  r2 = r2Client,
+  configuredUrl = envUrl("PODCAST_RSS_FEED_URL", "R2_PUBLIC_BASE_URL_PODCAST_RSS"),
+} = {}) {
   const attempts = [];
   try {
-    const xml = await r2Client.getObjectAsText("podcastRss", "feed.xml");
-    return { xml, method: "R2 podcastRss/feed.xml", feedUrl: r2Client.buildPublicUrl("podcastRss", "feed.xml"), attempts };
+    const xml = await r2.getObjectAsText("podcastRss", PODCAST_RSS_KEY);
+    return { xml, method: `R2 podcastRss/${PODCAST_RSS_KEY}`, feedUrl: r2.buildPublicUrl("podcastRss", PODCAST_RSS_KEY), attempts };
   } catch (error) {
-    attempts.push(`R2 podcastRss/feed.xml failed: ${error?.message || error}`);
+    attempts.push(`R2 podcastRss/${PODCAST_RSS_KEY} failed: ${error?.message || error}`);
   }
 
-  const configured = envUrl("PODCAST_RSS_FEED_URL", "R2_PUBLIC_BASE_URL_PODCAST_RSS");
-  const feedUrl = configured && /\.xml($|[?#])/i.test(configured) ? configured : configured ? joinUrl(configured, "feed.xml") : "";
-  if (!feedUrl) throw new Error(`No podcast RSS feed URL configured. ${attempts.join(" | ")}`);
+  const feedUrl = resolvePodcastRssFeedUrl(configuredUrl);
   const response = await fetchWithTimeout(feedUrl);
   if (!response.ok) throw new Error(`Podcast RSS public fetch failed with ${response.status}. ${attempts.join(" | ")}`);
   return { xml: await response.text(), method: "public podcast RSS fetch", feedUrl, attempts };
@@ -688,6 +698,8 @@ export const __podcastWebsiteReportsTestHooks = {
   buildSkillLensSummary,
   buildTranscriptSkillLensFindings,
   collectPodcastEpisodeEvidence,
+  readPodcastRssXml,
+  resolvePodcastRssFeedUrl,
   makeFinding,
   normaliseEpisodeItem,
 };
