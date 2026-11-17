@@ -69,7 +69,7 @@ test("malformed free response uses a single economy-model fallback, then a separ
   const result = await draftOptimisation(book, twoSources, metadata, { now, liveListing, request });
   assert.equal(result.status, 'approved');
   assert.deepEqual(result.keywords, ['machine learning grid']);
-  assert.deepEqual(calls, ['kdpResearchDraft', 'kdpResearchPaidFallback', 'kdpResearchDraft']);
+  assert.deepEqual(calls, ['kdpResearchDraft', 'kdpResearchPaidFallback', 'kdpResearchCritic']);
   assert.equal(result.council.paidFallbackUsed, true);
   assert.equal(result.council.calls, 3);
 });
