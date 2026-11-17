@@ -37,7 +37,7 @@ export async function withKdpBrowserContext<T>(
   try {
     lease = await claimDurableLease({
       namespace: 'kdp-account', key: 'browser-session',
-      pendingTtlMs: 30 * 60_000, completedTtlMs: 5_000,
+      pendingTtlMs: 110 * 60_000, completedTtlMs: 5_000,
       metadata: { purpose: 'exclusive authenticated KDP browser transaction' },
     })
     if (!lease.claimed || !lease.lease) {
