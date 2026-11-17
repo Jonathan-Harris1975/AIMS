@@ -22,8 +22,8 @@ export function calculatePrintCover(format, pages) {
   if (!allowedFormats.has(format) || !Number.isInteger(pages) || pages < 24 || pages > 828) {
     throw new TypeError("Invalid print format or final interior page count.");
   }
-  if (format === "hardcover" && (pages < 75 || pages > 550)) {
-    throw new Error("Hardcover interior must contain 75–550 pages.");
+  if (format === "hardcover" && (pages < 76 || pages > 550)) {
+    throw new Error("Hardcover interior must contain 76–550 pages.");
   }
   const paperThickness = 0.002252; // Black ink / white paper; KDP paperback specification.
   const spine = format === "paperback" ? pages * paperThickness : pages * paperThickness + 0.189;
@@ -33,7 +33,7 @@ export function calculatePrintCover(format, pages) {
   return { width: outer * 2 + panelW * 2 + spine, height: outer * 2 + panelH,
     outer, panelW, panelH, spine,
     specification: format === "paperback" ? "KDP paperback, 6x9, black ink white paper" :
-      "KDP case-laminate approximation; MUST pass KDP cover template/previewer validation" };
+      "KDP 6x9 case-laminate wrap; official KDP Previewer approval required" };
 }
 
 export function validatePrintSourceText(text) {
@@ -168,7 +168,7 @@ async function renderCover(book, format, pages, art, file) {
 function digest(bytes) { return crypto.createHash("sha256").update(bytes).digest("hex"); }
 
 function validCount(format, pages) {
-  if (!Number.isInteger(pages) || pages < (format === "hardcover" ? 75 : 24) ||
+  if (!Number.isInteger(pages) || pages < (format === "hardcover" ? 76 : 24) ||
       pages > (format === "hardcover" ? 550 : 828)) {
     throw new Error("Final interior page count is outside supported KDP " + format + " limits.");
   }

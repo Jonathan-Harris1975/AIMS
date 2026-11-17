@@ -13,7 +13,7 @@ test("6x9 black-ink print cover geometry uses the official paperback spine formu
   assert.ok(Math.abs(cover.width - 12.650856) < .00001);
   assert.equal(cover.height, 9.25);
   assert.ok(calculatePrintCover("hardcover", 178).width > cover.width);
-  assert.throws(() => calculatePrintCover("hardcover", 74), /75/);
+  assert.throws(() => calculatePrintCover("hardcover", 75), /76/);
   assert.throws(() => calculatePrintCover("paperback", 23), /Invalid/);
 });
 
@@ -47,7 +47,10 @@ test("KDP print weekly accounting resets Sunday at 00:00 UTC, independently of L
   for (const state of ["creating","submitting","uncertain","submitted","live_verified"]) {
     assert.equal(canAttemptPrintJob({state}),false);
   }
-  assert.equal(canAttemptPrintJob({state:"blocked"}),true);
+  assert.equal(canAttemptPrintJob({state:"blocked",updatedAt:"2026-11-17T19:00:00Z"},
+    new Date("2026-11-18T19:00:00Z")),false);
+  assert.equal(canAttemptPrintJob({state:"blocked",updatedAt:"2026-11-15T18:00:00Z"},
+    new Date("2026-11-18T19:00:00Z")),true);
   assert.equal(printWindowAllowsAction(new Date("2026-11-18T22:15:00Z"),{start:true}),true);
   assert.equal(printWindowAllowsAction(new Date("2026-11-18T22:50:00Z"),{start:true}),false);
   assert.equal(printWindowAllowsAction(new Date("2026-11-20T22:15:00Z")) ,false);
@@ -59,7 +62,7 @@ test("print worker sorts pilot title first and rejects uncertain duplicate KDP p
   assert.throws(() => choosePrintCandidates([{ebookId:3},{ebookId:3}]),/Invalid/);
   const shelf = {refs:[{titleId:"ABC1234567",format:"paperback",title:"Book Seven"}], pagesScanned:1};
   assert.equal(existingPrintMatches(shelf,{title:"Book Seven"},"paperback").length,1);
-  assert.throws(() => existingPrintMatches({refs:[{format:"paperback"}],pagesScanned:1},
+  assert.throws(() => existingPrintMatches({refs:[{format:"paperback",titleId:"AC0123456789"}],pagesScanned:1},
     {title:"Unknown"},"paperback"),/unverified title/);
 });
 

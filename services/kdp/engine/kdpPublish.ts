@@ -37,6 +37,7 @@ export type PublishContentSpec = {
   interiorPath?: string
   coverPath?: string
   printSettings?: KdpPrintContentSettings
+  forceReplaceFiles?: boolean
 }
 
 export type PublishBookRequest = {
@@ -275,6 +276,7 @@ export async function publishBook(
           interiorPath: content.interiorPath || '',
           coverPath: content.coverPath || '',
           printSettings: content.printSettings,
+          forceReplaceFiles: content.forceReplaceFiles === true,
         })
         const contentOk =
           (!content.interiorPath || result.interiorUploaded) &&

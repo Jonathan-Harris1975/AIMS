@@ -2,7 +2,7 @@
 // reuse Kindle ASINs as print identifiers, or assert that an interior has passed QA.
 export const PRINT_FORMATS = Object.freeze({
   paperback: { minimumPages: 24 },
-  hardcover: { minimumPages: 75, maximumPages: 550 },
+  hardcover: { minimumPages: 76, maximumPages: 550 },
 });
 export const PRINT_KDP_WEEKLY_LIMIT_PER_FORMAT = 2;
 // KDP permits only two new titles created and two first submissions per format per UTC week.

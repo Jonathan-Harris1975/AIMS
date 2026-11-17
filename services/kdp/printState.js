@@ -14,8 +14,23 @@ export function utcPrintWeek(at = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
-export function canAttemptPrintJob(job) {
-  return !job || !["creating", "submitting", "uncertain", "submitted", "live_verified"].includes(job.state);
+/** D1 datetime('now') is UTC but omits the ISO 8601 Z suffix. */
+export function parsePrintDatabaseTime(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+    return Date.parse(raw.replace(" ", "T") + "Z");
+  }
+  return Date.parse(raw);
+}
+
+export function canAttemptPrintJob(job, at = new Date()) {
+  if (!job) return true;
+  if (["creating", "submitting", "uncertain", "submitted", "live_verified"].includes(job.state)) return false;
+  if (job.state !== "blocked") return true;
+  // A broken source or AI questionnaire may be repaired externally. Retry
+  // periodically without letting that book occupy every night's two slots.
+  const blockedAt = parsePrintDatabaseTime(job.updatedAt);
+  return Number.isFinite(blockedAt) && (+at - blockedAt >= 48 * 60 * 60_000);
 }
 
 export function requirePrintFormat(format) {
@@ -151,5 +166,22 @@ export async function listKnownPrintJobs() {
   const result = await queryKdpD1("SELECT ebook_id, format, title_id FROM kdp_print_automation WHERE title_id IS NOT NULL");
   return (result.results || []).map(row => ({
     ebookId: Number(row.ebook_id), format: String(row.format), titleId: String(row.title_id),
+  }));
+}
+
+/** Unknown remote KDP outcomes must be reconciled against signed-in Bookshelf
+ * state before allowing any additional creation or first submission. */
+export async function listPrintJobsForReconciliation() {
+  await ensurePrintStateTables();
+  const response = await queryKdpD1(
+    "SELECT ebook_id,format,state,title_id,manifest_key,isbn,error_code,created_at,updated_at" +
+    " FROM kdp_print_automation WHERE state IN ('creating','submitting','uncertain')" +
+    " ORDER BY updated_at ASC,ebook_id ASC,format ASC"
+  );
+  return (response.results || []).map(row => ({
+    ebookId: Number(row.ebook_id), format: String(row.format), state: String(row.state),
+    titleId: row.title_id || null, manifestKey: row.manifest_key || null,
+    isbn: row.isbn || null, errorCode: row.error_code || null,
+    createdAt: row.created_at, updatedAt: row.updated_at,
   }));
 }

@@ -234,10 +234,22 @@ async function waitForUploadSuccess(page: Page, fileName: string): Promise<void>
   await page.waitForTimeout(3000)
 }
 
+export function requiredPrintOptionNames(settings: KdpPrintContentSettings): Set<string> {
+  const required = new Set(['trimSize', 'inkAndPaper', 'interiorHasBleed', 'containsAiContent'])
+  if (settings.containsAiContent === true) {
+    for (const field of ['aiTextAmount', 'aiImagesAmount', 'aiTranslationsAmount']) required.add(field)
+    if (settings.aiTextAmount && settings.aiTextAmount.toLowerCase() !== 'none') required.add('aiTextTool')
+    if (settings.aiImagesAmount && settings.aiImagesAmount.toLowerCase() !== 'none') required.add('aiImagesTool')
+  }
+  return required
+}
+
 export type CompletePrintContentSpec = {
   interiorPath: string
   coverPath: string
   printSettings?: KdpPrintContentSettings
+  /** Fresh production PDF assets must replace stale remote success uploads. */
+  forceReplaceFiles?: boolean
 }
 
 export type CompletePrintContentResult = {
@@ -275,11 +287,7 @@ async function completePrintContentOnce(
 
   const settings = { ...spec.printSettings, assignFreeIsbn: true }
   const applied = await fillPrintContentOnPage(page, settings, format)
-  const requiredOptions = new Set([
-    'trimSize', 'inkAndPaper', 'interiorHasBleed',
-    'containsAiContent', 'aiTextAmount', 'aiTextTool',
-    'aiImagesAmount', 'aiImagesTool', 'aiTranslationsAmount',
-  ])
+  const requiredOptions = requiredPrintOptionNames(settings)
   const missingRequired = applied.skipped.filter((key) => requiredOptions.has(key))
   const missingOptional = applied.skipped.filter((key) => !requiredOptions.has(key))
   if (missingRequired.length) {
@@ -309,7 +317,7 @@ async function completePrintContentOnce(
     }
   }
 
-  if (spec.coverPath && needsUpload(status, 'cover')) {
+  if (spec.coverPath && (spec.forceReplaceFiles || needsUpload(status, 'cover'))) {
     if (!fs.existsSync(spec.coverPath)) {
       throw new KdpClientError(`Cover file not found: ${spec.coverPath}`)
     }
@@ -323,7 +331,7 @@ async function completePrintContentOnce(
     }
   }
 
-  if (spec.interiorPath && needsUpload(status, 'interior')) {
+  if (spec.interiorPath && (spec.forceReplaceFiles || needsUpload(status, 'interior'))) {
     if (!fs.existsSync(spec.interiorPath)) {
       throw new KdpClientError(`Interior file not found: ${spec.interiorPath}`)
     }

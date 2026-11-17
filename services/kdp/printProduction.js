@@ -8,6 +8,7 @@ import { listKdpEbooks } from "./catalogue.js";
 import { createPrintAssets } from "./printAssets.js";
 import { readKindleAiDeclaration } from "./printAiDisclosure.js";
 import { reconcileLivePrintListings } from "./printVerification.js";
+import { reconcileInterruptedPrintJobs } from "./printReconciliation.js";
 import { planPrintPrices } from "./printPricePolicy.js";
 import { getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, listKnownPrintJobs, markPrintQuota,
@@ -39,8 +40,11 @@ function cleanTitle(value) {
 }
 
 export function existingPrintMatches(shelf, book, format) {
+  // Reports API is a valid complete Bookshelf source with pagesScanned=0;
+  // browser scans have pagesScanned>=1. Either must contain usable refs.
   if (!Array.isArray(shelf?.refs) || !shelf.refs.length ||
-      !Number.isInteger(shelf.pagesScanned) || shelf.pagesScanned < 1) {
+      !Number.isInteger(shelf.pagesScanned) || shelf.pagesScanned < 0 ||
+      shelf.refs.some(ref => !ref.titleId || !ref.format)) {
     throw new Error("Cannot establish a complete signed-in KDP Bookshelf inventory.");
   }
   const printRefs = shelf.refs.filter(r => r.format === format);
@@ -101,7 +105,7 @@ async function recordRun(data) {
 
 async function produceOne(book, format, shelf, options) {
   let job = await getPrintJob(book.ebookId, format);
-  if (!canAttemptPrintJob(job)) {
+  if (!canAttemptPrintJob(job, options.now())) {
     return { ebookId: book.ebookId, format, status: "already_in_progress_or_submitted", state: job?.state };
   }
   if (!printWindowAllowsAction(options.now(), { start: true })) {
@@ -163,7 +167,8 @@ async function produceOne(book, format, shelf, options) {
       format, ...(isNewTitle ? { create: true } : { create: false, titleId: job.titleId }),
       dryRun: false, publish: true,
       details: bookMetadata(book), categories,
-      content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath, printSettings: printSettings(aiDisclosure) },
+      content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath,
+        forceReplaceFiles: true, printSettings: printSettings(aiDisclosure) },
       pricing: plan.pricing,
     };
     const result = await options.publish(request);
@@ -220,6 +225,7 @@ export async function runPrintProduction({
   prepare = createPrintAssets, publish = publishBook,
   aiDisclosure = readKindleAiDeclaration, readKindle = syncBookMetadata,
   reconcileListings = reconcileLivePrintListings,
+  reconcileInterrupted = reconcileInterruptedPrintJobs,
   claimLease = claimDurableLease, releaseLease = releaseDurableLease,
 } = {}) {
   if (dryRun) return { ok: true, dryRun: true, kdpWritesPerformed: false,
@@ -256,6 +262,7 @@ export async function runPrintProduction({
         ref.title = meta.title;
       }
     }
+    const interruptedReconciliation = await reconcileInterrupted(books, shelf, { now });
     const weekLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ observedAt: now().toISOString(), weeklyLimit: weekLimit });
     const listingsReconciled = await reconcileListings(books, { limit: 12 });
@@ -269,7 +276,7 @@ export async function runPrintProduction({
       // Completed, submitted and uncertain titles cannot consume every future
       // scheduling slot. Skip them so the 40-book queue actually advances.
       const actionable = await Promise.all(["paperback","hardcover"].map(async format =>
-        ({ format, allowed: canAttemptPrintJob(await getPrintJob(book.ebookId, format)) })));
+        ({ format, allowed: canAttemptPrintJob(await getPrintJob(book.ebookId, format), now()) })));
       if (!actionable.some(row => row.allowed)) continue;
       booksTried++;
       for (const { format, allowed } of actionable) {
@@ -290,7 +297,7 @@ export async function runPrintProduction({
       ].includes(x.status)),
       schemaVersion: 1, checkedAt: now().toISOString(), weekUtc: utcPrintWeek(now()),
       kdpWritesPerformed: writes, maxBooksPerRun: MAX_BOOKS, capacity,
-      booksConsidered: booksTried, results: outcomes, listingsReconciled,
+      booksConsidered: booksTried, results: outcomes, listingsReconciled, interruptedReconciliation,
       submitted: outcomes.filter(x => x.status === "submitted_to_kdp_review").length,
       blocked: outcomes.filter(x => ["blocked","uncertain","submission_unverified"].includes(x.status)).length,
       publicPurchaseAvailabilityVerified: listingsReconciled.some(x => x.status === "live_verified"),

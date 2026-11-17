@@ -39,9 +39,16 @@ export async function readKindleAiDeclaration(titleId) {
     const raw = await page.evaluate(() => {
       const read = (...names) => {
         for (const name of names) {
-          const input = document.querySelector('input[name="' + name + '"]');
-          const value = input?.value?.trim();
-          if (value) return value;
+          const fields = [...document.querySelectorAll('[name]')].filter(
+            field => field.getAttribute('name') === name);
+          const checked = fields.find(field =>
+            (field.type === 'radio' || field.type === 'checkbox') && field.checked);
+          if (checked) return checked.value?.trim() || 'YES';
+          for (const field of fields) {
+            if (field.type === 'radio' || field.type === 'checkbox') continue;
+            const value = field.value?.trim();
+            if (value) return value;
+          }
         }
         return "";
       };
