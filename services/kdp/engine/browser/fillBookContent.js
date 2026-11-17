@@ -1,4 +1,4 @@
-(changes) => {
+(changes, format = 'paperback') => {
   const filled = []
   const skipped = []
 
@@ -9,9 +9,11 @@
 
   // The KDP hardcover content form uses hardcover_book in some layouts.
   // Only select a field that actually exists; never claim a write from a missing input.
-  const namesFor = (name) => name.includes('[print_book]')
-    ? [name.replace('[print_book]', '[hardcover_book]'), name]
-    : [name]
+  const namesFor = (name) => {
+    if (!name.includes('[print_book]')) return [name]
+    const hardcoverName = name.replace('[print_book]', '[hardcover_book]')
+    return format === 'hardcover' ? [hardcoverName, name] : [name, hardcoverName]
+  }
 
   const clickRadio = (name, value) => {
     for (const candidate of namesFor(name)) {
@@ -93,8 +95,10 @@
   if (changes.hasPublisherBarcode !== undefined) {
     const val = changes.hasPublisherBarcode ? 'true' : 'false'
     const hiddenSet = setHidden('data[print_book][has_publisher_barcode]', val)
-    const check = document.getElementById('data-hardcover-book-has-publisher-barcode') ||
-      document.getElementById('data-print-book-has-publisher-barcode')
+    const checkIds = format === 'hardcover'
+      ? ['data-hardcover-book-has-publisher-barcode', 'data-print-book-has-publisher-barcode']
+      : ['data-print-book-has-publisher-barcode', 'data-hardcover-book-has-publisher-barcode']
+    const check = document.getElementById(checkIds[0]) || document.getElementById(checkIds[1])
     if (check) {
       check.checked = changes.hasPublisherBarcode
       dispatch(check)
@@ -106,14 +110,15 @@
   const setSelectById = (id, value) => {
     const el = document.getElementById(id)
     if (!el) return false
-    el.value = value
+    el.value = String(value)
     dispatch(el)
-    return true
+    return el.value === String(value)
   }
 
   if (changes.aiTextAmount !== undefined) {
-    const ok = setSelectById('generative-ai-questionnaire-text', changes.aiTextAmount) ||
-      setHidden('data[print_book][generative_ai_questionnaire][text][amount_and_editing]', changes.aiTextAmount)
+    const selected = setSelectById('generative-ai-questionnaire-text', changes.aiTextAmount)
+    const stored = setHidden('data[print_book][generative_ai_questionnaire][text][amount_and_editing]', changes.aiTextAmount)
+    const ok = selected || stored
     if (ok) filled.push('aiTextAmount')
     else skipped.push('aiTextAmount')
   }
@@ -123,8 +128,9 @@
     } else skipped.push('aiTextTool')
   }
   if (changes.aiImagesAmount !== undefined) {
-    const ok = setSelectById('generative-ai-questionnaire-images', changes.aiImagesAmount) ||
-      setHidden('data[print_book][generative_ai_questionnaire][images][amount_and_editing]', changes.aiImagesAmount)
+    const selected = setSelectById('generative-ai-questionnaire-images', changes.aiImagesAmount)
+    const stored = setHidden('data[print_book][generative_ai_questionnaire][images][amount_and_editing]', changes.aiImagesAmount)
+    const ok = selected || stored
     if (ok) filled.push('aiImagesAmount')
     else skipped.push('aiImagesAmount')
   }
@@ -134,8 +140,9 @@
     } else skipped.push('aiImagesTool')
   }
   if (changes.aiTranslationsAmount !== undefined) {
-    const ok = setSelectById('generative-ai-questionnaire-translations', changes.aiTranslationsAmount) ||
-      setHidden('data[print_book][generative_ai_questionnaire][translations][amount_and_editing]', changes.aiTranslationsAmount)
+    const selected = setSelectById('generative-ai-questionnaire-translations', changes.aiTranslationsAmount)
+    const stored = setHidden('data[print_book][generative_ai_questionnaire][translations][amount_and_editing]', changes.aiTranslationsAmount)
+    const ok = selected || stored
     if (ok) filled.push('aiTranslationsAmount')
     else skipped.push('aiTranslationsAmount')
   }
