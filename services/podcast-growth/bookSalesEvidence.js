@@ -1,6 +1,7 @@
 // services/podcast-growth/bookSalesEvidence.js
 // Read-only proof of available KDP royalty workbooks, not a sales estimator.
 import { listObjects, getObjectAsText } from "../shared/utils/r2-client.js";
+import { warn } from "../../logger.js";
 
 const PREFIX = "reports/royalties/";
 const iso = (value) => {
@@ -29,6 +30,7 @@ export async function getBookSalesEvidence({
         status: "unavailable",
         evidenceMethod: "private-R2-kdp-royalty-report-inventory",
         workbookCount: 0,
+        workbookCountKnown: true,
         latest: null,
         royaltiesGBP: null,
         soldUnits: null,
@@ -45,24 +47,32 @@ export async function getBookSalesEvidence({
         endDate: typeof raw.endDate === "string" ? raw.endDate : null,
         createdAt: typeof raw.createdAt === "string" ? raw.createdAt : null,
       };
-    } catch {
-      // Missing metadata is a limitation, not a fabricated sales value.
+    } catch (error) {
+      // The sidecar path follows services/kdp/storage.js: key + ".json".
+      warn("podcast_growth.kdp_royalty_sidecar_unavailable", {
+        code: String(error?.code || error?.name || "unknown").slice(0, 60),
+      });
     }
     return {
       status: metadata ? "workbook-present" : "partial",
       evidenceMethod: "private-R2-kdp-royalty-report-inventory",
       workbookCount: reports.length,
+      workbookCountKnown: true,
       latest: { key: latest.key, observedAt: latest.observedAt, metadata },
       royaltiesGBP: null,
       soldUnits: null,
       attributableBookSales: null,
       limitation: "Workbook presence proves source availability, not royalties. Parse and reconcile the real KDP workbook before reporting sales or ROI.",
     };
-  } catch {
+  } catch (error) {
+    warn("podcast_growth.kdp_royalty_inventory_unavailable", {
+      code: String(error?.code || error?.name || "unknown").slice(0, 60),
+    });
     return {
       status: "unavailable",
       evidenceMethod: "private-R2-kdp-royalty-report-inventory",
       workbookCount: null,
+      workbookCountKnown: false,
       latest: null,
       royaltiesGBP: null,
       soldUnits: null,
