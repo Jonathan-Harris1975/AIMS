@@ -4,7 +4,7 @@
 // live print repricing uses the independent manifest rather than these estimates.
 import { listKdpEbooks } from "./catalogue.js";
 import { readKdpMetadataSnapshot } from "./storage.js";
-import { uk70RoyaltyPriceRange, parseKdpPriceMinorUnits } from "./engine/kdpPriceRules.ts";
+import { uk70RoyaltyPriceRange } from "./engine/kdpPriceRules.ts";
 import { calculatePrintPrice, KDP_PRINT_PRICING_POLICY_VERSION } from "./printPricePolicy.js";
 import { currentKdpPrice } from "./metadataValues.js";
 
