@@ -238,6 +238,8 @@ export type CompletePrintContentSpec = {
   interiorPath: string
   coverPath: string
   printSettings?: KdpPrintContentSettings
+  /** Fresh production PDF assets must replace stale remote success uploads. */
+  forceReplaceFiles?: boolean
 }
 
 export type CompletePrintContentResult = {
@@ -276,10 +278,15 @@ async function completePrintContentOnce(
   const settings = { ...spec.printSettings, assignFreeIsbn: true }
   const applied = await fillPrintContentOnPage(page, settings, format)
   const requiredOptions = new Set([
-    'trimSize', 'inkAndPaper', 'interiorHasBleed',
-    'containsAiContent', 'aiTextAmount', 'aiTextTool',
-    'aiImagesAmount', 'aiImagesTool', 'aiTranslationsAmount',
+    'trimSize', 'inkAndPaper', 'interiorHasBleed', 'containsAiContent',
   ])
+  // Amazon requires AI breakdown fields only when the existing Kindle
+  // disclosure actually says YES. A NO declaration has no AI tools to copy.
+  if (settings.containsAiContent === true) {
+    for (const field of ['aiTextAmount', 'aiImagesAmount', 'aiTranslationsAmount']) requiredOptions.add(field)
+    if (settings.aiTextAmount && settings.aiTextAmount.toLowerCase() !== 'none') requiredOptions.add('aiTextTool')
+    if (settings.aiImagesAmount && settings.aiImagesAmount.toLowerCase() !== 'none') requiredOptions.add('aiImagesTool')
+  }
   const missingRequired = applied.skipped.filter((key) => requiredOptions.has(key))
   const missingOptional = applied.skipped.filter((key) => !requiredOptions.has(key))
   if (missingRequired.length) {
@@ -309,7 +316,7 @@ async function completePrintContentOnce(
     }
   }
 
-  if (spec.coverPath && needsUpload(status, 'cover')) {
+  if (spec.coverPath && (spec.forceReplaceFiles || needsUpload(status, 'cover'))) {
     if (!fs.existsSync(spec.coverPath)) {
       throw new KdpClientError(`Cover file not found: ${spec.coverPath}`)
     }
@@ -323,7 +330,7 @@ async function completePrintContentOnce(
     }
   }
 
-  if (spec.interiorPath && needsUpload(status, 'interior')) {
+  if (spec.interiorPath && (spec.forceReplaceFiles || needsUpload(status, 'interior'))) {
     if (!fs.existsSync(spec.interiorPath)) {
       throw new KdpClientError(`Interior file not found: ${spec.interiorPath}`)
     }
