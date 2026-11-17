@@ -75,6 +75,8 @@ All routes require the normal AIMS bearer authentication. Long-running browser o
 | GET | `/kdp/audit/metadata/analyze` | Analyze the latest snapshot |
 | GET | `/kdp/audit/recovery/learnings` | Read browser recovery success/failure counts |
 | POST | `/kdp/audit/metadata/update` and `/batch` | Preview explicit metadata changes; `dryRun` defaults to true |
+| GET | `/kdp/audit/pricing/royalty-floor` | Read-only complete D1/KDP royalty-floor plan and readiness counts |
+| POST | `/kdp/audit/pricing/royalty-floor/run` | Durable UK £4.50 royalty-floor reconciliation; defaults to `dryRun: true`, requires explicit `{"dryRun":false}` to submit a change | 
 | POST | `/kdp/audit/pricing/update` and `/batch` | Preview explicit pricing changes; `dryRun` defaults to true |
 | GET | `/kdp/audit/reports/latest` | Read the latest private audit report |
 | GET | `/kdp/audit/page-count-sync` | Read outstanding page-count and website rebuild reconciliation status |
@@ -96,6 +98,16 @@ The default audit uses each D1 ASIN to form a marketplace-specific Amazon URL; i
 For a captured Kindle ASIN, an explicitly labelled Amazon `Print length` can update a different D1 `page_count`. The service checks the ASIN, count and slug, records an intent in private R2 before writing, and uses a conditional update to protect concurrent catalogue edits. The public audit does not update from a blocked, unverified, ambiguous or missing value. Before applying updates the rebuild hook and cache purge configuration must be present. After changes it purges the ebook API cache and triggers one website build. A background worker retries pending work every five minutes and confirms the live book's ASIN, visible length and Book schema page count; an accepted build hook alone is not considered confirmation. Pending sync status is available through `/kdp/audit/page-count-sync`. Build failures, missing permissions, inaccessible Amazon pages and stale website pages remain pending for retry rather than being reported as verified. D1 write permission and the existing Cloudflare cache purge credentials are required.
 
 Existing clients that rely on `metadataAnalysis`, `priceFloorAnalysis`, `catalogueComparison`, or `syncStats` should explicitly request `{"mode":"kdp"}`. Reports from the default mode use `publicAudit` instead.
+
+## UK royalty-floor rollout
+
+Unlike competitor-led research optimisation, the existing-book £4.50 royalty-floor correction is an independent policy rollout. D1 lists the 40 known Kindle titles; the fresh, signed-in KDP snapshot supplies each title ID, current UK price and delivery file size. The signed-in royalty plan must be verified as 70% on the actual KDP form, never guessed from the old price or KDP Select enrolment. The metadata parser reads KDP's selected `royalty_rate-radio`, with an authenticated rendered-page fallback when the static HTML omits its value.
+
+`GET /kdp/audit/pricing/royalty-floor` is a non-mutating inventory. `POST /kdp/audit/pricing/royalty-floor/run` starts an asynchronous job, with dry-run enabled by default. MAST calls it with `{"dryRun":false}` three times per day Monday–Thursday at 16:35, 18:35 and 21:00 London, after the normal research window. The job only submits **one price correction per run** and enforces a global minimum one-hour gap. This is a price-only update to an existing title, not the separate print/new-title quota.
+
+On every live attempt, the job re-reads the exact title from the KDP Bookshelf, checks the D1 ASIN, LIVE status, confirmed 70% plan, current UK price, actual file size, 70% price band and dynamic delivery-adjusted floor. R2 `pricing/royalty-floor/ledger.json` records `submitting` **before** any KDP write. On a timeout or uncertain submission it does **not** replay a Publish; later runs check signed-in and public Amazon UK Kindle prices and require both to reach the floor before marking `verified`. Missing proof becomes `blocked` or `needs_attention` and is visible in R2 `pricing/royalty-floor/latest.json` and the MAST job result. The signed-in snapshot must be at most eight days old, match the whole D1 catalogue and be refreshed by the normal Monday sync. Values already above the verified minimum are left untouched.
+
+This rollout changes only the UK Kindle list price. It does not change other marketplace prices, paperbacks, hardbacks, cover files or descriptions. A recorded submission is not proof of a published Amazon price, and the £4.50 target only covers eligible UK 70% sales at normal list prices.
 
 ## Service limits
 
