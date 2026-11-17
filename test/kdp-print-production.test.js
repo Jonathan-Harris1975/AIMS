@@ -13,7 +13,7 @@ test("6x9 black-ink print cover geometry uses the official paperback spine formu
   assert.ok(Math.abs(cover.width - 12.650856) < .00001);
   assert.equal(cover.height, 9.25);
   assert.ok(calculatePrintCover("hardcover", 178).width > cover.width);
-  assert.throws(() => calculatePrintCover("hardcover", 74), /75/);
+  assert.throws(() => calculatePrintCover("hardcover", 75), /76/);
   assert.throws(() => calculatePrintCover("paperback", 23), /Invalid/);
 });
 
