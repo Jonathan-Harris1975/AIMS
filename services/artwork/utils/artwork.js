@@ -611,8 +611,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
   // After every normal provider/QA route failed, a safely bounded near-miss
   // gets ONE alternate composition from its original provider. It must pass
   // full pixel QA; the image that failed QA is never silently promoted.
-  if (String(mode || "").toLowerCase() === "social" &&
-      parseBoolean(process.env.SOCIAL_ARTWORK_FINAL_QA_RESCUE_ENABLED, true)) {
+  if (String(mode || "").toLowerCase() === "social") {
     const nearMiss = selectRepairableSocialArtworkCandidate(qaCandidates);
     const provider = providers.find((item) => item.id === nearMiss?.provider?.id &&
       item.model === nearMiss?.provider?.model);
