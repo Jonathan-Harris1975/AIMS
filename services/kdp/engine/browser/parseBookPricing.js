@@ -38,11 +38,16 @@
       ? 'worldwide'
       : '')
 
-  const royaltyPlan =
-    document.querySelector('input[name="data[digital][royalty_plan]"]:checked')
-      ?.value ||
-    readHidden('data[digital][royalty_plan]') ||
-    ''
+  // KDP currently renders the selected Kindle plan under royalty_rate-radio.
+  // Do not infer 70% from an unselected option or from the list-price band.
+  const selectedPlan =
+    document.querySelector('input[name="data[digital][royalty_rate]-radio"]:checked')?.value ||
+    document.querySelector('input[name="data[digital][royalty_plan]"]:checked')?.value ||
+    document.querySelector('input[name="data[digital][royalty_rate]"]:checked')?.value ||
+    document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() ||
+    document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim()
+  const royaltyPlan = /^(?:70|70_PERCENT|35|35_PERCENT)$/.test(selectedPlan)
+    ? selectedPlan : ''
 
   function readHidden(name) {
     return document.querySelector(`input[name="${name}"]`)?.value?.trim() || ''

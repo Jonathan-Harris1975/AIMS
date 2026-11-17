@@ -208,7 +208,8 @@ export async function updateBookPricingOnPage(
     const royaltyPlan =
       document.querySelector('input[name="data[digital][royalty_plan]"]:checked')?.value ||
       document.querySelector('input[name="data[digital][royalty_rate]-radio"]:checked')?.value ||
-      read('data[digital][royalty_plan]') || read('data[digital][royalty_rate]')
+      document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim() ||
+      document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() || ''
     return { fileSizeKb, royaltyPlan }
   })()`) as { fileSizeKb: string; royaltyPlan: string }
   const pricePolicyErrors = validateKdpPriceChanges(
