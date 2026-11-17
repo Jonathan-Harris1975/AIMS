@@ -337,7 +337,7 @@ test("podcast audit reads the canonical published R2 feed and falls back to the 
   const fromR2 = await hooks.readPodcastRssXml({ r2, configuredUrl: "" });
   assert.deepEqual(requests, [["podcastRss", "turing-torch.xml"]]);
   assert.equal(fromR2.xml, xml);
-  assert.match(fromR2.method, /turing-torch\\.xml/);
+  assert.match(fromR2.method, /turing-torch\.xml/);
   assert.deepEqual(fromR2.attempts, []);
 
   const fallbackUrls = [];
@@ -352,7 +352,7 @@ test("podcast audit reads the canonical published R2 feed and falls back to the 
   assert.deepEqual(fallbackUrls, ["https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml"]);
   assert.equal(defaultFallback.xml, xml);
   assert.equal(defaultFallback.attempts.length, 1);
-  assert.match(defaultFallback.attempts[0], /turing-torch\\.xml/);
+  assert.match(defaultFallback.attempts[0], /turing-torch\.xml/);
 
   const customFallback = await hooks.readPodcastRssXml({
     r2: unavailableR2,
