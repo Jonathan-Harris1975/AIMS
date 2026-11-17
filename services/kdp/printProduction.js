@@ -6,6 +6,8 @@ import { claimDurableLease, releaseDurableLease } from "../shared/utils/durableL
 import { putPrivateJson } from "../shared/utils/r2-client.js";
 import { listKdpEbooks } from "./catalogue.js";
 import { createPrintAssets } from "./printAssets.js";
+import { readKindleAiDeclaration } from "./printAiDisclosure.js";
+import { reconcileLivePrintListings } from "./printVerification.js";
 import { planPrintPrices } from "./printPricePolicy.js";
 import { getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, listKnownPrintJobs, markPrintQuota,
@@ -65,8 +67,8 @@ function bookMetadata(book) {
   };
 }
 
-function printSettings() {
-  return { trimWidthIn: 6, trimHeightIn: 9, inkAndPaper: "BW_WHITE",
+function printSettings(aiDisclosure) {
+  return { ...aiDisclosure, trimWidthIn: 6, trimHeightIn: 9, inkAndPaper: "BW_WHITE",
     interiorHasBleed: false, coverFinish: "matte", hasPublisherBarcode: false };
 }
 
@@ -99,6 +101,12 @@ async function produceOne(book, format, shelf, options) {
       await savePrintJob(book.ebookId, format, { state: "uncertain", errorCode: "existing_kdp_print_title_unreconciled" });
       return { ebookId: book.ebookId, format, status: "existing_kdp_print_title_unreconciled" };
     }
+    // Reuse the existing verified Amazon Kindle questionnaire. Do not
+    // fabricate AI declarations or create print drafts before identity checks.
+    const sourceRefs = shelf.refs.filter(ref => ref.format === "kindle" &&
+      String(ref.asin || "").toUpperCase() === String(book.asin || "").toUpperCase());
+    if (sourceRefs.length !== 1) throw new Error("Existing Kindle KDP title identity could not be uniquely verified.");
+    const aiDisclosure = await options.aiDisclosure(sourceRefs[0].titleId);
     assets = await options.prepare(book, format);
     const manifest = assets.manifest;
     const manifestKey = "print/assets/" + book.ebookId + "/" + format + "/manifest.json";
@@ -117,7 +125,7 @@ async function produceOne(book, format, shelf, options) {
       // Persist intent before clicking Create. Crash/timeouts remain UNCERTAIN.
       await savePrintJob(book.ebookId, format, { state: "creating", manifestKey });
       const created = await options.create(format);
-      if (!created?.titleId) throw new Error("KDP did not return an exact title ID after creating a print draft.");
+      if (!/^[A-Z0-9]{10,14}$/i.test(String(created?.titleId || ""))) throw new Error("KDP did not return an exact title ID after creating a print draft.");
       job = await savePrintJob(book.ebookId, format, { state: "draft", titleId: created.titleId, manifestKey });
       await markPrintQuota(book.ebookId, format, "create", "done", week);
       await writePrintEditionState(book.ebookId, format, "draft");
@@ -139,7 +147,7 @@ async function produceOne(book, format, shelf, options) {
     const request = {
       format, titleId: job.titleId, create: false, dryRun: false, publish: true,
       details: bookMetadata(book),
-      content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath, printSettings: printSettings() },
+      content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath, printSettings: printSettings(aiDisclosure) },
       pricing: plan.pricing,
     };
     const result = await options.publish(request);
@@ -180,6 +188,7 @@ export async function runPrintProduction({
   dryRun = false, ebookId = null, now = () => new Date(),
   listBooks = listKdpEbooks, inspectBookshelf = listBookshelf,
   prepare = createPrintAssets, create = createTitle, publish = publishBook,
+  aiDisclosure = readKindleAiDeclaration, reconcileListings = reconcileLivePrintListings,
   claimLease = claimDurableLease, releaseLease = releaseDurableLease,
 } = {}) {
   if (dryRun) return { ok: true, dryRun: true, kdpWritesPerformed: false,
@@ -218,6 +227,7 @@ export async function runPrintProduction({
     }
     const weekLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ observedAt: now().toISOString(), weeklyLimit: weekLimit });
+    const listingsReconciled = await reconcileListings(books, { limit: 12 });
     const eligible = ebookId == null ? books : books.filter(book => book.ebookId === Number(ebookId));
     if (!eligible.length) throw new Error("No matching existing KDP ebook found.");
     const outcomes = [];
@@ -235,7 +245,7 @@ export async function runPrintProduction({
         if (!printWindowAllowsAction(now(), { start: true })) break;
         if (!allowed) continue;
         const item = await produceOne(book, format, shelf, {
-          now, prepare, create: async f => { writes = true; return create(f); },
+          now, prepare, aiDisclosure, create: async f => { writes = true; return create(f); },
           publish: async request => { writes = true; return publish(request); },
           weeklyLimit: weekLimit,
         });
@@ -243,16 +253,16 @@ export async function runPrintProduction({
       }
     }
     report = {
-      ok: outcomes.length > 0 && outcomes.every(x => [
+      ok: outcomes.every(x => [
         "submitted_to_kdp_review", "already_in_progress_or_submitted",
         "weekly_quota_exhausted", "draft_saved_window_closed", "assets_ready_window_closed",
       ].includes(x.status)),
       schemaVersion: 1, checkedAt: now().toISOString(), weekUtc: utcPrintWeek(now()),
       kdpWritesPerformed: writes, maxBooksPerRun: MAX_BOOKS, capacity,
-      booksConsidered: booksTried, results: outcomes,
+      booksConsidered: booksTried, results: outcomes, listingsReconciled,
       submitted: outcomes.filter(x => x.status === "submitted_to_kdp_review").length,
       blocked: outcomes.filter(x => ["blocked","uncertain","submission_unverified"].includes(x.status)).length,
-      publicPurchaseAvailabilityVerified: false,
+      publicPurchaseAvailabilityVerified: listingsReconciled.some(x => x.status === "live_verified"),
     };
     report.reportRef = await recordRun(report);
     return report;
