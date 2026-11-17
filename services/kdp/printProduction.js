@@ -134,7 +134,7 @@ async function recordRun(data) {
 export function isPlatformQuotaRejection(error) {
   const messages = Array.isArray(error) ? error : [error];
   return messages.some(item => {
-    const raw = typeof item === "string" ? item : JSON.stringify(item || "");
+    const raw = item instanceof Error ? item.message : typeof item === "string" ? item : JSON.stringify(item || "");
     return /(?:weekly|per week|this week).{0,80}(?:limit|quota|maximum|too many)|(?:limit|quota|maximum).{0,80}(?:weekly|per week|this week)|too many (?:new )?(?:titles|submissions)/i.test(raw);
   });
 }
