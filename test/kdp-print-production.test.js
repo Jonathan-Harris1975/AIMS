@@ -62,7 +62,7 @@ test("print worker sorts pilot title first and rejects uncertain duplicate KDP p
   assert.throws(() => choosePrintCandidates([{ebookId:3},{ebookId:3}]),/Invalid/);
   const shelf = {refs:[{titleId:"ABC1234567",format:"paperback",title:"Book Seven"}], pagesScanned:1};
   assert.equal(existingPrintMatches(shelf,{title:"Book Seven"},"paperback").length,1);
-  assert.throws(() => existingPrintMatches({refs:[{format:"paperback"}],pagesScanned:1},
+  assert.throws(() => existingPrintMatches({refs:[{format:"paperback",titleId:"AC0123456789"}],pagesScanned:1},
     {title:"Unknown"},"paperback"),/unverified title/);
 });
 
