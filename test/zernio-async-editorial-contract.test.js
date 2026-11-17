@@ -23,7 +23,7 @@ test("terminal Zernio async replay returns the existing pollable job rather than
   const requestKey = "test-promo-" + process.pid + "-" + Date.now();
   const sessionId = stableZernioAsyncPayload(lane, {}, requestKey).sessionId;
   completeJob(asyncServiceJobType("zernio", lane), sessionId, {
-    result: { ok: false, error: "source delivery not confirmed" },
+    result: { ok: true, confirmed: true, scheduled: true },
   });
   await flushJobStoreWrites({ throwOnError: true });
   let calls = 0;
@@ -34,11 +34,46 @@ test("terminal Zernio async replay returns the existing pollable job rather than
   });
   assert.equal(receipt.sessionId, sessionId);
   assert.equal(receipt.status, "completed");
-  assert.equal(receipt.result.ok, false);
+  assert.equal(receipt.result.ok, true);
   assert.equal(receipt.started, false);
   assert.equal(receipt.duplicateJob, true);
   assert.equal(calls, 0);
   assert.ok(getPublicJob(asyncServiceJobType("zernio", lane), sessionId));
+});
+
+test("failed Zernio async job stays retryable until its bounded attempt limit, then fails closed with pollable identity", async () => {
+  const lane = "newsletter-promo";
+  const sessionId = stableZernioAsyncPayload(lane, {},
+    "test-failure-recovery-" + process.pid + "-" + Date.now()).sessionId;
+  const type = asyncServiceJobType("zernio", lane);
+  completeJob(type, sessionId, {
+    attempt: 2, result: { ok: false, confirmed: false, error: "source not verified" },
+  });
+  await flushJobStoreWrites({ throwOnError: true });
+  let calls = 0;
+  const oneMore = await startAsyncServiceRouteJob({
+    service: "zernio", lane, payload: { sessionId },
+    runner: async () => { calls++; return { ok: false, error: "source still unverified" }; },
+    reuseTerminal: true,
+  });
+  assert.equal(oneMore.started, true);
+  assert.equal(oneMore.sessionId, sessionId);
+  // Durable acceptance has happened; wait for the scheduled in-process worker
+  // to settle, rather than issuing a second write.
+  for (let i = 0; i < 40 && getPublicJob(type, sessionId)?.status !== "completed"; i++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.equal(calls, 1);
+  await flushJobStoreWrites({ throwOnError: true });
+  const terminal = await startAsyncServiceRouteJob({
+    service: "zernio", lane, payload: { sessionId },
+    runner: async () => { calls++; return { ok: true }; }, reuseTerminal: true,
+  });
+  assert.equal(terminal.started, false);
+  assert.equal(terminal.retryExhausted, true);
+  assert.equal(terminal.ok, false);
+  assert.equal(terminal.sessionId, sessionId);
+  assert.equal(calls, 1);
 });
 
 test("daily Zernio publication no longer invokes the separately scheduled weekly mini-series or podcast promotion", () => {
