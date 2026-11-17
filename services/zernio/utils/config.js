@@ -1,7 +1,6 @@
 import { THRESHOLDS } from "../../../config/thresholds.js";
 
 const DAILY_IMAGE_BASE = "https://images.jonathan-harris.online";
-const DEFAULT_STORED_IMAGE_URL = `${DAILY_IMAGE_BASE}/site-logo`;
 
 function trimString(value, fallback = "") {
   if (value === undefined || value === null) return fallback;
@@ -196,7 +195,9 @@ export const MINI_SERIES_CONFIG = {
   minimumSuitabilityScore: Math.max(0, Math.min(100, Number(process.env.ZERNIO_MINI_SERIES_MIN_SCORE || 78))),
   researchLookbackDays: Math.max(2, Number(process.env.ZERNIO_MINI_SERIES_LOOKBACK_DAYS || 7)),
   researchMaxItems: Math.max(4, Number(process.env.ZERNIO_MINI_SERIES_MAX_SOURCE_ITEMS || 12)),
-  fallbackImageUrl: trimString(process.env.ZERNIO_MINI_SERIES_IMAGE_URL, DEFAULT_STORED_IMAGE_URL),
+  // A generic site logo is not a suitable fallback for an evidence-led mini-series.
+  // Only explicitly approved mini-series artwork may be reused.
+  fallbackImageUrl: trimString(process.env.ZERNIO_MINI_SERIES_IMAGE_URL, ""),
   publishTimes: {
     tuesday: normaliseTime(process.env.ZERNIO_MINI_SERIES_TUESDAY_TIME, "19:30"),
     wednesday: normaliseTime(process.env.ZERNIO_MINI_SERIES_WEDNESDAY_TIME, "19:30"),
