@@ -89,20 +89,6 @@ async function clickSaveOnContentPage(page: Page): Promise<void> {
   await saveContentPage(page)
 }
 
-async function ensurePremiumColorSelected(page: Page): Promise<void> {
-  await page.evaluate(`(() => {
-    const premium = document.querySelector(
-      'input[name="data[print_book][ink_and_paper]"][value="COLOR_COLOR"]',
-    )
-    if (premium && !premium.checked) {
-      premium.checked = true
-      premium.dispatchEvent(new Event('change', { bubbles: true }))
-      premium.dispatchEvent(new Event('input', { bubbles: true }))
-    }
-  })()`)
-  await page.waitForTimeout(1000)
-}
-
 async function clearFailedContentUploads(page: Page): Promise<void> {
   await dismissKdpOverlays(page)
   await page.evaluate(`(() => {
@@ -282,7 +268,10 @@ async function completePrintContentOnce(
   }
 
   const settings = { ...spec.printSettings, assignFreeIsbn: true }
-  await fillPrintContentOnPage(page, settings)
+  const applied = await fillPrintContentOnPage(page, settings)
+  if (applied.skipped.length) {
+    errors.push(`KDP did not expose requested print options: ${applied.skipped.join(', ')}`)
+  }
   await page.waitForTimeout(2000)
   await saveContentPage(page).catch(() => {})
 
@@ -329,8 +318,8 @@ async function completePrintContentOnce(
   }
 
   const approved = await approveManuscriptIfNeeded(page)
-  if (!approved && !isSuccess(status.coverStatus)) {
-    errors.push('Could not launch previewer and approve manuscript.')
+  if (!approved) {
+    errors.push('Could not independently confirm print previewer approval.')
   }
   await clickSaveOnContentPage(page)
 
