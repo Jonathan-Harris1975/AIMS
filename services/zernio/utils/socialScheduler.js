@@ -11,6 +11,7 @@ import { addDays, nextWeekdayDateString, toScheduledDateTime, zonedDateString, z
 import { loadRecentRssContext } from "./feedContext.js";
 import { fetchBlogRssItems, fetchBlogRssOriginItems } from "./blogRssFeed.js";
 import { fetchPodcastPromoEpisode } from "./podcastRssFeed.js";
+import { resolvePodcastPromoDestination } from "../../podcast-growth/campaignLinks.js";
 import { getLaneHistory, getWeeklyTopicLedger, recordLaneSchedule, getQuizHistory, recordQuizSchedule, claimScheduleSlot, resetScheduleSlotClaim, completeScheduleSlot,
    releaseScheduleSlot, clearScheduleSlotClaim, isRecentSpotlightPerson, getRecentSpotlightPeople, recordSpotlightPerson, hasRecentSocialSource, recordUsedSocialSource } from "./state.js";
 import { resolveProfile, inspectZernioTargeting, listPosts, getPost, createPost, deletePost, getZernioApiKey } from "./zernioClient.js";
@@ -3113,11 +3114,17 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
     temperature: 0.36,
   });
 
-  const destination = PODCAST_PROMO_CONFIG.spotifyUrl;
+  const promotionLink = resolvePodcastPromoDestination({
+    mode: PODCAST_PROMO_CONFIG.linkMode,
+    episode,
+    spotifyUrl: PODCAST_PROMO_CONFIG.spotifyUrl,
+    websiteUrl: PODCAST_PROMO_CONFIG.websiteUrl,
+  });
+  const destination = promotionLink.url;
   const post = {
     title: generated.title,
     topic: generated.topic,
-    content: ensureHashtags(`${generated.content}\n\n${episode.mode === "preview" ? "Follow on Spotify" : "Listen on Spotify"}: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
+    content: ensureHashtags(`${generated.content}\n\n${promotionLink.label}: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
     imageUrl: options.imageUrl || "",
   };
   if (!normaliseSimple(generated.content).includes(normaliseSimple(episode.title))) {

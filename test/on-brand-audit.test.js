@@ -326,6 +326,48 @@ test("podcast website report lane produces RAMS-readable source-owner findings w
   assert.ok(findings.every((finding) => finding.ramsPolicy?.codePatchAllowed === false));
 });
 
+test("podcast audit reads the canonical published R2 feed and falls back to the public feed", async () => {
+  const { __podcastWebsiteReportsTestHooks: hooks } = await import("../audits/utils/podcastWebsiteReports.js");
+  const xml = "<rss><channel><item><title>Fixture episode</title></item></channel></rss>";
+  const requests = [];
+  const r2 = {
+    getObjectAsText: async (...args) => { requests.push(args); return xml; },
+    buildPublicUrl: (_alias, key) => `https://podcast-rss-feeds.jonathan-harris.online/${key}`,
+  };
+  const fromR2 = await hooks.readPodcastRssXml({ r2, configuredUrl: "" });
+  assert.deepEqual(requests, [["podcastRss", "turing-torch.xml"]]);
+  assert.equal(fromR2.xml, xml);
+  assert.match(fromR2.method, /turing-torch\.xml/);
+  assert.deepEqual(fromR2.attempts, []);
+
+  const originalFetch = globalThis.fetch;
+  const fetchedUrls = [];
+  try {
+    globalThis.fetch = async (url) => {
+      fetchedUrls.push(String(url));
+      return { ok: true, text: async () => xml };
+    };
+    const unavailableR2 = { getObjectAsText: async () => { throw new Error("R2 unavailable"); } };
+    const publicFallback = await hooks.readPodcastRssXml({ r2: unavailableR2, configuredUrl: "" });
+    assert.equal(publicFallback.xml, xml);
+    assert.equal(publicFallback.method, "public podcast RSS fetch");
+    assert.equal(publicFallback.attempts.length, 1);
+    assert.deepEqual(fetchedUrls, ["https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml"]);
+
+    const configuredFallback = await hooks.readPodcastRssXml({
+      r2: unavailableR2, configuredUrl: "https://custom.example.test/podcasts/",
+    });
+    assert.equal(configuredFallback.feedUrl, "https://custom.example.test/podcasts/turing-torch.xml");
+    assert.equal(fetchedUrls.at(-1), configuredFallback.feedUrl);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(hooks.resolvePodcastRssFeedUrl(""), "https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml");
+  assert.equal(hooks.resolvePodcastRssFeedUrl("https://custom.example.test/podcasts/"), "https://custom.example.test/podcasts/turing-torch.xml");
+  assert.equal(hooks.resolvePodcastRssFeedUrl("https://custom.example.test/custom.xml"), "https://custom.example.test/custom.xml");
+});
+
 test("/audits/podcast-website/health mounts the separate podcast and transcript report lane", async () => {
   const { default: router } = await import(`../audits/routes/index.js?podcast-report-route=${Date.now()}`);
   const app = express();
