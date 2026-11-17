@@ -70,11 +70,6 @@ const DEFAULT_PLAYBOOK: PlaybookRule[] = [
     contexts: ['content', 'publish', 'any'],
   },
   {
-    pattern: /minimum of 72|only has \d+ page\(s\) but must have a minimum of 72/i,
-    actions: ['select_premium_color'],
-    contexts: ['content', 'publish', 'any'],
-  },
-  {
     pattern: /timeout.*exceeded|timed out waiting/i,
     actions: ['dismiss_overlays', 'reload_page', 'wait_processing'],
   },
