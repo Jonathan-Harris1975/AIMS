@@ -153,3 +153,20 @@ export async function listKnownPrintJobs() {
     ebookId: Number(row.ebook_id), format: String(row.format), titleId: String(row.title_id),
   }));
 }
+
+/** Unknown remote KDP outcomes must be reconciled against signed-in Bookshelf
+ * state before allowing any additional creation or first submission. */
+export async function listPrintJobsForReconciliation() {
+  await ensurePrintStateTables();
+  const response = await queryKdpD1(
+    "SELECT ebook_id,format,state,title_id,manifest_key,isbn,error_code,created_at,updated_at" +
+    " FROM kdp_print_automation WHERE state IN ('creating','submitting','uncertain')" +
+    " ORDER BY updated_at ASC,ebook_id ASC,format ASC"
+  );
+  return (response.results || []).map(row => ({
+    ebookId: Number(row.ebook_id), format: String(row.format), state: String(row.state),
+    titleId: row.title_id || null, manifestKey: row.manifest_key || null,
+    isbn: row.isbn || null, errorCode: row.error_code || null,
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  }));
+}
