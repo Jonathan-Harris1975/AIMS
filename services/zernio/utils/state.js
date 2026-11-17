@@ -366,6 +366,8 @@ export function recordLaneSchedule(laneKey, entry) {
       topic: entry?.topic || null,
       title: entry?.title || null,
       imageUrl: entry?.imageUrl || null,
+      imageStatus: entry?.imageStatus || null,
+      imageFallbackReason: entry?.imageFallbackReason || null,
       recordedAt: new Date().toISOString(),
     },
   ]);
