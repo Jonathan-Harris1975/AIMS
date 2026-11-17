@@ -1,6 +1,7 @@
 import express from "express";
 import { z } from "zod";
-import { requestDedupe } from "../../shared/utils/requestDedupe.js";
+import { requestDedupe, getRequestIdempotencyKey } from "../../shared/utils/requestDedupe.js";
+import { stableZernioAsyncPayload } from "../utils/asyncJobIdentity.js";
 import {
   validateBody,
   zernioDailyBodySchema,
@@ -164,52 +165,10 @@ for (const laneKey of Object.keys(LANE_CONFIG)) {
       ? buildAndScheduleDailyLaneAccountVariants(laneKey, payload)
       : buildAndScheduleDailyLane(laneKey, payload);
 
-  const runDailyLane = async (payload) => {
-    const daily = await runDailyLaneBase(payload);
-    const extras = {};
-
-    // MAST does not need extra weekday triggers. The existing Monday and
-    // Thursday Zernio runs open the door; AIMS composes the extra weekly work.
-    if (laneKey === "monday") {
-      try {
-        extras.weeklyMiniSeries = await buildAndScheduleWeeklyMiniSeries({
-          weekStartDate: payload.publishDate,
-          dryRun: payload.dryRun,
-          profileName: payload.profileName,
-          accountId: payload.accountId,
-          apiKey: payload.apiKey,
-        });
-      } catch (error) {
-        extras.weeklyMiniSeries = { ok: false, failed: true, error: error?.message || String(error) };
-      }
-    }
-
-    if (laneKey === "thursday") {
-      try {
-        extras.podcastPromotion = await buildAndSchedulePodcastThursdayPromo({
-          publishDate: payload.publishDate,
-          dryRun: payload.dryRun,
-          profileName: payload.profileName,
-          accountId: payload.accountId,
-          apiKey: payload.apiKey,
-        });
-      } catch (error) {
-        extras.podcastPromotion = { ok: false, failed: true, error: error?.message || String(error) };
-      }
-    }
-
-    const failedExtras = Object.entries(extras)
-      .filter(([, result]) => result?.ok === false || result?.failed === true || result?.partialFailure === true)
-      .map(([name, result]) => ({ name, error: result?.error || result?.reason || "weekly extra did not confirm success" }));
-
-    return {
-      ...daily,
-      ok: daily?.ok !== false && failedExtras.length === 0,
-      partialFailure: daily?.partialFailure === true || failedExtras.length > 0,
-      issues: [...(Array.isArray(daily?.issues) ? daily.issues : []), ...failedExtras],
-      extras,
-    };
-  };
+  // The Monday mini-series and Thursday podcast promotion now have their own
+  // MAST schedules and terminal receipts. Never turn a successful daily post
+  // into a failed daily operation because an independent weekly task failed.
+  const runDailyLane = runDailyLaneBase;
 
   router.post(
     `/daily/${laneKey}`,
@@ -268,7 +227,6 @@ router.post(
 
 router.post(
   "/mini-series/weekly",
-  requestDedupe("zernio:mini-series:weekly"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioMiniSeriesBodySchema, req.body);
     if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
@@ -277,7 +235,8 @@ router.post(
       const job = await startAsyncServiceRouteJob({
         service: "zernio",
         lane: "weekly-mini-series",
-        payload: parsed.data,
+        payload: stableZernioAsyncPayload("weekly-mini-series", parsed.data, getRequestIdempotencyKey(req)),
+        reuseTerminal: true,
         req,
         runner: buildAndScheduleWeeklyMiniSeries,
         metadata: { route: "/zernio/mini-series/weekly" },
@@ -294,7 +253,6 @@ router.post(
 // independently, and a failure must never delay the AI Edge email sender.
 router.post(
   "/newsletter/promo",
-  requestDedupe("zernio:newsletter:promo"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioDailyBodySchema, req.body);
     if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
@@ -304,7 +262,9 @@ router.post(
     }
     if (shouldRunAsyncServiceRoute(req)) {
       const job = await startAsyncServiceRouteJob({
-        service: "zernio", lane: "newsletter-promo", payload: parsed.data,
+        service: "zernio", lane: "newsletter-promo",
+        payload: stableZernioAsyncPayload("newsletter-promo", parsed.data, getRequestIdempotencyKey(req)),
+        reuseTerminal: true,
         req, runner: buildAndScheduleNewsletterPromo,
         metadata: { route: "/zernio/newsletter/promo" },
       });
@@ -316,7 +276,6 @@ router.post(
 
 router.post(
   "/podcast/thursday-promo",
-  requestDedupe("zernio:podcast:thursday-promo"),
   asyncRoute(async (req, res) => {
     const parsed = validateBody(zernioPodcastPromoBodySchema, req.body);
     if (!parsed.ok) return res.status(400).json({ ok: false, error: parsed.error });
@@ -325,7 +284,8 @@ router.post(
       const job = await startAsyncServiceRouteJob({
         service: "zernio",
         lane: "podcast-thursday-promo",
-        payload: parsed.data,
+        payload: stableZernioAsyncPayload("podcast-thursday-promo", parsed.data, getRequestIdempotencyKey(req)),
+        reuseTerminal: true,
         req,
         runner: buildAndSchedulePodcastThursdayPromo,
         metadata: { route: "/zernio/podcast/thursday-promo" },
