@@ -40,8 +40,8 @@ Zernio owns AIMS static/social scheduling: seven daily editorial lanes, blog-RSS
 
 ## Special lanes
 
-- **Mini-series:** planned weekly research can skip a weak week; each part must remain evidence-backed and distinct.
-- **Thursday podcast promotion:** image/static social promotion for Turing's Torch. Audio promotion remains owned by the podcast lane.
+- **Mini-series:** MAST invokes /zernio/mini-series/weekly independently each Monday at 14:30 Europe/London; planned weekly research can skip a weak week and every published part must remain evidence-backed and distinct. A failed series must never change the outcome of an otherwise successful Monday daily post.
+- **Thursday podcast promotion:** MAST invokes /zernio/podcast/thursday-promo independently at 14:30 Europe/London. This is an image/static social promotion for Turing's Torch; audio remains owned by the podcast lane. A failed promotion must never change Thursday's daily-post result.
 - **eBooks:** scheduled Tuesday, Thursday and Saturday; the main post requires a valid HTTPS book URL and passes eBook conversion/content gates.
 - **Quiz:** schedules separate question and answer posts with distinct artwork.
 - **Blog RSS:** publishes the daily blog-social package after the blog service has produced it.
