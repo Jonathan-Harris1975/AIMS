@@ -153,7 +153,7 @@ test("approved image upload is retried without another paid generation and last-
   assert.match(source, /type: "curated_static_fallback"/);
   const shared = await readFile(new URL("../services/artwork/utils/artwork.js", import.meta.url), "utf8");
   assert.match(shared, /maxQaRegenerations: 0, providerAttempts: 1/);
-  assert.match(shared, /SOCIAL_ARTWORK_FINAL_QA_RESCUE_ENABLED/);
+  assert.match(shared, /selectRepairableSocialArtworkCandidate\(qaCandidates\)/);
   assert.match(source, /persist: true/);
   assert.match(defaults, /^SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS=1$/m);
   assert.match(defaults, /^ZERNIO_ARTWORK_UPLOAD_ATTEMPTS=3$/m);
