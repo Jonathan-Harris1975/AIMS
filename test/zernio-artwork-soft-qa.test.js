@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { artworkQaRegenerationLimit, selectPublishableSocialArtworkCandidate, selectRepairableSocialArtworkCandidate, buildFinalSocialArtworkRescuePrompt, buildQaRepairPrompt } from "../services/artwork/utils/artwork.js";
+import {
+  artworkQaRegenerationLimit,
+  selectPublishableSocialArtworkCandidate,
+  selectRepairableSocialArtworkCandidate,
+  buildFinalSocialArtworkRescuePrompt,
+  buildQaRepairPrompt,
+} from "../services/artwork/utils/artwork.js";
 import { buildArtworkVisualQaPrompt } from "../services/artwork/utils/artworkVisualQa.js";
 import { readFile } from "node:fs/promises";
 import { getArtworkProviderAttempts } from "../services/artwork/utils/openrouterImagePayload.js";
