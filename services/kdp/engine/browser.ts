@@ -21,6 +21,26 @@ export async function launchKdpBrowser(headless = true): Promise<Browser> {
 
 let browserQueue = Promise.resolve()
 
+export async function claimExclusiveKdpBrowserLease(
+  claim = claimDurableLease,
+  requireRemote = process.env.NODE_ENV === 'production',
+) {
+  const acquired = await claim({
+    namespace: 'kdp-account', key: 'browser-session',
+    pendingTtlMs: 110 * 60_000, completedTtlMs: 5_000,
+    metadata: { purpose: 'exclusive authenticated KDP browser transaction' },
+  })
+  if (!acquired.claimed || !acquired.lease) {
+    throw new Error('KDP account session is busy in another production worker; retry after its lease releases.')
+  }
+  if (requireRemote && acquired.lease.backend !== 'r2') {
+    throw new Error('Live KDP browser operations require the distributed R2 account-session lock.')
+  }
+  return acquired
+}
+
+
+
 export async function withKdpBrowserContext<T>(
   fn: (context: BrowserContext) => Promise<T>,
   { autoLogin = true, retryExpired = true, headless = true, viewport = { width: 1920, height: 1080 } } = {},
@@ -35,17 +55,7 @@ export async function withKdpBrowserContext<T>(
   // browserQueue alone cannot protect multiple Koyeb workers or instances.
   let lease: Awaited<ReturnType<typeof claimDurableLease>> | undefined
   try {
-    lease = await claimDurableLease({
-      namespace: 'kdp-account', key: 'browser-session',
-      pendingTtlMs: 110 * 60_000, completedTtlMs: 5_000,
-      metadata: { purpose: 'exclusive authenticated KDP browser transaction' },
-    })
-    if (!lease.claimed || !lease.lease) {
-      throw new Error('KDP account session is busy in another production worker; retry after its lease releases.')
-    }
-    if (process.env.NODE_ENV === 'production' && lease.lease.backend !== 'r2') {
-      throw new Error('Live KDP browser operations require the distributed R2 account-session lock.')
-    }
+    lease = await claimExclusiveKdpBrowserLease()
     return await withKdpBrowserContextOnce(fn, { autoLogin, retryExpired, headless, viewport })
   } finally {
     if (lease?.claimed && lease.lease) {
