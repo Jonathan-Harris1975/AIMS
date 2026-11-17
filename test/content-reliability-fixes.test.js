@@ -294,7 +294,8 @@ test("Zernio keeps fresh generated artwork primary and permits the curated store
   assert.match(socialBlog, /reason: "artwork-fallback-unavailable-after-retries"/);
   assert.match(socialBlog, /if \(isGeneratedSocialBlogArtwork\(art\)\)/);
   assert.doesNotMatch(zernioConfig, /ZERNIO_BLOG_RSS_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
-  assert.match(zernioConfig, /ZERNIO_MINI_SERIES_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
+  assert.match(zernioConfig, /ZERNIO_MINI_SERIES_IMAGE_URL, ""/);
+  assert.doesNotMatch(zernioConfig, /DEFAULT_STORED_IMAGE_URL/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
   assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
   assert.match(env, /^BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
