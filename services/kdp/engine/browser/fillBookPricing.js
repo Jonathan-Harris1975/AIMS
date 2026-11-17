@@ -5,8 +5,11 @@
   }
 
   const setByName = (name, value) => {
-    const el = document.querySelector(`input[name="${name}"]`)
-    if (el) {
+    const candidates = format === 'hardcover' && name.includes('[print_book]')
+      ? [name.replace('[print_book]', '[hardcover_book]'), name] : [name]
+    for (const candidate of candidates) {
+      const el = document.querySelector(`input[name="${candidate}"]`)
+      if (!el) continue
       el.value = value
       dispatchInput(el)
       return true

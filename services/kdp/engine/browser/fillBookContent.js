@@ -1,4 +1,4 @@
-(changes) => {
+(changes, format = 'paperback') => {
   const filled = []
   const skipped = []
 
@@ -7,9 +7,18 @@
     el.dispatchEvent(new Event('change', { bubbles: true }))
   }
 
+  // The KDP hardcover content form uses hardcover_book in some layouts.
+  // Only select a field that actually exists; never claim a write from a missing input.
+  const namesFor = (name) => {
+    if (!name.includes('[print_book]')) return [name]
+    const hardcoverName = name.replace('[print_book]', '[hardcover_book]')
+    return format === 'hardcover' ? [hardcoverName, name] : [name, hardcoverName]
+  }
+
   const clickRadio = (name, value) => {
-    const el = document.querySelector(`input[name="${name}"][value="${value}"]`)
-    if (el) {
+    for (const candidate of namesFor(name)) {
+      const el = document.querySelector(`input[name="${candidate}"][value="${value}"]`)
+      if (!el) continue
       el.checked = true
       dispatch(el)
       return true
@@ -18,8 +27,9 @@
   }
 
   const setHidden = (name, value) => {
-    const el = document.querySelector(`input[name="${name}"]`)
-    if (el) {
+    for (const candidate of namesFor(name)) {
+      const el = document.querySelector(`input[name="${candidate}"]`)
+      if (!el) continue
       el.value = String(value)
       dispatch(el)
       return true
@@ -84,67 +94,62 @@
 
   if (changes.hasPublisherBarcode !== undefined) {
     const val = changes.hasPublisherBarcode ? 'true' : 'false'
-    setHidden('data[print_book][has_publisher_barcode]', val)
-    const check = document.getElementById('data-print-book-has-publisher-barcode')
+    const hiddenSet = setHidden('data[print_book][has_publisher_barcode]', val)
+    const checkIds = format === 'hardcover'
+      ? ['data-hardcover-book-has-publisher-barcode', 'data-print-book-has-publisher-barcode']
+      : ['data-print-book-has-publisher-barcode', 'data-hardcover-book-has-publisher-barcode']
+    const check = document.getElementById(checkIds[0]) || document.getElementById(checkIds[1])
     if (check) {
       check.checked = changes.hasPublisherBarcode
       dispatch(check)
     }
-    filled.push('hasPublisherBarcode')
+    if (hiddenSet || check) filled.push('hasPublisherBarcode')
+    else skipped.push('hasPublisherBarcode')
   }
 
   const setSelectById = (id, value) => {
     const el = document.getElementById(id)
     if (!el) return false
-    el.value = value
+    el.value = String(value)
     dispatch(el)
-    return true
+    return el.value === String(value)
   }
 
   if (changes.aiTextAmount !== undefined) {
-    setSelectById('generative-ai-questionnaire-text', changes.aiTextAmount)
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][text][amount_and_editing]',
-      changes.aiTextAmount,
-    )
-    filled.push('aiTextAmount')
+    const selected = setSelectById('generative-ai-questionnaire-text', changes.aiTextAmount)
+    const stored = setHidden('data[print_book][generative_ai_questionnaire][text][amount_and_editing]', changes.aiTextAmount)
+    const ok = selected || stored
+    if (ok) filled.push('aiTextAmount')
+    else skipped.push('aiTextAmount')
   }
   if (changes.aiTextTool !== undefined) {
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][text][tools][0]',
-      changes.aiTextTool,
-    )
-    filled.push('aiTextTool')
+    if (setHidden('data[print_book][generative_ai_questionnaire][text][tools][0]', changes.aiTextTool)) {
+      filled.push('aiTextTool')
+    } else skipped.push('aiTextTool')
   }
   if (changes.aiImagesAmount !== undefined) {
-    setSelectById('generative-ai-questionnaire-images', changes.aiImagesAmount)
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][images][amount_and_editing]',
-      changes.aiImagesAmount,
-    )
-    filled.push('aiImagesAmount')
+    const selected = setSelectById('generative-ai-questionnaire-images', changes.aiImagesAmount)
+    const stored = setHidden('data[print_book][generative_ai_questionnaire][images][amount_and_editing]', changes.aiImagesAmount)
+    const ok = selected || stored
+    if (ok) filled.push('aiImagesAmount')
+    else skipped.push('aiImagesAmount')
   }
   if (changes.aiImagesTool !== undefined) {
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][images][tools][0]',
-      changes.aiImagesTool,
-    )
-    filled.push('aiImagesTool')
+    if (setHidden('data[print_book][generative_ai_questionnaire][images][tools][0]', changes.aiImagesTool)) {
+      filled.push('aiImagesTool')
+    } else skipped.push('aiImagesTool')
   }
   if (changes.aiTranslationsAmount !== undefined) {
-    setSelectById('generative-ai-questionnaire-translations', changes.aiTranslationsAmount)
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][translations][amount_and_editing]',
-      changes.aiTranslationsAmount,
-    )
-    filled.push('aiTranslationsAmount')
+    const selected = setSelectById('generative-ai-questionnaire-translations', changes.aiTranslationsAmount)
+    const stored = setHidden('data[print_book][generative_ai_questionnaire][translations][amount_and_editing]', changes.aiTranslationsAmount)
+    const ok = selected || stored
+    if (ok) filled.push('aiTranslationsAmount')
+    else skipped.push('aiTranslationsAmount')
   }
   if (changes.containsAiContent !== undefined) {
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][contains_ai_content]',
-      changes.containsAiContent ? 'YES' : 'NO',
-    )
-    filled.push('containsAiContent')
+    if (setHidden('data[print_book][generative_ai_questionnaire][contains_ai_content]',
+      changes.containsAiContent ? 'YES' : 'NO')) filled.push('containsAiContent')
+    else skipped.push('containsAiContent')
   }
 
   if (changes.assignFreeIsbn) {

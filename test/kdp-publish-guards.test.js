@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { publishBlockers } from "../services/kdp/engine/kdpPublish.ts";
+import { publishBook, publishBlockers } from "../services/kdp/engine/kdpPublish.ts";
 import { clickPublish } from "../services/kdp/engine/kdpWizard.ts";
 
 test("publishing is blocked on failed steps even when their error list is empty", () => {
@@ -18,4 +18,13 @@ test("publishing never falls back to an arbitrary visible submit button", async 
     waitForTimeout: async () => {},
   };
   await assert.rejects(clickPublish(page), /Could not click KDP button/);
+});
+
+test("KDP print dry-runs cannot allocate new title creation slots", async () => {
+  for (const format of ["paperback", "hardcover"]) {
+    await assert.rejects(
+      publishBook({ format, create: true, dryRun: true, publish: false }),
+      /Dry-run cannot create a KDP title/,
+    );
+  }
 });

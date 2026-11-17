@@ -70,11 +70,6 @@ const DEFAULT_PLAYBOOK: PlaybookRule[] = [
     contexts: ['content', 'publish', 'any'],
   },
   {
-    pattern: /minimum of 72|only has \d+ page\(s\) but must have a minimum of 72/i,
-    actions: ['select_premium_color'],
-    contexts: ['content', 'publish', 'any'],
-  },
-  {
     pattern: /timeout.*exceeded|timed out waiting/i,
     actions: ['dismiss_overlays', 'reload_page', 'wait_processing'],
   },
@@ -182,15 +177,8 @@ export async function executeRecoveryAction(
       await selectPdfCoverUploadOption(page)
       break
     case 'select_premium_color':
-      await page.evaluate(`(() => {
-        const el = document.querySelector('input[name="data[print_book][ink_and_paper]"][value="COLOR_COLOR"]')
-        if (el) {
-          el.checked = true
-          el.dispatchEvent(new Event('change', { bubbles: true }))
-          el.dispatchEvent(new Event('input', { bubbles: true }))
-        }
-      })()`)
-      await page.waitForTimeout(1500)
+      // Retired action may persist in earlier recovery learnings. Never silently
+      // change print colour/paper costs to bypass a minimum-page validation.
       break
     case 'bypass_server_busy':
       await bypassServerBusy(page)

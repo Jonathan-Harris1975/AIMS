@@ -22,11 +22,11 @@ const READ_CONTENT_STATUS_FN = `(() => {
   }
   const isbnEl = document.getElementById('print-isbn-free-isbn')
   return {
-    manuscriptStatus: read(['data[print_book][publisher_interior][status]']),
-    coverStatus: read(['data[print_book][publisher_cover][status]']),
-    interiorFileName: read(['data[print_book][publisher_interior][source_file_name]']),
-    coverFileName: read(['data[print_book][publisher_cover][source_file_name]']),
-    isbn: (isbnEl && isbnEl.value ? isbnEl.value.trim() : '') || read(['data[view][free_isbn]']),
+    manuscriptStatus: read(['data[hardcover_book][publisher_interior][status]', 'data[print_book][publisher_interior][status]']),
+    coverStatus: read(['data[hardcover_book][publisher_cover][status]', 'data[print_book][publisher_cover][status]']),
+    interiorFileName: read(['data[hardcover_book][publisher_interior][source_file_name]', 'data[print_book][publisher_interior][source_file_name]']),
+    coverFileName: read(['data[hardcover_book][publisher_cover][source_file_name]', 'data[print_book][publisher_cover][source_file_name]']),
+    isbn: (isbnEl && isbnEl.value ? isbnEl.value.trim() : '') || read(['data[view][free_isbn]', 'data[hardcover_book][owner_isbn]']),
   }
 })()`
 
@@ -47,8 +47,10 @@ export async function selectPdfCoverUploadOption(page: Page): Promise<void> {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await dismissKdpOverlays(page)
   await page.evaluate(`(() => {
-    const sel =
-      '#data-print-book-publisher-cover-choice-accordion [data-a-accordion-row-name="UPLOAD"] a[data-action="a-accordion"]'
+    const sel = [
+      '#data-hardcover-book-publisher-cover-choice-accordion [data-a-accordion-row-name="UPLOAD"] a[data-action="a-accordion"]',
+      '#data-print-book-publisher-cover-choice-accordion [data-a-accordion-row-name="UPLOAD"] a[data-action="a-accordion"]',
+    ].join(', ')
     const el = document.querySelector(sel)
     if (el) {
       el.scrollIntoView({ block: 'center' })
@@ -63,7 +65,7 @@ export async function waitForCoverUploadSuccessElement(
   options: { timeoutMs?: number } = {},
 ): Promise<void> {
   const timeoutMs = options.timeoutMs ?? 600_000
-  await page.waitForSelector('#data-print-book-publisher-cover-file-upload-success', {
+  await page.waitForSelector('#data-hardcover-book-publisher-cover-file-upload-success, #data-print-book-publisher-cover-file-upload-success', {
     timeout: timeoutMs,
   })
 }
