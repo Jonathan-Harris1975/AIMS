@@ -116,15 +116,18 @@ async function clearFailedContentUploads(page: Page): Promise<void> {
   await page.waitForTimeout(2500)
 }
 
-async function uploadInteriorFile(page: Page, filePath: string): Promise<void> {
+async function uploadInteriorFile(page: Page, format: KdpBookFormat, filePath: string): Promise<void> {
   await revealContentUpload(page, 'interior')
-  const input = page.locator('#data-print-book-publisher-interior-file-upload-AjaxInput')
+  const input = page.locator(format === 'hardcover'
+    ? '#data-hardcover-book-publisher-interior-file-upload-AjaxInput'
+    : '#data-print-book-publisher-interior-file-upload-AjaxInput')
+  if (!(await input.count())) throw new KdpClientError(`No ${format} interior upload input on KDP content page.`)
   await input.setInputFiles(filePath)
   await waitForUploadSuccess(page, path.basename(filePath))
   await waitForContentFileStatus(page, 'manuscript', { timeoutMs: 300_000 }).catch(() => {})
 }
 
-async function uploadCoverFile(page: Page, filePath: string): Promise<void> {
+async function uploadCoverFile(page: Page, format: KdpBookFormat, filePath: string): Promise<void> {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await selectPdfCoverUploadOption(page)
   for (let i = 0; i < 3; i++) {
@@ -132,7 +135,9 @@ async function uploadCoverFile(page: Page, filePath: string): Promise<void> {
     await page.waitForTimeout(500)
   }
 
-  const coverInput = page.locator('#data-print-book-publisher-cover-file-upload-AjaxInput')
+  const coverInput = page.locator(format === 'hardcover'
+    ? '#data-hardcover-book-publisher-cover-file-upload-AjaxInput'
+    : '#data-print-book-publisher-cover-file-upload-AjaxInput')
   await coverInput.waitFor({ state: 'attached', timeout: 30_000 })
   await coverInput.setInputFiles(filePath)
 
@@ -158,7 +163,7 @@ async function revealContentUpload(page: Page, fileType: 'interior' | 'cover'): 
       await page.waitForTimeout(1500)
     }
   } else {
-    const pdfBtn = page.locator('#data-print-book-publisher-cover-pdf-only-file-upload-browse-button-announce')
+    const pdfBtn = page.locator('#data-hardcover-book-publisher-cover-pdf-only-file-upload-browse-button-announce, #data-print-book-publisher-cover-pdf-only-file-upload-browse-button-announce').first()
     if (await pdfBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await pdfBtn.click({ timeout: 10_000 })
       await page.waitForTimeout(1500)
@@ -264,8 +269,8 @@ async function completePrintContentOnce(
 ): Promise<Omit<CompletePrintContentResult, 'recoveryLog'>> {
   const errors: string[] = []
 
-  if (format !== 'paperback') {
-    throw new KdpClientError('completePrintContentOnPage supports paperback only.')
+  if (format !== 'paperback' && format !== 'hardcover') {
+    throw new KdpClientError('Complete print content supports paperback and hardcover only.')
   }
 
   await openContentPage(page, format, titleId)
@@ -278,7 +283,6 @@ async function completePrintContentOnce(
 
   const settings = { ...spec.printSettings, assignFreeIsbn: true }
   await fillPrintContentOnPage(page, settings)
-  await ensurePremiumColorSelected(page)
   await page.waitForTimeout(2000)
   await saveContentPage(page).catch(() => {})
 
@@ -286,7 +290,6 @@ async function completePrintContentOnce(
   const interiorName = spec.interiorPath
     ? path.basename(spec.interiorPath).replace(/\.[^.]+$/, '')
     : ''
-  const coverName = spec.coverPath ? path.basename(spec.coverPath).replace(/\.[^.]+$/, '') : ''
 
   const isbn = await assignFreeKdpIsbn(page)
   if (!isbn) errors.push('Could not assign free KDP ISBN.')
@@ -304,7 +307,7 @@ async function completePrintContentOnce(
       throw new KdpClientError(`Cover file not found: ${spec.coverPath}`)
     }
     try {
-      await uploadCoverFile(page, spec.coverPath)
+      await uploadCoverFile(page, format, spec.coverPath)
       status = await readContentFileStatus(page)
       await saveContentPage(page).catch(() => {})
     } catch (e) {
@@ -317,7 +320,7 @@ async function completePrintContentOnce(
       throw new KdpClientError(`Interior file not found: ${spec.interiorPath}`)
     }
     try {
-      await uploadInteriorFile(page, spec.interiorPath)
+      await uploadInteriorFile(page, format, spec.interiorPath)
       status = await readContentFileStatus(page)
       await saveContentPage(page).catch(() => {})
     } catch (e) {
@@ -347,11 +350,9 @@ async function completePrintContentOnce(
     isSuccess(status.manuscriptStatus) || refreshed?.manuscriptStatus === 'SUCCESS'
 
   return {
-    interiorUploaded: Boolean(
-      !spec.interiorPath ||
-        interiorOk ||
-        (interiorName && refreshed?.interiorFileName.includes(interiorName)),
-    ),
+    // A matching filename alone is not evidence that KDP finished processing.
+    interiorUploaded: Boolean(!spec.interiorPath || (interiorOk &&
+      (!refreshed?.interiorFileName || refreshed.interiorFileName.includes(interiorName)))),
     coverUploaded: Boolean(!spec.coverPath || coverOk),
     isbn: refreshed?.isbn || isbn,
     errors,
@@ -364,8 +365,8 @@ export async function completePrintContentOnPage(
   format: KdpBookFormat,
   spec: CompletePrintContentSpec,
 ): Promise<CompletePrintContentResult> {
-  if (format !== 'paperback') {
-    throw new KdpClientError('completePrintContentOnPage supports paperback only.')
+  if (format !== 'paperback' && format !== 'hardcover') {
+    throw new KdpClientError('Complete print content supports paperback and hardcover only.')
   }
 
   const { result, recoveryLog } = await runWithRecovery(
