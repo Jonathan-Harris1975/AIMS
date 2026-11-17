@@ -16,7 +16,7 @@ export const KDP_PRINT_RETAIL_CEILINGS = Object.freeze({
   GBP: Object.freeze({ paperback: 19.99, hardcover: 27.99 }),
   USD: Object.freeze({ paperback: 29.99, hardcover: 39.99 }),
 });
-export const KDP_PRINT_PRICING_POLICY_VERSION = "2026-11-17-v2";
+export const KDP_PRINT_PRICING_POLICY_VERSION = "2026-11-17-v3";
 
 function charmPriceAtOrAbove(value) {
   if (!Number.isFinite(value) || value <= 0) throw new RangeError("Invalid print price.");
