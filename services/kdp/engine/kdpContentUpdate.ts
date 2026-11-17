@@ -234,6 +234,16 @@ async function waitForUploadSuccess(page: Page, fileName: string): Promise<void>
   await page.waitForTimeout(3000)
 }
 
+export function requiredPrintOptionNames(settings: KdpPrintContentSettings): Set<string> {
+  const required = new Set(['trimSize', 'inkAndPaper', 'interiorHasBleed', 'containsAiContent'])
+  if (settings.containsAiContent === true) {
+    for (const field of ['aiTextAmount', 'aiImagesAmount', 'aiTranslationsAmount']) required.add(field)
+    if (settings.aiTextAmount && settings.aiTextAmount.toLowerCase() !== 'none') required.add('aiTextTool')
+    if (settings.aiImagesAmount && settings.aiImagesAmount.toLowerCase() !== 'none') required.add('aiImagesTool')
+  }
+  return required
+}
+
 export type CompletePrintContentSpec = {
   interiorPath: string
   coverPath: string
@@ -277,16 +287,7 @@ async function completePrintContentOnce(
 
   const settings = { ...spec.printSettings, assignFreeIsbn: true }
   const applied = await fillPrintContentOnPage(page, settings, format)
-  const requiredOptions = new Set([
-    'trimSize', 'inkAndPaper', 'interiorHasBleed', 'containsAiContent',
-  ])
-  // Amazon requires AI breakdown fields only when the existing Kindle
-  // disclosure actually says YES. A NO declaration has no AI tools to copy.
-  if (settings.containsAiContent === true) {
-    for (const field of ['aiTextAmount', 'aiImagesAmount', 'aiTranslationsAmount']) requiredOptions.add(field)
-    if (settings.aiTextAmount && settings.aiTextAmount.toLowerCase() !== 'none') requiredOptions.add('aiTextTool')
-    if (settings.aiImagesAmount && settings.aiImagesAmount.toLowerCase() !== 'none') requiredOptions.add('aiImagesTool')
-  }
+  const requiredOptions = requiredPrintOptionNames(settings)
   const missingRequired = applied.skipped.filter((key) => requiredOptions.has(key))
   const missingOptional = applied.skipped.filter((key) => !requiredOptions.has(key))
   if (missingRequired.length) {
