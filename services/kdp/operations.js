@@ -31,6 +31,7 @@ import {
 } from "./storage.js";
 
 import { runOptimisationUpdates } from "./optimisationUpdates.js";
+import { reconcileRoyaltyFloor } from "./royaltyFloorRollout.js";
 import { buildPrintPreflight, getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 
 const router = express.Router();
@@ -589,6 +590,18 @@ router.post("/audit/metadata/update/batch", requestDedupe("kdp:metadata-update-b
   // Amazon KDP changes are always processed sequentially to prevent parallel browser writes.
   return { ok: true, ...(await updateBookMetadataBatch(updates, { dryRun: body.dryRun !== false })) };
 })));
+
+// Separate from research optimisation: the existing 40-book royalty shortfall is
+// a mandatory pricing policy correction, not a competitor-driven proposal.
+router.get("/audit/pricing/royalty-floor", asyncRoute(async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json(await reconcileRoyaltyFloor({ dryRun: true }));
+}));
+
+router.post("/audit/pricing/royalty-floor/run", requestDedupe("kdp:royalty-floor-rollout"), asyncRoute(async (req, res) =>
+  startJob(req, res, "audit-royalty-floor", () =>
+    reconcileRoyaltyFloor({ dryRun: req.body?.dryRun !== false })),
+));
 
 router.post("/audit/pricing/update", requestDedupe("kdp:pricing-update"), asyncRoute(async (req, res) => startJob(req, res, "audit-pricing-update", async () => {
   const body = requireObjectBody(req.body);
