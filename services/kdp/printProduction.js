@@ -12,7 +12,7 @@ import { planPrintPrices } from "./printPricePolicy.js";
 import { getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, listKnownPrintJobs, markPrintQuota,
   reservePrintQuota, savePrintJob, utcPrintWeek, writePrintEditionState } from "./printState.js";
-import { createTitle, publishBook } from "./engine/kdpPublish.ts";
+import { publishBook } from "./engine/kdpPublish.ts";
 import { listBookshelf, syncBookMetadata } from "./engine/kdpMetadata.ts";
 
 const MAX_BOOKS = 2;
@@ -132,68 +132,77 @@ async function produceOne(book, format, shelf, options) {
     const manifest = assets.manifest;
     const manifestKey = "print/assets/" + book.ebookId + "/" + format + "/manifest.json";
     const plan = planPrintPrices(format, manifest.finalPageCount);
-    if (!job?.titleId) {
-      await savePrintJob(book.ebookId, format, { state: "assets_ready", manifestKey });
-      await writePrintEditionState(book.ebookId, format, "qa_passed");
-      if (!printWindowAllowsAction(options.now(), { start: true })) {
-        return { ebookId: book.ebookId, format, status: "assets_ready_window_closed" };
-      }
-      const claim = await reservePrintQuota(book.ebookId, format, "create", {
-        week, limit: options.weeklyLimit,
-      });
-      if (!claim.reserved) return { ebookId: book.ebookId, format, status: claim.reason };
-      action = "create";
-      // Persist intent before clicking Create. Crash/timeouts remain UNCERTAIN.
-      await savePrintJob(book.ebookId, format, { state: "creating", manifestKey });
-      const created = await options.create(format);
-      if (!/^[A-Z0-9]{10,14}$/i.test(String(created?.titleId || ""))) throw new Error("KDP did not return an exact title ID after creating a print draft.");
-      job = await savePrintJob(book.ebookId, format, { state: "draft", titleId: created.titleId, manifestKey });
-      await markPrintQuota(book.ebookId, format, "create", "done", week);
-      await writePrintEditionState(book.ebookId, format, "draft");
-      action = null;
-    } else {
-      // Reuse the persisted draft after a known pre-submission failure. Never
-      // create another KDP title for the same book+format.
-      job = await savePrintJob(book.ebookId, format, { state: "draft", manifestKey });
-    }
+    const isNewTitle = !job?.titleId;
+    await savePrintJob(book.ebookId, format,
+      { state: isNewTitle ? "assets_ready" : "draft", manifestKey });
+    await writePrintEditionState(book.ebookId, format, isNewTitle ? "qa_passed" : "draft");
     if (!printWindowAllowsAction(options.now(), { start: true })) {
-      return { ebookId: book.ebookId, format, status: "draft_saved_window_closed", titleId: job.titleId };
+      return { ebookId: book.ebookId, format, status: "assets_ready_window_closed" };
     }
-    const claim = await reservePrintQuota(book.ebookId, format, "submit", {
-      week, limit: options.weeklyLimit,
+    if (isNewTitle) {
+      const reservedCreate = await reservePrintQuota(book.ebookId, format, "create",
+        { week, limit: options.weeklyLimit });
+      if (!reservedCreate.reserved) {
+        return { ebookId: book.ebookId, format, status: reservedCreate.reason };
+      }
+    }
+    const reservedSubmit = await reservePrintQuota(book.ebookId, format, "submit",
+      { week, limit: options.weeklyLimit });
+    if (!reservedSubmit.reserved) {
+      return { ebookId: book.ebookId, format, status: reservedSubmit.reason };
+    }
+    action = isNewTitle ? "create_and_submit" : "submit";
+    // A single existing AIMS browser transaction handles Create -> Details ->
+    // actual title-ID resolution -> Cover/Interior -> Preview -> Price -> Submit.
+    // Both independent weekly quotas were durably reserved BEFORE any click.
+    await savePrintJob(book.ebookId, format, {
+      state: isNewTitle ? "creating" : "submitting", titleId: job?.titleId || null,
+      manifestKey,
     });
-    if (!claim.reserved) return { ebookId: book.ebookId, format, status: claim.reason, titleId: job.titleId };
-    action = "submit";
-    await savePrintJob(book.ebookId, format, { state: "submitting", titleId: job.titleId, manifestKey });
     const request = {
-      format, titleId: job.titleId, create: false, dryRun: false, publish: true,
+      format, ...(isNewTitle ? { create: true } : { create: false, titleId: job.titleId }),
+      dryRun: false, publish: true,
       details: bookMetadata(book), categories,
       content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath, printSettings: printSettings(aiDisclosure) },
       pricing: plan.pricing,
     };
     const result = await options.publish(request);
-    const isbn = result?.steps?.find(s => s.step === "content")?.detail?.isbn || null;
-    if (!result?.published || result.errors?.length || !isbn) {
-      // The click outcome can be ambiguous even when a step says failed.
+    const titleId = /^[A-Z0-9]{10,14}$/i.test(String(result?.titleId || ""))
+      ? result.titleId : job?.titleId || null;
+    if (isNewTitle && titleId) {
+      await markPrintQuota(book.ebookId, format, "create", "done", week);
+    }
+    const isbn = result?.steps?.find(step => step.step === "content")?.detail?.isbn || null;
+    if (!titleId || !result?.published || result.errors?.length || !isbn) {
       await markPrintQuota(book.ebookId, format, "submit", "uncertain", week);
-      await savePrintJob(book.ebookId, format, { state: "uncertain", titleId: job.titleId,
-        isbn, manifestKey, errorCode: "kdp_submit_or_isbn_unverified" });
+      if (isNewTitle && !titleId) {
+        await markPrintQuota(book.ebookId, format, "create", "uncertain", week);
+      }
+      await savePrintJob(book.ebookId, format, {
+        state: "uncertain", titleId, isbn, manifestKey,
+        errorCode: "kdp_submission_title_or_isbn_unverified",
+      });
       await writePrintEditionState(book.ebookId, format, "uncertain", isbn);
       return { ebookId: book.ebookId, format, status: "submission_unverified",
-        titleId: job.titleId, errors: result?.errors || [] };
+        titleId, errors: result?.errors || [] };
     }
     await markPrintQuota(book.ebookId, format, "submit", "done", week);
-    await savePrintJob(book.ebookId, format, { state: "submitted", titleId: job.titleId, isbn, manifestKey });
+    await savePrintJob(book.ebookId, format, { state: "submitted", titleId, isbn, manifestKey });
     await writePrintEditionState(book.ebookId, format, "submitted", isbn);
     return { ebookId: book.ebookId, format, status: "submitted_to_kdp_review",
-      titleId: job.titleId, isbn, pages: manifest.finalPageCount,
+      titleId, isbn, pages: manifest.finalPageCount,
       ukPrintPrice: plan.uk.price, usPrintPrice: plan.us.price };
   } catch (error) {
     const errorText = shortError(error);
     // A failure in source/cover production is safe to retry. A failure once
     // Create/Publish has been attempted must stay uncertain until reconciled.
     const uncertain = Boolean(action);
-    if (uncertain) await markPrintQuota(book.ebookId, format, action, "uncertain", week).catch(() => {});
+    if (uncertain) {
+      const reservedActions = action === "create_and_submit" ? ["create","submit"] : [action];
+      for (const reserved of reservedActions) {
+        await markPrintQuota(book.ebookId, format, reserved, "uncertain", week).catch(() => {});
+      }
+    }
     const state = uncertain ? "uncertain" : job?.titleId ? "draft" : "blocked";
     try {
       await savePrintJob(book.ebookId, format, { state, titleId: job?.titleId || undefined, errorCode: errorText });
@@ -208,7 +217,7 @@ async function produceOne(book, format, shelf, options) {
 export async function runPrintProduction({
   dryRun = false, ebookId = null, now = () => new Date(),
   listBooks = listKdpEbooks, inspectBookshelf = listBookshelf,
-  prepare = createPrintAssets, create = createTitle, publish = publishBook,
+  prepare = createPrintAssets, publish = publishBook,
   aiDisclosure = readKindleAiDeclaration, readKindle = syncBookMetadata,
   reconcileListings = reconcileLivePrintListings,
   claimLease = claimDurableLease, releaseLease = releaseDurableLease,
@@ -267,7 +276,7 @@ export async function runPrintProduction({
         if (!printWindowAllowsAction(now(), { start: true })) break;
         if (!allowed) continue;
         const item = await produceOne(book, format, shelf, {
-          now, prepare, aiDisclosure, readKindle, create: async f => { writes = true; return create(f); },
+          now, prepare, aiDisclosure, readKindle,
           publish: async request => { writes = true; return publish(request); },
           weeklyLimit: weekLimit,
         });
