@@ -72,9 +72,17 @@ test("worker does not advance when the audit or search fails", async () => {
   assert.equal((await runResearchTick(options)).status, "monday_audit_unavailable");
   assert.equal(saved, null);
   options.getAudit = async () => ({ ok: true, complete: true, mode: "public", runId: "1", createdAt: "2026-10-26T12:00:00Z", completedAt: "2026-10-26T12:10:00Z" });
-  await assert.rejects(runResearchTick(options), /provider failed/);
+  const first = await runResearchTick(options);
+  assert.equal(first.status, "pending");
+  assert.equal(first.lastTechnicalFailure.stage, "discovery");
+  assert.equal(first.technicalRetryScheduled, true);
   assert.equal(saved.cursor, 0);
   assert.equal(saved.pending.length, 1);
+  const second = await runResearchTick(options);
+  assert.equal(second.status, "complete");
+  assert.equal(second.technicalFailures, 1);
+  assert.equal(saved.results[0].optimisation.reason, "technical_failure");
+  assert.equal(saved.results[0].optimisation.failure.code, "Error");
 });
 
 test("monthly quota is persisted before provider calls and prevents the next call", async () => {
@@ -90,9 +98,11 @@ test("monthly quota is persisted before provider calls and prevents the next cal
     discover: async (_book, { beforeRequest }) => { await beforeRequest(); await beforeRequest(); },
     claim: async () => ({ claimed: true, lease: { backend: "r2" } }), release: async () => {},
   };
-  await assert.rejects(runResearchTick(options), /Monthly search limit/);
+  assert.equal((await runResearchTick(options)).status, "research_monthly_limit");
   assert.equal(saved.requestsReserved, 1);
   assert.equal(saved.pending.length, 1);
+  assert.equal(saved.cursor, 0);
+  assert.equal(saved.lastTechnicalFailure.code, "research_monthly_limit");
 });
 
 test("Amazon blocks stop the batch and retries reuse the saved search", async () => {
