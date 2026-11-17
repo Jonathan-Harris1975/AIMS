@@ -194,9 +194,14 @@ function normaliseEpisodeItem(item = {}, index = 0) {
 const PODCAST_RSS_KEY = "turing-torch.xml";
 const DEFAULT_PODCAST_RSS_FEED_URL = "https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml";
 
+function resolvePodcastRssFeedUrl(configuredUrl = "") {
+  return configuredUrl && /\.xml($|[?#])/i.test(configuredUrl)
+    ? configuredUrl
+    : configuredUrl ? joinUrl(configuredUrl, PODCAST_RSS_KEY) : DEFAULT_PODCAST_RSS_FEED_URL;
+}
+
 async function readPodcastRssXml({
   r2 = r2Client,
-  fetchFeed = fetchWithTimeout,
   configuredUrl = envUrl("PODCAST_RSS_FEED_URL", "R2_PUBLIC_BASE_URL_PODCAST_RSS"),
 } = {}) {
   const attempts = [];
@@ -207,10 +212,8 @@ async function readPodcastRssXml({
     attempts.push(`R2 podcastRss/${PODCAST_RSS_KEY} failed: ${error?.message || error}`);
   }
 
-  const feedUrl = configuredUrl && /\.xml($|[?#])/i.test(configuredUrl)
-    ? configuredUrl
-    : configuredUrl ? joinUrl(configuredUrl, PODCAST_RSS_KEY) : DEFAULT_PODCAST_RSS_FEED_URL;
-  const response = await fetchFeed(feedUrl);
+  const feedUrl = resolvePodcastRssFeedUrl(configuredUrl);
+  const response = await fetchWithTimeout(feedUrl);
   if (!response.ok) throw new Error(`Podcast RSS public fetch failed with ${response.status}. ${attempts.join(" | ")}`);
   return { xml: await response.text(), method: "public podcast RSS fetch", feedUrl, attempts };
 }
@@ -696,6 +699,7 @@ export const __podcastWebsiteReportsTestHooks = {
   buildTranscriptSkillLensFindings,
   collectPodcastEpisodeEvidence,
   readPodcastRssXml,
+  resolvePodcastRssFeedUrl,
   makeFinding,
   normaliseEpisodeItem,
 };
