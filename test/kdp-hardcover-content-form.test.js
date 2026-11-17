@@ -84,7 +84,7 @@ test("a paperback form with both namespaces updates paperback fields only", () =
   }
   const document = {
     querySelector(selector) {
-      const match = /^input\\[name="([^"]+)"\\]$/.exec(selector);
+      const match = /^input\[name="([^"]+)"\]$/.exec(selector);
       return match ? fields.get(match[1]) || null : null;
     },
     querySelectorAll() { return []; },
