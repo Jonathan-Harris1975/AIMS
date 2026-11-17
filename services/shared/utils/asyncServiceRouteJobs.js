@@ -16,7 +16,7 @@ function slug(value) {
 }
 
 function requestIdempotencyKey(req = {}) {
-  return getRequestIdempotencyKey(req);
+  return getRequestIdempotencyKey(req || {});
 }
 
 function boolEnv(name, fallback = false, env = process.env) {
