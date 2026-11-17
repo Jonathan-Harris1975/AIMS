@@ -34,6 +34,7 @@ export async function claimExclusiveKdpBrowserLease(
     throw new Error('KDP account session is busy in another production worker; retry after its lease releases.')
   }
   if (requireRemote && acquired.lease.backend !== 'r2') {
+    await releaseDurableLease(acquired.lease).catch(() => {})
     throw new Error('Live KDP browser operations require the distributed R2 account-session lock.')
   }
   return acquired
