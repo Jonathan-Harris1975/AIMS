@@ -47,7 +47,9 @@ test("daily Zernio publication no longer invokes the separately scheduled weekly
   const daily = source.slice(source.indexOf("const runDailyLane = runDailyLaneBase;"), source.indexOf("router.post(", source.indexOf("const runDailyLane = runDailyLaneBase;")));
   assert.doesNotMatch(daily, /buildAndScheduleWeeklyMiniSeries|buildAndSchedulePodcastThursdayPromo/);
   for (const pathname of ["/newsletter/promo", "/mini-series/weekly", "/podcast/thursday-promo"]) {
-    const section = source.slice(source.indexOf('"' + pathname + '"'), source.indexOf("\n);", source.indexOf('"' + pathname + '"')));
+    const routeStart = source.indexOf('router.post(\n  "' + pathname + '"');
+    assert.ok(routeStart >= 0, "route exists: " + pathname);
+    const section = source.slice(routeStart, source.indexOf("\n);", routeStart));
     assert.match(section, /reuseTerminal: true/);
     assert.match(section, /stableZernioAsyncPayload/);
     assert.doesNotMatch(section, /requestDedupe\(/);
