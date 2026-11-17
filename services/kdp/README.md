@@ -125,8 +125,8 @@ book, and pauses 60 seconds before continuing. The research never substitutes
 KDP search results for the public audit.
 
 Research combines captured Amazon recommendations with Tavily candidates and
-recent dated sources. A free-first drafter and separate critic use the
-`kdpResearchDraft` route with configured free back-ups. If inference fails
+recent dated sources. A free-first drafter and independently routed critic use the
+`kdpResearchDraft` and `kdpResearchCritic` routes with distinct provider priorities. If inference fails
 or returns malformed JSON, each stage permits at most one attempt with the
 economy-model `kdpResearchPaidFallback` route; no premium council, no retry
 loops. Competitor private keyword fields are not available.
