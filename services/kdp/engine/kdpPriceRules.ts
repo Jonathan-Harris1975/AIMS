@@ -9,9 +9,12 @@ export const KDP_PRICE_RULES_SOURCE = 'https://kdp.amazon.com/en_US/help/topic/G
 export const KDP_UK_TARGET_ROYALTY_MINOR = 450
 
 /**
- * Minimum UK price yielding at least £4.50 at the 70% royalty rate.
- * KDP delivery charge: £0.10/MB, rounded to a penny. KDP metadata is
- * reported in rounded KB; include one extra KB to avoid understating cost.
+ * Reader-friendly UK list-price floor yielding at least £4.50 at the
+ * 70% royalty rate, rounded UP to .99 (without crossing KDP's 70% band).
+ * This single floor is shared by the royalty worker and market optimiser
+ * so a subsequent research update cannot undo a compliant correction.
+ * KDP delivery charge is £0.10/MB, rounded to a penny; signed-in KDP sizes
+ * are rounded KB, so include one extra KB rather than understate costs.
  * A missing file size cannot establish a royalty guarantee.
  */
 export function uk70RoyaltyFloorMinor(fileSizeKb: string | number | null | undefined): number | null {
@@ -20,7 +23,8 @@ export function uk70RoyaltyFloorMinor(fileSizeKb: string | number | null | undef
   const kb = Number(raw)
   if (!Number.isSafeInteger(kb) || kb > 1_000_000) return null
   const deliveryMinor = Math.max(1, Math.round(((kb + 1) * 10) / 1024))
-  return Math.ceil((KDP_UK_TARGET_ROYALTY_MINOR * 10) / 7) + deliveryMinor
+  const minimumMinor = Math.ceil((KDP_UK_TARGET_ROYALTY_MINOR * 10) / 7) + deliveryMinor
+  return Math.ceil((minimumMinor + 1) / 100) * 100 - 1
 }
 
 export type KdpPriceBand = {
