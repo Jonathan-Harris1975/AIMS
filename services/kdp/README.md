@@ -173,3 +173,8 @@ Tavily/free-or-economy-model request, configured D1 write/cache-purge/rebuild cr
 and one confirmed KDP-to-website update. Local mocks and CI do not establish those
 production facts. Inspect `GET /kdp/research/weekly` and private update records for
 blocked/uncertain states; never classify a saved draft or button click as live.
+
+
+### Paperback and hardback rollout capacity (November 2026)
+
+The AIMS operator target is **ten existing books per UTC week**, creating and first-submitting up to ten paperbacks **and** ten hardcovers (independent per-format counters). The authenticated MAST production job remains at 22:15 Europe/London, Monday–Thursday, with a maximum of three books per night, no Friday print submissions, and a 22:50 cutoff for starting additional formats. The ten-title weekly ceiling is configurable downwards via `KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT` but not above ten. This is a local operational target, not a guarantee that Amazon will accept ten titles: where signed-in KDP signals a lower limit, the worker stops the remaining queue for that run, marks the remote operation uncertain for reconciliation, and reports the failure to MAST. Every run persists per-format create/submit reservations to its R2 report and D1. D1 quota counters are versioned as `kdp_print_quota_counters_v2`, with prior reservations imported from the original two-title table without discarding them. A successful submission is not retail availability; the existing signed-in/public verification must separately confirm live paperback/hardback listings before website badges are exposed.

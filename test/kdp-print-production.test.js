@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { calculatePrintCover, parsePdfInfo, validatePrintSourceText } from "../services/kdp/printAssets.js";
 import { calculatePrintPrice, planPrintPrices } from "../services/kdp/printPricePolicy.js";
 import { utcPrintWeek, canAttemptPrintJob } from "../services/kdp/printState.js";
-import { categorySpecsFromKindle, existingPrintMatches, choosePrintCandidates, printWindowAllowsAction,
+import { categorySpecsFromKindle, existingPrintMatches, choosePrintCandidates, printWindowAllowsAction, isPlatformQuotaRejection,
   runPrintProduction } from "../services/kdp/printProduction.js";
 import { normalizeAiDeclaration } from "../services/kdp/printAiDisclosure.js";
 import { publicPurchaseControls, verifyPrintIdentity } from "../services/kdp/printVerification.js";
@@ -115,4 +115,13 @@ test("print categories fall back only for evidence-matched AI books and verified
   assert.throws(() => categorySpecsFromKindle([], { title: "Cooking for Beginners" }, "Amazon.com"),
     /cannot be verified/);
   assert.throws(() => categorySpecsFromKindle([], book, ""), /Unknown Kindle home marketplace/);
+});
+
+
+test("platform weekly limit denials trigger the unattended print circuit breaker", () => {
+  assert.equal(isPlatformQuotaRejection(new Error("You have reached your weekly title creation limit.")),true);
+  assert.equal(isPlatformQuotaRejection([{message:"Submission limit reached for this week"}]),true);
+  assert.equal(isPlatformQuotaRejection(["Too many new titles"]),true);
+  assert.equal(isPlatformQuotaRejection(new Error("Network timeout")),false);
+  assert.equal(isPlatformQuotaRejection([{message:"Missing print cover"}]),false);
 });

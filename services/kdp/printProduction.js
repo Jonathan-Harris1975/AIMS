@@ -12,11 +12,11 @@ import { reconcileInterruptedPrintJobs } from "./printReconciliation.js";
 import { planPrintPrices } from "./printPricePolicy.js";
 import { getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, listKnownPrintJobs, markPrintQuota,
-  reservePrintQuota, savePrintJob, utcPrintWeek, writePrintEditionState } from "./printState.js";
+  reservePrintQuota, savePrintJob, utcPrintWeek, writePrintEditionState, getPrintQuotaUsage } from "./printState.js";
 import { publishBook } from "./engine/kdpPublish.ts";
 import { listBookshelf, syncBookMetadata } from "./engine/kdpMetadata.ts";
 
-const MAX_BOOKS = 2;
+const MAX_BOOKS = 3;
 const MAX_FORMAT_START_MINUTE = 22 * 60 + 50;
 const SPECIAL_FIRST_BOOK = 7;
 const STORAGE_ROOT = "print/production/reports/";
@@ -129,6 +129,16 @@ async function recordRun(data) {
   return { bucket: "kdp", key };
 }
 
+// Treat an observed KDP platform ceiling as a circuit breaker. A blocked
+// format is left uncertain for signed-in reconciliation, not blindly retried.
+export function isPlatformQuotaRejection(error) {
+  const messages = Array.isArray(error) ? error : [error];
+  return messages.some(item => {
+    const raw = item instanceof Error ? item.message : typeof item === "string" ? item : JSON.stringify(item || "");
+    return /(?:weekly|per week|this week).{0,80}(?:limit|quota|maximum|too many)|(?:limit|quota|maximum).{0,80}(?:weekly|per week|this week)|too many (?:new )?(?:titles|submissions)/i.test(raw);
+  });
+}
+
 async function produceOne(book, format, shelf, options) {
   let job = await getPrintJob(book.ebookId, format);
   if (!canAttemptPrintJob(job, options.now())) {
@@ -214,7 +224,8 @@ async function produceOne(book, format, shelf, options) {
         errorCode: "kdp_submission_title_or_isbn_unverified",
       });
       await writePrintEditionState(book.ebookId, format, "uncertain", isbn);
-      return { ebookId: book.ebookId, format, status: "submission_unverified",
+      return { ebookId: book.ebookId, format,
+        status: isPlatformQuotaRejection(result?.errors) ? "kdp_platform_limit_detected" : "submission_unverified",
         titleId, errors: result?.errors || [] };
     }
     await markPrintQuota(book.ebookId, format, "submit", "done", week);
@@ -239,7 +250,9 @@ async function produceOne(book, format, shelf, options) {
       await savePrintJob(book.ebookId, format, { state, titleId: job?.titleId || undefined, errorCode: errorText });
       await writePrintEditionState(book.ebookId, format, uncertain ? "uncertain" : "blocked");
     } catch { /* Keep the original error; any state write failure is also a terminal failure. */ }
-    return { ebookId: book.ebookId, format, status: state, error: errorText };
+    return { ebookId: book.ebookId, format,
+      status: uncertain && isPlatformQuotaRejection(error) ? "kdp_platform_limit_detected" : state,
+      error: errorText };
   } finally {
     await assets?.cleanup?.().catch(() => {});
   }
@@ -291,14 +304,16 @@ export async function runPrintProduction({
     const interruptedReconciliation = await reconcileInterrupted(books, shelf, { now });
     const weekLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ observedAt: now().toISOString(), weeklyLimit: weekLimit });
+    const quotaUsageBefore = await getPrintQuotaUsage(utcPrintWeek(now()));
     const listingsReconciled = await reconcileListings(books, { limit: 12 });
     const eligible = ebookId == null ? books : books.filter(book => book.ebookId === Number(ebookId));
     if (!eligible.length) throw new Error("No matching existing KDP ebook found.");
     const outcomes = [];
     let booksTried = 0;
     let writes = false;
+    let platformLimitDetected = false;
     for (const book of eligible) {
-      if (booksTried >= MAX_BOOKS || !printWindowAllowsAction(now(), { start: true })) break;
+      if (platformLimitDetected || booksTried >= MAX_BOOKS || !printWindowAllowsAction(now(), { start: true })) break;
       // Completed, submitted and uncertain titles cannot consume every future
       // scheduling slot. Skip them so the 40-book queue actually advances.
       const actionable = await Promise.all(["paperback","hardcover"].map(async format =>
@@ -314,8 +329,13 @@ export async function runPrintProduction({
           weeklyLimit: weekLimit,
         });
         outcomes.push(item);
+        if (item.status === "kdp_platform_limit_detected") {
+          platformLimitDetected = true;
+          break;
+        }
       }
     }
+    const quotaUsageAfter = await getPrintQuotaUsage(utcPrintWeek(now()));
     report = {
       ok: outcomes.every(x => [
         "submitted_to_kdp_review", "already_in_progress_or_submitted",
@@ -323,9 +343,10 @@ export async function runPrintProduction({
       ].includes(x.status)),
       schemaVersion: 1, checkedAt: now().toISOString(), weekUtc: utcPrintWeek(now()),
       kdpWritesPerformed: writes, maxBooksPerRun: MAX_BOOKS, capacity,
+      quotaUsageBefore, quotaUsageAfter, externalWeeklyLimitDetected: platformLimitDetected,
       booksConsidered: booksTried, results: outcomes, listingsReconciled, interruptedReconciliation,
       submitted: outcomes.filter(x => x.status === "submitted_to_kdp_review").length,
-      blocked: outcomes.filter(x => ["blocked","uncertain","submission_unverified"].includes(x.status)).length,
+      blocked: outcomes.filter(x => ["blocked","uncertain","submission_unverified","kdp_platform_limit_detected"].includes(x.status)).length,
       publicPurchaseAvailabilityVerified: listingsReconciled.some(x => x.status === "live_verified"),
     };
     report.reportRef = await recordRun(report);
