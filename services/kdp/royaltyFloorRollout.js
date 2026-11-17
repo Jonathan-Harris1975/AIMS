@@ -6,7 +6,7 @@ import { syncBookMetadata } from './engine/kdpMetadata.ts';
 import { publishBook } from './engine/kdpPublish.ts';
 import { auditPublicCatalogue } from './publicListingAudit.js';
 import { currentKdpPrice } from './metadataValues.js';
-import { parseKdpPriceMinorUnits, uk70RoyaltyFloorMinor, validateKdpPriceChanges } from './engine/kdpPriceRules.ts';
+import { parseKdpPriceMinorUnits, uk70RoyaltyFloorMinor, uk70RoyaltyPriceRange, validateKdpPriceChanges } from './engine/kdpPriceRules.ts';
 
 const LEDGER_KEY = 'pricing/royalty-floor/ledger.json';
 const REPORT_KEY = 'pricing/royalty-floor/latest.json';
@@ -19,8 +19,9 @@ const TITLE_ID = /^[A-Z0-9]{10,20}$/;
 
 function validatedMetadataPrice(book) {
   const price = parseKdpPriceMinorUnits(currentKdpPrice(book, 'GBP') || '');
-  const floor = uk70RoyaltyFloorMinor(book.fileSizeKb);
-  return { price, floor };
+  const priceRange = uk70RoyaltyPriceRange(book.fileSizeKb);
+  const floor = priceRange?.minimumMinor ?? uk70RoyaltyFloorMinor(book.fileSizeKb);
+  return { price, floor, priceRange };
 }
 
 export function buildRoyaltyFloorPlan(snapshot, catalogue) {
@@ -50,10 +51,11 @@ export function buildRoyaltyFloorPlan(snapshot, catalogue) {
     titles.add(book.titleId);
     const catalogueBook = map.get(asin);
     if (!catalogueBook) throw new Error('A KDP Kindle title cannot be matched to the D1 catalogue.');
-    const { price, floor } = validatedMetadataPrice(book);
+    const { price, floor, priceRange } = validatedMetadataPrice(book);
     rows.push({
       titleId: book.titleId, asin, ebookId: catalogueBook.ebookId,
       title: catalogueBook.title, priceMinor: price, floorMinor: floor,
+      priceRange, fileSizeKb: book.fileSizeKb,
       planVerified: /70/.test(String(book.royaltyPlan || '')),
       live: /^live$/i.test(String(book.publishingStatus || '')),
       needsChange: floor !== null && price !== null && price < floor,
