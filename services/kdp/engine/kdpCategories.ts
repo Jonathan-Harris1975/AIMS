@@ -110,7 +110,9 @@ async function selectCategoryPathInModal(page: Page, path: string[]): Promise<st
   for (let level = 0; level < segments.length; level++) {
     const label = segments[level]
     const select = dialog.locator('select').nth(level)
-    if ((await select.count()) === 0) break
+    if ((await select.count()) === 0) {
+      throw new KdpClientError(`Category picker does not expose required path level ${level + 1}: ${label}`)
+    }
 
     const aliasesFor = (wanted: string): string[] => {
       const w = wanted.toLowerCase()
