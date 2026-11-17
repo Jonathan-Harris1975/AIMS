@@ -2,7 +2,7 @@
 // metadata. Never infer that an absent title means creation did not happen.
 // Published/reviewing titles resume the public listing verification pipeline;
 // unambiguously saved drafts resume only after a review grace period.
-import { listPrintJobsForReconciliation, savePrintJob, writePrintEditionState } from "./printState.js";
+import { listPrintJobsForReconciliation, parsePrintDatabaseTime, savePrintJob, writePrintEditionState } from "./printState.js";
 import { syncBookMetadata } from "./engine/kdpMetadata.ts";
 
 const STALE_DRAFT_MS = 36 * 60 * 60 * 1000;
@@ -81,7 +81,7 @@ export async function reconcileInterruptedPrintJobs(books, shelf, {
         await write(job.ebookId, job.format, "submitted", isbn);
         results.push({ ...result, status: "submission_reconciled", titleId: matched.titleId });
       } else if (outcome === "draft") {
-        const ageMs = +now() - Date.parse(String(job.updatedAt || ""));
+        const ageMs = +now() - parsePrintDatabaseTime(job.updatedAt);
         if (!Number.isFinite(ageMs) || ageMs < draftGraceMs) {
           results.push({ ...result, status: "awaiting_safe_draft_recheck" });
           continue;
