@@ -29,6 +29,11 @@ test("Podcast Index uses exact RSS identity, not a fuzzy title match", () => {
   assert.equal(result.competitors.length, 1);
   assert.equal(result.competitors[0].id, 1);
   assert.equal(result.country, null);
+  const variant = summarisePodcastIndexSearch({ feeds: [
+    { url: TURINGS_TORCH_RSS_URL.replace("https://", "http://www.") + "?utm_source=test" },
+  ] }, "AI");
+  assert.equal(variant.ownPositionInSample, 1);
+  assert.equal(summarisePodcastIndexSearch({ feeds: [{ id: null, url: "https://other.example/feed" }] }, "AI").competitors[0].id, null);
   assert.throws(() => summarisePodcastIndexSearch({ feeds: {} }, "AI"), /invalid JSON feeds/);
 });
 
@@ -69,7 +74,7 @@ test("snapshot persists only public API evidence privately and reuses same-day d
   assert.equal(reused.reused, true);
   assert.equal(appleCalls, 2);
   assert.equal(indexCalls, 2);
-  assert.equal(writes.length, 2);
+  assert.equal(writes.length, 3); // same-day reuse refreshes the latest pointer
 });
 
 test("failed sources are unavailable, not fabricated as zero ranking", async () => {
@@ -101,5 +106,7 @@ test("partial provider failures retain verified evidence", async () => {
   assert.equal(result.status, "partial");
   assert.equal(result.evidence.length, 1);
   assert.equal(result.evidence[0].ownPositionInSample, null);
+  assert.deepEqual(result.providers, ["apple-itunes-search"]);
+  assert.deepEqual(result.attemptedProviders, ["apple-itunes-search", "podcast-index-search"]);
   assert.equal(result.persisted, true);
 });
