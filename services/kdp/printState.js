@@ -130,3 +130,11 @@ export async function writePrintEditionState(ebookId, format, state, isbn = null
     " isbn=COALESCE(excluded.isbn,kdp_print_editions.isbn), updated_at=datetime('now')" +
     " WHERE kdp_print_editions.state <> 'live_verified'", [ebookId,format,state,isbn]);
 }
+
+export async function listKnownPrintJobs() {
+  await ensurePrintStateTables();
+  const result = await queryKdpD1("SELECT ebook_id, format, title_id FROM kdp_print_automation WHERE title_id IS NOT NULL");
+  return (result.results || []).map(row => ({
+    ebookId: Number(row.ebook_id), format: String(row.format), titleId: String(row.title_id),
+  }));
+}
