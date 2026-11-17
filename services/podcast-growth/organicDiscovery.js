@@ -18,13 +18,29 @@ const MAX_RESULTS = 25;
 
 const clean = (value, max = 160) => String(value == null ? "" : value).replace(/\s+/g, " ").trim().slice(0, max);
 const asArray = (value) => Array.isArray(value) ? value : [];
-const normaliseFeed = (value) => clean(value, 500).replace(/\/+$/, "").toLowerCase();
+const normaliseFeed = (value) => {
+  try {
+    const url = new URL(clean(value, 500));
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const path = url.pathname.replace(/\/+$/, "");
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^utm_/i.test(key)) url.searchParams.delete(key);
+    }
+    return host + path + url.search;
+  } catch { return ""; }
+};
+const positiveId = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
 const safeError = (error) => clean(error && error.message ? error.message : error, 160);
 
 export function summariseAppleSearch(payload, term) {
   if (!payload || !Array.isArray(payload.results)) throw new Error("Apple podcast search returned invalid JSON results");
   const results = payload.results.slice(0, MAX_RESULTS);
-  const match = results.findIndex((item) => Number(item.collectionId) === TURINGS_TORCH_APPLE_ID);
+  const match = results.findIndex((item) => positiveId(item.collectionId) === TURINGS_TORCH_APPLE_ID);
   return {
     provider: "apple-itunes-search",
     country: "GB",
@@ -33,9 +49,9 @@ export function summariseAppleSearch(payload, term) {
     sampledResults: results.length,
     ownPositionInSample: match < 0 ? null : match + 1,
     ownNotObservedInSample: match < 0,
-    competitors: results.filter((item) => Number(item.collectionId) !== TURINGS_TORCH_APPLE_ID).slice(0, 5)
+    competitors: results.filter((item) => positiveId(item.collectionId) !== TURINGS_TORCH_APPLE_ID).slice(0, 5)
       .map((item) => ({
-        id: Number.isFinite(Number(item.collectionId)) ? Number(item.collectionId) : null,
+        id: positiveId(item.collectionId),
         title: clean(item.collectionName || item.trackName, 120),
         author: clean(item.artistName, 100),
       })),
@@ -57,7 +73,7 @@ export function summarisePodcastIndexSearch(payload, term) {
     ownNotObservedInSample: match < 0,
     competitors: results.filter((item) => normaliseFeed(item.url || item.feedUrl) !== ownFeed).slice(0, 5)
       .map((item) => ({
-        id: Number.isFinite(Number(item.id)) ? Number(item.id) : null,
+        id: positiveId(item.id),
         title: clean(item.title, 120),
         author: clean(item.author, 100),
       })),
@@ -116,7 +132,15 @@ export async function collectPodcastGrowthSnapshot({
   try {
     const previous = JSON.parse(await readText(BUCKET, dailyKey(day)));
     if (previous && previous.schemaVersion === "podcast-growth-discovery/v1" && previous.status !== "unavailable") {
-      return { ...previous, reused: true };
+      try {
+        // Heal a missing latest pointer after a partially completed prior write.
+        await persist(BUCKET, PREFIX + "/latest.json", previous);
+        return { ...previous, reused: true, persisted: true };
+      } catch {
+        return { ...previous, reused: true, persisted: false,
+          limitations: [...(Array.isArray(previous.limitations) ? previous.limitations : []),
+            "Could not restore the private latest snapshot pointer."] };
+      }
     }
   } catch {
     // New day or storage unavailable: an explicit API invocation may still proceed.
@@ -124,8 +148,8 @@ export async function collectPodcastGrowthSnapshot({
 
   const evidence = [];
   const limitations = [];
-  const providers = ["apple-itunes-search"];
-  if (indexCredentialsAvailable) providers.push("podcast-index-search");
+  const attemptedProviders = ["apple-itunes-search"];
+  if (indexCredentialsAvailable) attemptedProviders.push("podcast-index-search");
   else limitations.push("Podcast Index search skipped: existing API credentials unavailable.");
 
   for (let i = 0; i < uniqueTerms.length; i += 1) {
@@ -153,7 +177,8 @@ export async function collectPodcastGrowthSnapshot({
     sourcePolicy: "public-API-samples-not-listener-metrics-or-certified-rankings",
     show: { title: "Turing's Torch: AI Weekly", appleCollectionId: TURINGS_TORCH_APPLE_ID, feedUrl: TURINGS_TORCH_RSS_URL },
     terms: uniqueTerms,
-    providers,
+    providers: [...new Set(evidence.map((item) => item.provider))],
+    attemptedProviders,
     evidence,
     limitations,
   };
