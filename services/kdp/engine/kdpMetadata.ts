@@ -360,6 +360,34 @@ export async function fetchBookMetadata(
     pricing = parsedPricing
   }
 
+  // KDP's price form can select the royalty_rate radio after client-side
+  // hydration. Server HTML alone omits it for some existing LIVE books.
+  // Read the actual authenticated pricing form rather than assuming 70%.
+  if (ref.format === 'kindle' && !/^(?:35|70)(?:_PERCENT)?$/.test(pricing.royaltyPlan)) {
+    const response = await kdpGoto(requestPage, setupPageUrl(ref.format, ref.titleId, 'pricing'), {
+      waitUntil: 'networkidle', timeout: 120_000,
+    }).catch(() => null)
+    if (requestPage.url().toLowerCase().includes('signin')) throw new KdpAuthError()
+    if (response?.ok()) {
+      const rendered = await requestPage.evaluate(`(() => {
+        const plan = [
+          'data[digital][royalty_rate]-radio',
+          'data[digital][royalty_plan]',
+          'data[digital][royalty_rate]',
+        ].map((name) => document.querySelector('input[name="' + name + '"]:checked')?.value?.trim())
+          .find(Boolean) ||
+          document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() ||
+          document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim() || ''
+        const bytes = document.querySelector('input[name="data[digital][filesize_bytes]"]')?.value || ''
+        return { plan, bytes }
+      })()`) as { plan: string; bytes: string }
+      if (/^(?:35|70)(?:_PERCENT)?$/.test(rendered.plan)) pricing.royaltyPlan = rendered.plan
+      if (/^\\d+$/.test(rendered.bytes) && Number.isSafeInteger(Number(rendered.bytes))) {
+        pricing.fileSizeKb = String(Math.ceil(Number(rendered.bytes) / 1024))
+      }
+    }
+  }
+
   return {
     titleId: ref.titleId,
     format: ref.format,
