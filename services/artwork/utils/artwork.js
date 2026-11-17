@@ -244,9 +244,9 @@ export function buildQaRepairPrompt(prompt, qa = {}, mode = "podcast") {
     return [
       "PIXEL QA REPAIR: change the entire scene, not only colours or framing.",
       `Mandatory repairs: ${defects.join(" | ") || String(qa.summary || "Fix scene relevance").slice(0, 250)}.`,
-      "Choose one source-specific human decision, physical consequence or clearly documented technical result.",
+      "Choose one source-specific human decision, physical consequence or clearly documented technical result. People are optional; never invent a stock-photo presenter.",
       "No visible text, pseudo-text, labels, signs, dashboards, whiteboards or watermarks.",
-      "Overrule any earlier staging involving server racks; show the human decision instead.",
+      "Reject generic server racks, decorative PC towers, dashboards, stock-photo portraits and abstract puzzle imagery; the visual must explain the particular post.",
       `Source-specific subject: ${String(prompt || "").slice(0, 1050)}.`,
     ].join(" ");
   }
@@ -315,7 +315,36 @@ export function selectPublishableSocialArtworkCandidate(candidates = [], options
     .sort((left, right) => candidateRank(right) - candidateRank(left))[0] || null;
 }
 
-async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal, generationKey = "artwork", variation = "initial" } = {}) {
+/**
+ * A near-miss is a reason to try one better-directed image, never to
+ * publish the failed image. Hard defects and materially off-topic images
+ * are ineligible even for that final bounded attempt.
+ */
+export function selectRepairableSocialArtworkCandidate(candidates = [], options = {}) {
+  const floors = { ...socialAdvisoryFloors(), ...(options.floors || {}) };
+  return (Array.isArray(candidates) ? candidates : [])
+    .filter((candidate) => candidate?.base64 && candidate?.qa)
+    .filter((candidate) => (candidate.qa.hardDefects || []).length === 0)
+    .filter((candidate) => Number(candidate.qa.score || 0) >= floors.minScore)
+    .filter((candidate) => Number(candidate.qa.relevance || 0) >= Math.max(60, floors.minRelevance - 10))
+    .filter((candidate) => Number(candidate.qa.textSafety || 0) >= floors.minTextSafety)
+    .sort((left, right) => candidateRank(right) - candidateRank(left))[0] || null;
+}
+
+export function buildFinalSocialArtworkRescuePrompt(prompt, qa = {}) {
+  const defects = [...(qa.hardDefects || []), ...(qa.defects || [])]
+    .filter(Boolean).slice(0, 4).map((item) => String(item).slice(0, 190));
+  return [
+    "FINAL TOPICAL ARTWORK RESCUE. Make a completely new, source-specific physical editorial scene.",
+    `The prior image missed the actual story: ${defects.join(" | ") || String(qa.summary || "Insufficient topical relevance").slice(0, 250)}.`,
+    "Depict the precise technical action, comparison or consequence described in the brief. Make the relationship visible without labels.",
+    "No unrelated stock-photo people, decorative PC towers, puzzles, mosaics, generic server racks, abstract AI symbols or generic model-at-desk scenes.",
+    "No text, pseudo-text, readable screens, labels, watermarks, diagrams or logos.",
+    `Original post evidence and creative direction: ${String(prompt || "").slice(0, 1200)}.`,
+  ].join(" ");
+}
+
+async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal, generationKey = "artwork", variation = "initial", maxQaRegenerations = null, providerAttempts = null } = {}) {
   const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const instruction = buildModelAwareArtworkPrompt({
     model: provider.model,
@@ -349,7 +378,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
   });
   const payload = filterImagePayloadByCapabilities(rawPayload, supportedParameters);
 
-  const attempts = getArtworkProviderAttempts(mode);
+  const attempts = providerAttempts ?? getArtworkProviderAttempts(mode);
   let lastError;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -378,7 +407,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
 
       if (shouldAuditArtwork(mode)) {
         const qaRequired = parseBoolean(process.env.ARTWORK_VISUAL_QA_REQUIRED, true);
-        const maxRegenerations = artworkQaRegenerationLimit(mode);
+        const maxRegenerations = maxQaRegenerations ?? artworkQaRegenerationLimit(mode);
         let qa;
         let qaPrompt = prompt;
         for (let qaAttempt = 0; qaAttempt <= maxRegenerations; qaAttempt += 1) {
@@ -569,6 +598,36 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
         hardDefects: selected.qa.hardDefects || [],
       });
       return selected.base64;
+    }
+  }
+
+  // After every normal provider/QA route failed, a safely bounded near-miss
+  // gets ONE alternate composition from its original provider. It must pass
+  // full pixel QA; the image that failed QA is never silently promoted.
+  if (String(mode || "").toLowerCase() === "social" &&
+      parseBoolean(process.env.SOCIAL_ARTWORK_FINAL_QA_RESCUE_ENABLED, true)) {
+    const nearMiss = selectRepairableSocialArtworkCandidate(qaCandidates);
+    const provider = providers.find((item) => item.id === nearMiss?.provider?.id &&
+      item.model === nearMiss?.provider?.model);
+    if (nearMiss && provider && !signal?.aborted) {
+      info("artwork.social.final_qa_rescue_start", {
+        provider: provider.id, score: nearMiss.qa.score, relevance: nearMiss.qa.relevance,
+      });
+      try {
+        return await requestArtworkFromProvider(
+          provider, buildFinalSocialArtworkRescuePrompt(prompt, nearMiss.qa), mode, date,
+          { signal, generationKey: stableGenerationKey, variation: "final-qa-rescue",
+            maxQaRegenerations: 0, providerAttempts: 1 },
+        );
+      } catch (rescueError) {
+        if (rescueError?.artworkCandidate) qaCandidates.push(rescueError.artworkCandidate);
+        lastError = rescueError;
+        warn("artwork.social.final_qa_rescue_failed", {
+          provider: provider.id, score: rescueError?.artworkVisualQa?.score ?? null,
+          relevance: rescueError?.artworkVisualQa?.relevance ?? null,
+          error: rescueError?.message || String(rescueError),
+        });
+      }
     }
   }
 
