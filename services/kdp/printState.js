@@ -14,13 +14,22 @@ export function utcPrintWeek(at = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
+/** D1 datetime('now') is UTC but omits the ISO 8601 Z suffix. */
+export function parsePrintDatabaseTime(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+    return Date.parse(raw.replace(" ", "T") + "Z");
+  }
+  return Date.parse(raw);
+}
+
 export function canAttemptPrintJob(job, at = new Date()) {
   if (!job) return true;
   if (["creating", "submitting", "uncertain", "submitted", "live_verified"].includes(job.state)) return false;
   if (job.state !== "blocked") return true;
   // A broken source or AI questionnaire may be repaired externally. Retry
   // periodically without letting that book occupy every night's two slots.
-  const blockedAt = Date.parse(String(job.updatedAt || ""));
+  const blockedAt = parsePrintDatabaseTime(job.updatedAt);
   return Number.isFinite(blockedAt) && (+at - blockedAt >= 48 * 60 * 60_000);
 }
 
