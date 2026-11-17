@@ -286,6 +286,24 @@ function isMandatoryReasoningError(error = {}) {
   return /reasoning.*mandatory|reasoning.*required|cannot disable reasoning|reasoning.*cannot be disabled/.test(text);
 }
 
+// A Google Vertex adapter has returned a provider-side 400 for a Zernio
+// mini-series prompt whose outbound text messages are structurally valid.
+// Avoid that endpoint *only after* this exact failure, and do not disable
+// Headroom or change the approved model family.
+export function isGoogleTextPartAdapterFailure(error, messages) {
+  const detail = String(error?.bodySnippet || error?.message || "");
+  if (Number(error?.status) !== 400
+      || !/text content parts must carry a string/i.test(detail)
+      || !/provider_name[^a-z]*google/i.test(detail)) return false;
+  return Array.isArray(messages) && messages.length > 0 && messages.every(message =>
+    message && typeof message.role === "string" && (
+      typeof message.content === "string" ||
+      (Array.isArray(message.content) && message.content.every(part =>
+        typeof part === "string" || (part && part.type === "text" && typeof part.text === "string")
+      ))
+    ));
+}
+
 function extractMessageContent(json) {
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content === "string") return content;
@@ -303,7 +321,7 @@ function extractMessageContent(json) {
 }
 
 async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, max_tokens, temperature, top_p,
-  response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false, onUsage }) {
+  response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false, avoidGoogleVertex = false, onUsage }) {
   if (signal?.aborted) {
     throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("OpenRouter request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
   }
@@ -315,7 +333,20 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
   // relaxation. Relaxing optional model parameters must never relax Comms Hub
   // ZDR or data-collection policy.
   const providerOptions = getOpenRouterProviderOptions({ response_format: relaxedParameters ? undefined : response_format, routeKey });
-  if (providerOptions) payload.provider = providerOptions;
+  if (avoidGoogleVertex) {
+    // Respect an explicit provider-only policy. In that case the caller's
+    // normal fallback chain, not an unauthorised routing override, applies.
+    const allowed = providerOptions?.only || [];
+    if (allowed.length && !allowed.some(slug => !String(slug).startsWith("google-vertex"))) {
+      const error = new Error("Configured provider-only policy prevents excluding failing Google Vertex");
+      error.nonRetryable = true;
+      error.code = "OPENROUTER_PROVIDER_ONLY_CONFLICT";
+      throw error;
+    }
+    payload.provider = { ...(providerOptions || {}),
+      ignore: [...new Set([...(providerOptions?.ignore || []), "google-vertex"])],
+    };
+  } else if (providerOptions) payload.provider = providerOptions;
 
   if (!relaxedParameters) {
     payload.temperature = temperature;
@@ -355,7 +386,17 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
     const res = await fetch(getOpenRouterChatEndpoint(), { method: "POST", headers: reqHeaders, body: JSON.stringify(payload), signal: controller.signal });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw makeOpenRouterError(res.status, text, providerId, res.headers?.get?.("retry-after"));
+      const failure = makeOpenRouterError(res.status, text, providerId, res.headers?.get?.("retry-after"));
+      if (!avoidGoogleVertex && /^zernioMiniSeries/.test(String(routeKey || ""))
+          && isGoogleTextPartAdapterFailure(failure, messages)) {
+        warn("ai.openrouter.google_vertex_adapter_rejected", {
+          routeKey, providerId, model, action: "retry-once-excluding-google-vertex",
+        });
+        return callOpenRouter({ routeKey, providerId, model, apiKey, messages,
+          max_tokens, temperature, top_p, response_format, headers, timeoutMs,
+          reasoning, signal, relaxedParameters, avoidGoogleVertex: true, onUsage });
+      }
+      throw failure;
     }
     const json = await res.json();
     const usage = json?.usage || null;
