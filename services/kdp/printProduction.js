@@ -62,7 +62,24 @@ export function choosePrintCandidates(books) {
   }).sort((a,b) => (a.ebookId === SPECIAL_FIRST_BOOK ? -1 : b.ebookId === SPECIAL_FIRST_BOOK ? 1 : a.ebookId - b.ebookId));
 }
 
-export function categorySpecsFromKindle(categories = []) {
+// Use an externally evidenced print-books category when KDP's signed-in
+// Kindle metadata lacks the public breadcrumb. KDP still has to confirm every
+// category-picker level before any title is submitted. Never invent node IDs.
+// Amazon.com print: Books > Computers & Technology > Computer Science > AI & Machine Learning
+// Amazon.co.uk print: Books > Computing & Internet > Computer Science > Artificial Intelligence
+const PRINT_AI_CATEGORY = Object.freeze({
+  us: Object.freeze(["Computers & Technology", "Computer Science", "AI & Machine Learning"]),
+  uk: Object.freeze(["Computing & Internet", "Computer Science", "Artificial Intelligence"]),
+});
+
+function isAiCatalogueBook(book) {
+  if (!book || typeof book !== "object") return false;
+  const text = [book.title, book.description, book.summary, ...(Array.isArray(book.keywords) ? book.keywords : [])]
+    .filter(value => typeof value === "string").join(" ");
+  return /\b(?:artificial intelligence|ai|machine learning|deepfakes?|neural networks?)\b/i.test(text);
+}
+
+export function categorySpecsFromKindle(categories = [], book = null, homeMarketplace = "") {
   const specs = [];
   for (const entry of categories || []) {
     const path = String(entry).split(/\s*›\s*/).map(x => x.trim()).filter(Boolean);
@@ -71,10 +88,19 @@ export function categorySpecsFromKindle(categories = []) {
     if (nodes.length >= 2) specs.push({ path:nodes });
     if (specs.length >= 3) break;
   }
-  // Preserve the signed-in Kindle hierarchy while stripping only the root;
-  // the KDP print category wizard must itself confirm the matching path.
-  if (!specs.length) throw new Error("Existing Kindle print-compatible categories cannot be verified.");
-  return specs;
+  if (specs.length) return specs;
+  // 40/40 existing KDP metadata snapshots currently have empty categories.
+  // Only classify the known AI catalogue where its real description confirms
+  // the subject. Unknown subjects remain blocked until source categories exist.
+  if (!isAiCatalogueBook(book)) {
+    throw new Error("Existing Kindle print-compatible categories cannot be verified.");
+  }
+  const marketplace = String(homeMarketplace).toLowerCase();
+  if (!["amazon.com", "amazon.co.uk"].includes(marketplace)) {
+    throw new Error("Unknown Kindle home marketplace; no print category can be selected safely.");
+  }
+  const path = marketplace === "amazon.co.uk" ? PRINT_AI_CATEGORY.uk : PRINT_AI_CATEGORY.us;
+  return [{ path: [...path] }];
 }
 
 function bookMetadata(book) {
@@ -130,7 +156,7 @@ async function produceOne(book, format, shelf, options) {
       String(kindle.asin || "").toUpperCase() !== String(book.asin || "").toUpperCase()) {
       throw new Error("Signed-in Kindle source title or ASIN does not match the private catalogue.");
     }
-    const categories = categorySpecsFromKindle(kindle.categories);
+    const categories = categorySpecsFromKindle(kindle.categories, book, kindle.homeMarketplace);
     const aiDisclosure = await options.aiDisclosure(sourceRefs[0].titleId);
     assets = await options.prepare(book, format);
     const manifest = assets.manifest;
