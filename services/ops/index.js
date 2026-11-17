@@ -22,6 +22,7 @@ import {
 import { info, warn } from "../../logger.js";
 
 const router = express.Router();
+let podcastGrowthSnapshotInFlight = null;
 
 // Suite bearer authentication is applied by routes/index.js before this router.
 router.get("/spend/openrouter/daily", async (req, res) => {
@@ -55,13 +56,22 @@ router.get("/podcast-growth/latest", async (_req, res) => {
 router.get("/podcast-growth/book-sales-evidence", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   const evidence = await getBookSalesEvidence();
-  return res.json({ ok: true, evidence });
+  return res.json({ ok: evidence.status !== "unavailable", evidence });
 });
 
 router.post("/podcast-growth/snapshot", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const snapshot = await collectPodcastGrowthSnapshot();
+    // Collapse concurrent triggers within this process; the dated private R2
+    // snapshot is the durable same-day checkpoint across sequential workers.
+    if (!podcastGrowthSnapshotInFlight) {
+      const job = collectPodcastGrowthSnapshot();
+      podcastGrowthSnapshotInFlight = job;
+      void job.finally(() => {
+        if (podcastGrowthSnapshotInFlight === job) podcastGrowthSnapshotInFlight = null;
+      }).catch(() => {});
+    }
+    const snapshot = await podcastGrowthSnapshotInFlight;
     return res.status(snapshot.status === "unavailable" || snapshot.persisted === false ? 503 : 200)
       .json({ ok: snapshot.status !== "unavailable" && snapshot.persisted !== false, snapshot });
   } catch (error) {
