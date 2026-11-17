@@ -10,6 +10,7 @@ Headroom, model selection or advertising. No paid API and no additional AI infer
 
 - GET /ops/podcast-growth/status : local readiness without external calls
 - GET /ops/podcast-growth/latest : latest private snapshot or HTTP 404
+- GET /ops/podcast-growth/book-sales-evidence : inspect downloaded KDP workbook availability; no invented royalty totals
 - POST /ops/podcast-growth/snapshot : collect search evidence once daily; repeats reuse existing data
 
 The existing suite bearer-auth middleware protects all ops routes. Do not call
@@ -41,3 +42,12 @@ deployment, rate limits and scheduler permissions.
 
 Monthly content audits can use the latest dated snapshot as supplemental evidence
 without blocking publication or treating absent snapshots as zero performance.
+
+## Book sales source integrity
+
+The authenticated, read-only book-sales evidence endpoint inspects the existing
+private KDP R2 prefix reports/royalties/. A downloaded workbook with a metadata
+sidecar may prove a royalty source exists, but the endpoint intentionally returns
+null for actual sold units, royalties and sales attribution until a verified
+parser and reconciliation are available. Missing workbooks are not zero sales.
+This endpoint does not initiate KDP login, download, pricing or publishing.
