@@ -344,7 +344,14 @@ export function buildFinalSocialArtworkRescuePrompt(prompt, qa = {}) {
   ].join(" ");
 }
 
-async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal, generationKey = "artwork", variation = "initial", maxQaRegenerations = null, providerAttempts = null } = {}) {
+async function requestArtworkFromProvider(provider, prompt, mode, date, {
+  useShortInstruction = false,
+  signal,
+  generationKey = "artwork",
+  variation = "initial",
+  maxQaRegenerations = null,
+  providerAttempts = null,
+} = {}) {
   const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const instruction = buildModelAwareArtworkPrompt({
     model: provider.model,
