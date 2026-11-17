@@ -16,8 +16,8 @@ test("40 titles create 80 preparation-only edition records, no live claims", () 
   assert.equal(report.kdpWritesPerformed, false);
   for (const format of ["paperback", "hardcover"]) {
     assert.equal(report.byFormat[format].total, 40);
-    assert.equal(report.byFormat[format].weeklyCreationCap, 2);
-    assert.equal(report.byFormat[format].weeklyFirstSubmissionCap, 2);
+    assert.equal(report.byFormat[format].weeklyCreationCap, 10);
+    assert.equal(report.byFormat[format].weeklyFirstSubmissionCap, 10);
     assert.equal(report.byFormat[format].sourceReviewRequired, 40);
   }
   assert.ok(report.records.every((x) => x.state === "source_pdf_review_required"));
@@ -55,10 +55,10 @@ test("every record sharing a normalized Kindle ASIN is blocked from preparation"
   }
 });
 
-test("print rollout capacity never exceeds two new titles per format per UTC week", () => {
+test("print rollout provides three weekday title slots but never more than ten per format per week", () => {
   const dates = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"];
   // A read-only Monday plan does not create a book or spend weekly quota.
-  const expected = [2, 2, 2, 2, 0];
+  const expected = [3, 3, 3, 3, 0];
   for (let i = 0; i < dates.length; i++) {
     const plan = getPrintRolloutCapacity({ observedAt: dates[i] + "T17:10:00Z" });
     assert.equal(plan.scheduledSlotsPerFormatToday, expected[i]);
@@ -68,11 +68,13 @@ test("print rollout capacity never exceeds two new titles per format per UTC wee
   }
 });
 
-test("configuration cannot raise the official two-title weekly limit", () => {
-  assert.equal(parsePrintWeeklyLimit("2"), 2);
-  for (const value of [undefined, "", "12", "10", "0", "101", "abc"]) {
-    assert.equal(parsePrintWeeklyLimit(value), 2);
+test("configured weekly print creation/submission cap accepts up to ten and rejects more", () => {
+  for (const value of [undefined, "", "12", "0", "101", "abc"]) {
+    assert.equal(parsePrintWeeklyLimit(value), 10);
   }
+  assert.equal(parsePrintWeeklyLimit("2"), 2);
+  assert.equal(parsePrintWeeklyLimit("10"), 10);
+  assert.equal(getPrintRolloutCapacity({weeklyLimit:10,observedAt:"2026-11-16T18:00:00Z"}).weeklyLimitPerFormat,10);
   assert.throws(() => getPrintRolloutCapacity({ weeklyLimit: 12 }), /weekly limit/);
 });
 
