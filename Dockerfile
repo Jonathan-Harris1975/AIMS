@@ -39,7 +39,7 @@ RUN echo "[build] runtime packages" \
     ffmpeg \
     chromium \
     poppler-utils \
-    ttf-dejavu \
+    font-dejavu \
  && command -v chromium >/dev/null \
  && command -v ffmpeg >/dev/null \
  && command -v ffprobe >/dev/null \
