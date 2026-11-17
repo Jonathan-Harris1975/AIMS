@@ -39,8 +39,11 @@ function cleanTitle(value) {
 }
 
 export function existingPrintMatches(shelf, book, format) {
+  // Reports API is a valid complete Bookshelf source with pagesScanned=0;
+  // browser scans have pagesScanned>=1. Either must contain usable refs.
   if (!Array.isArray(shelf?.refs) || !shelf.refs.length ||
-      !Number.isInteger(shelf.pagesScanned) || shelf.pagesScanned < 1) {
+      !Number.isInteger(shelf.pagesScanned) || shelf.pagesScanned < 0 ||
+      shelf.refs.some(ref => !ref.titleId || !ref.format)) {
     throw new Error("Cannot establish a complete signed-in KDP Bookshelf inventory.");
   }
   const printRefs = shelf.refs.filter(r => r.format === format);
