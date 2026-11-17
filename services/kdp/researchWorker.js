@@ -121,8 +121,11 @@ export async function runResearchTick({
       // technical failures so one broken title cannot starve the whole catalogue.
       const byId = new Map(currentCatalogue.map((item) => [item.ebookId, item]));
       const carryPending = (state.pending || []).map((item) => byId.get(item.ebookId)).filter(Boolean);
-      const failed = (state.results || []).filter((item) => item.optimisation?.technical === true ||
-        item.updateDispatch?.ok === false).map((item) => byId.get(item.ebookId)).filter(Boolean)
+      // A queued update with a dispatch failure stays with the separate durable
+      // update worker; do not create another weekly proposal for a possibly
+      // submitted title merely because its dispatch acknowledgement was lost.
+      const failed = (state.results || []).filter((item) => item.optimisation?.technical === true)
+        .map((item) => byId.get(item.ebookId)).filter(Boolean)
         .slice(0, Math.max(1, Math.ceil(limit / 5)));
       const next = new Map();
       for (const item of [...carryPending, ...failed, ...selection.books]) {
