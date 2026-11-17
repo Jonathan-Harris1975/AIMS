@@ -92,6 +92,11 @@ export async function publishBook(
   if (!shouldCreate && !request.titleId?.trim()) {
     throw new KdpClientError('titleId is required unless create=true.')
   }
+  if (shouldCreate && dryRun) {
+    // Visiting KDP /create and clicking a format button reserves a weekly title
+    // creation slot. A dry-run must never consume one just to inspect readiness.
+    throw new KdpClientError('Dry-run cannot create a KDP title; use a verified existing draft.')
+  }
   if (request.publish && dryRun) {
     throw new KdpClientError('Cannot publish with dryRun=true.')
   }
