@@ -152,7 +152,7 @@ export async function reservePrintQuota(ebookId, format, action, { week = utcPri
 }
 
 export async function getPrintQuotaUsage(week = utcPrintWeek()) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(week)) throw new TypeError("Invalid print quota week.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) throw new TypeError("Invalid print quota week.");
   await ensurePrintStateTables();
   const response = await queryKdpD1(
     "SELECT format,action,reserved FROM kdp_print_quota_counters_v2 WHERE week_utc=?", [week]);
