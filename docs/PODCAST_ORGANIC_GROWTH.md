@@ -11,7 +11,7 @@ Headroom, model selection or advertising. No paid API and no additional AI infer
 - GET /ops/podcast-growth/status : local readiness without external calls
 - GET /ops/podcast-growth/latest : latest private snapshot or HTTP 404
 - GET /ops/podcast-growth/book-sales-evidence : inspect downloaded KDP workbook availability; no invented royalty totals
-- POST /ops/podcast-growth/snapshot : collect search evidence once daily; repeats reuse existing data
+- POST /ops/podcast-growth/snapshot : reuse a same-day successful/partial snapshot; unavailable days may retry
 
 The existing suite bearer-auth middleware protects all ops routes. Do not call
 the collection endpoint from the public website.
@@ -51,3 +51,7 @@ sidecar may prove a royalty source exists, but the endpoint intentionally return
 null for actual sold units, royalties and sales attribution until a verified
 parser and reconciliation are available. Missing workbooks are not zero sales.
 This endpoint does not initiate KDP login, download, pricing or publishing.
+
+Concurrent POST calls within one AIMS process share a single in-flight collection. The private dated snapshot limits sequential repeats across instances, but simultaneous first-time requests on different instances may still race; do not fire parallel cross-instance cron triggers.
+
+KDP storage writes metadata beside each workbook using the existing convention workbook-key + .json. A missing sidecar is logged as partial source evidence. A null workbook count means storage was inaccessible (unknown), while zero means an accessible empty report prefix. Neither establishes sales volume.
