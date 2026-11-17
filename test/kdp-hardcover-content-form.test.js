@@ -41,7 +41,7 @@ for (const prefix of ["print_book", "hardcover_book"]) {
       trimHeightIn: 9,
       inkAndPaper: "black_and_white",
       interiorHasBleed: false,
-    });
+    }, prefix === "hardcover_book" ? "hardcover" : "paperback");
     assert.deepEqual(Array.from(result.skipped), []);
     assert.deepEqual(Array.from(result.filled), ["trimSize", "inkAndPaper", "interiorHasBleed"]);
     assert.equal(width.value, "600");
@@ -74,4 +74,56 @@ test("hardcover pricing selects an actual hardcover USD field, not a Kindle pric
   assert.deepEqual(Array.from(applied.filled), ["listPriceUsd"]);
   assert.deepEqual(Array.from(applied.skipped), []);
   assert.equal(input.value, "16.99");
+});
+
+test("a paperback form with both namespaces updates paperback fields only", () => {
+  const fields = new Map();
+  for (const prefix of ["print_book", "hardcover_book"]) {
+    fields.set(`data[${prefix}][trim_size][width]`, { value: "", dispatchEvent() {} });
+    fields.set(`data[${prefix}][trim_size][height]`, { value: "", dispatchEvent() {} });
+  }
+  const document = {
+    querySelector(selector) {
+      const match = /^input\\[name="([^"]+)"\\]$/.exec(selector);
+      return match ? fields.get(match[1]) || null : null;
+    },
+    querySelectorAll() { return []; },
+    getElementById() { return null; },
+  };
+  const fn = vm.runInNewContext(`(${source})`, { document, Event: class Event {} });
+  fn({ trimWidthIn: 6, trimHeightIn: 9 }, "paperback");
+  assert.equal(fields.get("data[print_book][trim_size][width]").value, "600");
+  assert.equal(fields.get("data[hardcover_book][trim_size][width]").value, "");
+  fn({ trimWidthIn: 6, trimHeightIn: 9 }, "hardcover");
+  assert.equal(fields.get("data[hardcover_book][trim_size][width]").value, "600");
+});
+
+test("AI questionnaire writes both the visible select and the matching hidden value", () => {
+  const hidden = { value: "", dispatchEvent() {} };
+  const select = { value: "", dispatchEvent() {} };
+  const document = {
+    querySelector(selector) {
+      return selector === 'input[name="data[hardcover_book][generative_ai_questionnaire][text][amount_and_editing]"]'
+        ? hidden : null;
+    },
+    querySelectorAll() { return []; },
+    getElementById(id) { return id === "generative-ai-questionnaire-text" ? select : null; },
+  };
+  const fn = vm.runInNewContext(`(${source})`, { document, Event: class Event {} });
+  const result = fn({ aiTextAmount: "some" }, "hardcover");
+  assert.deepEqual(Array.from(result.skipped), []);
+  assert.deepEqual(Array.from(result.filled), ["aiTextAmount"]);
+  assert.equal(select.value, "some");
+  assert.equal(hidden.value, "some");
+});
+
+test("AI questionnaire does not claim a value persisted when no field exists", () => {
+  const document = {
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    getElementById() { return null; },
+  };
+  const fn = vm.runInNewContext(`(${source})`, { document, Event: class Event {} });
+  const result = fn({ containsAiContent: true, aiTextAmount: "some" }, "hardcover");
+  assert.deepEqual(Array.from(result.skipped), ["aiTextAmount", "containsAiContent"]);
 });
