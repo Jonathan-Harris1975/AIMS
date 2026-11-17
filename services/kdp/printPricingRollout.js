@@ -66,15 +66,19 @@ export function planPublishedPrintPrice(book, job, manifest, signedIn) {
     if (value === null) throw new Error(currency + " signed-in KDP print price cannot be verified.");
     observed[currency] = money(value);
     const targetMinor = Math.round(Number(targets[currency].price) * 100);
-    const ceilingMinor = Math.round(targets[currency].sensibleRetailCeiling * 100);
-    // Repair an inadequate royalty OR implausibly expensive existing retail price.
-    // Do not reduce prices within a sensible range merely because they earn more.
+    const ceilingMinor = Math.round(Number(targets[currency].maximumPrice) * 100);
+    // Enforce this edition's royalty-safe minimum and page-count-based ceiling.
+    // Preserve a profitable price already inside its own price range.
     if (value < targetMinor) changes[currency] = targets[currency].price;
     else if (value > ceilingMinor) changes[currency] = money(ceilingMinor);
   }
   return { ebookId: book.ebookId, format: job.format, titleId: job.titleId,
     observedPrices: observed, targetPrices: Object.fromEntries(
-      Object.entries(targets).map(([key, value]) => [key, value.price])),
+      Object.entries(targets).map(([key, value]) => [key, value.minimumPrice])),
+    maximumPrices: Object.fromEntries(
+      Object.entries(targets).map(([key, value]) => [key, value.maximumPrice])),
+    priceExplanations: Object.fromEntries(
+      Object.entries(targets).map(([key, value]) => [key, value.priceRationale])),
     changes, estimates: targets, policyVersion: KDP_PRINT_PRICING_POLICY_VERSION };
 }
 

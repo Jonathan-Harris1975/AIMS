@@ -33,6 +33,7 @@ import {
 import { runOptimisationUpdates } from "./optimisationUpdates.js";
 import { reconcileRoyaltyFloor } from "./royaltyFloorRollout.js";
 import { reconcilePrintPricing } from "./printPricingRollout.js";
+import { previewKdpFormatPriceRanges } from "./priceRangeReport.js";
 import { buildPrintPreflight, getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
 import { inspectPrintSourcePdf } from "./printSourceAudit.js";
 import { runPrintProduction } from "./printProduction.js";
@@ -626,6 +627,12 @@ router.post("/audit/metadata/update/batch", requestDedupe("kdp:metadata-update-b
 
 // Separate from research optimisation: the existing 40-book royalty shortfall is
 // a mandatory pricing policy correction, not a competitor-driven proposal.
+// Explain the per-book size/page-count minimum–maximum bounds without KDP writes.
+router.get("/audit/pricing/ranges", asyncRoute(async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json(await previewKdpFormatPriceRanges());
+}));
+
 router.get("/audit/pricing/royalty-floor", asyncRoute(async (_req, res) => {
   res.set("Cache-Control", "no-store");
   res.json(await reconcileRoyaltyFloor({ dryRun: true }));

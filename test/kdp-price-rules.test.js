@@ -6,6 +6,7 @@ import {
   kdpPriceBandForKey,
   parseKdpPriceMinorUnits,
   uk70RoyaltyFloorMinor,
+  uk70RoyaltyPriceRange,
   validateKdpPriceChanges,
 } from '../services/kdp/engine/kdpPriceRules.ts'
 
@@ -163,4 +164,21 @@ test('signed-in KDP audit reports a UK royalty shortfall or unverifiable cost', 
   const unknown = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', prices: { GB: '6.99' } })])
   assert.equal(unknown.issues[0].code, 'target_royalty_unverifiable')
   assert.equal(unknown.unverifiedPriceCount, 1)
+})
+
+
+test('file-size-specific Kindle bands protect the £4.50 royalty and vary testing ceilings', () => {
+  for (const [kb, expectedMax] of [[309, '7.99'], [349, '7.99'], [350, '8.99'],
+    [399, '8.99'], [400, '9.99'], [449, '9.99'], [450, '10.99'], [464, '10.99']]) {
+    const range = uk70RoyaltyPriceRange(String(kb))
+    assert.equal(range.minimumPrice, '6.99', `minimum ${kb} KB`)
+    assert.equal(range.maximumPrice, expectedMax, `maximum ${kb} KB`)
+    assert.ok(range.estimatedRoyaltyAtMinimum >= 4.50)
+    assert.ok(range.priceRationale.includes(String(kb)))
+    assert.equal(range.priceRangeBasis, 'verified_kdp_file_size_uk_70_percent')
+  }
+  assert.equal(uk70RoyaltyPriceRange(''), null)
+  assert.equal(uk70RoyaltyPriceRange('-1'), null)
+  assert.equal(uk70RoyaltyPriceRange('1000000'), null)
+  assert.ok(Number(uk70RoyaltyPriceRange('800').maximumPrice) <= 12.99)
 })
