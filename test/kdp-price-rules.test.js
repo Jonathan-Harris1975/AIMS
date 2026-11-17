@@ -135,6 +135,19 @@ test('UK 70% pricing floors round up to .99 above £4.50 after KDP delivery', ()
   }
 })
 
+test('eBook £4.50 is an estimated per-sale royalty floor, NOT a list price', () => {
+  for (const kb of [0, 1, 313, 437, 1024, 2048, 5120, 10000]) {
+    const price = uk70RoyaltyFloorMinor(String(kb))
+    const deliveryPennies = Math.max(1, Math.round(((kb + 1) * 10) / 1024))
+    const estimatedRoyalty = 0.70 * (price - deliveryPennies)
+    assert.ok(estimatedRoyalty >= 450,
+      `GBP price ${price}p for ${kb} KB returned ${estimatedRoyalty}p, below £4.50`)
+    assert.equal(price % 100, 99, 'commercial shelf prices must end .99')
+  }
+  // A £4.50 list price cannot deliver £4.50 royalty under the 70% plan.
+  assert.ok(0.70 * (450 - 4) < 450)
+})
+
 test('UK royalty target refuses unknown delivery sizes and 35% plans', () => {
   assert.match(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '70_PERCENT').join(' '), /delivery file size/)
   assert.match(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '35_PERCENT', '1024').join(' '), /requires a verified 70%/)
