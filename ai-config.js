@@ -284,6 +284,7 @@ export const aiConfig = {
     podcastHelper: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol", "meta"]),
     seoKeywords: routeChain(["summary", "fast", "fallback"], ["google25FlashLite", "gpt56Sol"]),
     kdpResearchDraft: fixedRouteChain(["openrouterFreePrimary", "auditFreePrimary", "auditFreeBackup"]),
+    kdpResearchCritic: fixedRouteChain(["auditFreeBackup", "auditFreePrimary", "openrouterFreePrimary"]),
     kdpResearchPaidFallback: fixedRouteChain(["auditEconomy"]),
     artworkPrompt: routeChain(["summary", "fast", "fallback"], ["meta", "google25FlashLite"]),
     artworkImage: routeChain(["image"], ["artworkPrimary", "artworkBackup"]),
