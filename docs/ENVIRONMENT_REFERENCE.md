@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **540**
+- Runtime variables referenced in production code: **541**
 - Present in curated templates: **406**
-- Not present in curated templates: **134**
+- Not present in curated templates: **135**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -214,7 +214,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_CONTENT_AUTOMATION_ENABLED` | Yes | services/comms-hub/routes/index.js:138 |
 | `COMMS_HUB_CONTENT_AUTOMATION_PODCAST_ENABLED` | Yes | services/comms-hub/routes/index.js:142 |
 | `COMMS_HUB_CONTENT_AUTOMATION_SOCIAL_ENABLED` | Yes | services/comms-hub/routes/index.js:141 |
-| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2302 |
+| `COMMS_HUB_CONTENT_AUTOMATION_ZERNIO_MINI_SERIES_BRIEF_LIMIT` | Yes | services/zernio/utils/socialScheduler.js:2303 |
 | `COMMS_HUB_CREDENTIAL_VAULT_ENABLED` | Yes | services/comms-hub/routes/index.js:150 |
 | `COMMS_HUB_DELAYED_ACTION_WORKER_ENABLED` | Yes | services/comms-hub/routes/index.js:146 |
 | `COMMS_HUB_EMAIL_ENABLED` | Yes | services/comms-hub/routes/index.js:131 |
@@ -467,7 +467,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:245<br>services/blog/weekly/buildWeeklyBlogPost.js:221<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
 | `ZERNIO_ACCOUNT_ID` | Yes | services/zernio/utils/config.js:63 |
-| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1776<br>services/zernio/utils/socialScheduler.js:2699<br>services/zernio/utils/socialScheduler.js:3163<br>services/zernio/utils/socialScheduler.js:3577 |
+| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1777<br>services/zernio/utils/socialScheduler.js:2700<br>services/zernio/utils/socialScheduler.js:3170<br>services/zernio/utils/socialScheduler.js:3584 |
 | `ZERNIO_API_BASE_URL` | Yes | services/zernio/utils/config.js:54<br>services/zernio/utils/zernioClient.js:36 |
 | `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:14 |
 | `ZERNIO_ARTWORK_UPLOAD_ATTEMPTS` | No | services/artwork/createSocialArtwork.js:44 |
@@ -475,16 +475,16 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_BLOG_RSS_FETCH_TIMEOUT_MS` | No | services/zernio/utils/blogRssFeed.js:85 |
 | `ZERNIO_BLOG_RSS_HASHTAG_LIMIT` | No | services/zernio/utils/config.js:106 |
 | `ZERNIO_BLOG_RSS_TIME` | Yes | services/zernio/utils/config.js:103 |
-| `ZERNIO_CANONICAL_IMAGE_HOSTS` | Yes | services/zernio/utils/socialScheduler.js:128 |
-| `ZERNIO_DAILY_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:44 |
+| `ZERNIO_CANONICAL_IMAGE_HOSTS` | Yes | services/zernio/utils/socialScheduler.js:129 |
+| `ZERNIO_DAILY_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:45 |
 | `ZERNIO_DEFAULT_DRY_RUN` | Yes | services/zernio/utils/config.js:79 |
-| `ZERNIO_DUPLICATE_RECONCILIATION_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:960 |
-| `ZERNIO_EBOOK_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:50 |
-| `ZERNIO_EBOOK_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:238 |
-| `ZERNIO_EBOOK_THURSDAY_TIME` | Yes | services/zernio/utils/config.js:237 |
-| `ZERNIO_EBOOK_TUESDAY_TIME` | Yes | services/zernio/utils/config.js:236 |
-| `ZERNIO_FRIDAY_BUILD_CONTEXT` | No | services/zernio/utils/socialScheduler.js:82 |
-| `ZERNIO_FRIDAY_BUILD_CONTEXT_TTL_DAYS` | No | services/zernio/utils/socialScheduler.js:105 |
+| `ZERNIO_DUPLICATE_RECONCILIATION_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:961 |
+| `ZERNIO_EBOOK_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:51 |
+| `ZERNIO_EBOOK_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:240 |
+| `ZERNIO_EBOOK_THURSDAY_TIME` | Yes | services/zernio/utils/config.js:239 |
+| `ZERNIO_EBOOK_TUESDAY_TIME` | Yes | services/zernio/utils/config.js:238 |
+| `ZERNIO_FRIDAY_BUILD_CONTEXT` | No | services/zernio/utils/socialScheduler.js:83 |
+| `ZERNIO_FRIDAY_BUILD_CONTEXT_TTL_DAYS` | No | services/zernio/utils/socialScheduler.js:106 |
 | `ZERNIO_FRIDAY_IMAGE_URL` | No | services/zernio/utils/config.js:152 |
 | `ZERNIO_FRIDAY_TIME` | Yes | services/zernio/utils/config.js:151 |
 | `ZERNIO_META_API_KEY` | Yes | audits/utils/onBrandEvidence.js:223 |
@@ -495,12 +495,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_MINI_SERIES_MAX_SOURCE_ITEMS` | No | services/zernio/utils/config.js:197 |
 | `ZERNIO_MINI_SERIES_MIN_POSTS` | No | services/zernio/utils/config.js:193 |
 | `ZERNIO_MINI_SERIES_MIN_SCORE` | No | services/zernio/utils/config.js:195 |
-| `ZERNIO_MINI_SERIES_POST_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:48 |
-| `ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:46 |
-| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2757 |
+| `ZERNIO_MINI_SERIES_POST_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:49 |
+| `ZERNIO_MINI_SERIES_RESEARCH_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:47 |
+| `ZERNIO_MINI_SERIES_RETRY_BASE_MS` | Yes | services/zernio/utils/socialScheduler.js:2758 |
 | `ZERNIO_MINI_SERIES_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:206 |
 | `ZERNIO_MINI_SERIES_SUNDAY_TIME` | Yes | services/zernio/utils/config.js:207 |
-| `ZERNIO_MINI_SERIES_THEME_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:47 |
+| `ZERNIO_MINI_SERIES_THEME_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:48 |
 | `ZERNIO_MINI_SERIES_THURSDAY_TIME` | Yes | services/zernio/utils/config.js:204 |
 | `ZERNIO_MINI_SERIES_TUESDAY_TIME` | Yes | services/zernio/utils/config.js:202 |
 | `ZERNIO_MINI_SERIES_WEDNESDAY_TIME` | Yes | services/zernio/utils/config.js:203 |
@@ -510,8 +510,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_NEWSLETTER_MONDAY_TIME` | No | services/zernio/utils/config.js:216 |
 | `ZERNIO_NEWSLETTER_SIGNUP_URL` | No | services/zernio/utils/config.js:214 |
 | `ZERNIO_NEWSLETTER_WEDNESDAY_TIME` | No | services/zernio/utils/config.js:217 |
-| `ZERNIO_PODCAST_PROMO_IMAGE_URL` | Yes | services/zernio/utils/config.js:228 |
-| `ZERNIO_PODCAST_PROMO_MAX_TOKENS` | Yes | services/zernio/utils/socialScheduler.js:49 |
+| `ZERNIO_PODCAST_PROMO_IMAGE_URL` | Yes | services/zernio/utils/config.js:230 |
+| `ZERNIO_PODCAST_PROMO_LINK_MODE` | No | services/zernio/utils/config.js:229 |
+| `ZERNIO_PODCAST_PROMO_MAX_TOKENS` | Yes | services/zernio/utils/socialScheduler.js:50 |
 | `ZERNIO_PODCAST_PROMO_TIME` | Yes | services/zernio/utils/config.js:225 |
 | `ZERNIO_PODCAST_RSS_FEED_URL` | Yes | services/zernio/utils/config.js:226<br>services/zernio/utils/podcastRssFeed.js:50 |
 | `ZERNIO_PODCAST_SPOTIFY_URL` | Yes | services/zernio/utils/config.js:227 |
@@ -523,19 +524,19 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ZERNIO_QUIZ_ARTWORK_TIMEOUT_MS` | No | services/artwork/createQuizArtwork.js:11 |
 | `ZERNIO_QUIZ_DETERMINISTIC_ARTWORK` | No | services/artwork/createQuizArtwork.js:22 |
 | `ZERNIO_QUIZ_IMAGE_URL` | Yes | services/zernio/utils/config.js:180 |
-| `ZERNIO_QUIZ_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:45 |
+| `ZERNIO_QUIZ_MAX_TOKENS` | No | services/zernio/utils/socialScheduler.js:46 |
 | `ZERNIO_QUIZ_QUESTION_TIME` | Yes | services/zernio/utils/config.js:178 |
 | `ZERNIO_REPORT_FROM_DATE` | No | audits/utils/zernioSocialPerformance.js:61 |
 | `ZERNIO_REPORT_TO_DATE` | No | audits/utils/zernioSocialPerformance.js:62 |
 | `ZERNIO_REQUIRED_PLATFORMS` | Yes | services/zernio/utils/config.js:69 |
-| `ZERNIO_REQUIRE_IMAGE` | Yes | services/zernio/utils/socialScheduler.js:1020 |
-| `ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/zernio/utils/socialScheduler.js:1180 |
+| `ZERNIO_REQUIRE_IMAGE` | Yes | services/zernio/utils/socialScheduler.js:1021 |
+| `ZERNIO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/zernio/utils/socialScheduler.js:1181 |
 | `ZERNIO_RSS_LOOKBACK_DAYS` | Yes | services/zernio/utils/config.js:80 |
 | `ZERNIO_SATURDAY_IMAGE_URL` | No | services/zernio/utils/config.js:161 |
 | `ZERNIO_SATURDAY_TIME` | Yes | services/zernio/utils/config.js:160 |
-| `ZERNIO_SCHEDULE_MIN_LEAD_MS` | Yes | services/zernio/utils/socialScheduler.js:818 |
-| `ZERNIO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/zernio/utils/socialScheduler.js:817 |
-| `ZERNIO_SCHEDULE_TIME_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:882 |
+| `ZERNIO_SCHEDULE_MIN_LEAD_MS` | Yes | services/zernio/utils/socialScheduler.js:819 |
+| `ZERNIO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/zernio/utils/socialScheduler.js:818 |
+| `ZERNIO_SCHEDULE_TIME_TOLERANCE_MS` | Yes | services/zernio/utils/socialScheduler.js:883 |
 | `ZERNIO_SLOT_COMPLETED_TTL_MS` | No | services/zernio/utils/state.js:11 |
 | `ZERNIO_SLOT_PENDING_TTL_MS` | No | services/zernio/utils/state.js:10 |
 | `ZERNIO_SUNDAY_IMAGE_URL` | No | services/zernio/utils/config.js:170 |
