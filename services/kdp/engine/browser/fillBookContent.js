@@ -92,13 +92,15 @@
 
   if (changes.hasPublisherBarcode !== undefined) {
     const val = changes.hasPublisherBarcode ? 'true' : 'false'
-    setHidden('data[print_book][has_publisher_barcode]', val)
-    const check = document.getElementById('data-print-book-has-publisher-barcode')
+    const hiddenSet = setHidden('data[print_book][has_publisher_barcode]', val)
+    const check = document.getElementById('data-hardcover-book-has-publisher-barcode') ||
+      document.getElementById('data-print-book-has-publisher-barcode')
     if (check) {
       check.checked = changes.hasPublisherBarcode
       dispatch(check)
     }
-    filled.push('hasPublisherBarcode')
+    if (hiddenSet || check) filled.push('hasPublisherBarcode')
+    else skipped.push('hasPublisherBarcode')
   }
 
   const setSelectById = (id, value) => {
@@ -110,49 +112,37 @@
   }
 
   if (changes.aiTextAmount !== undefined) {
-    setSelectById('generative-ai-questionnaire-text', changes.aiTextAmount)
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][text][amount_and_editing]',
-      changes.aiTextAmount,
-    )
-    filled.push('aiTextAmount')
+    const ok = setSelectById('generative-ai-questionnaire-text', changes.aiTextAmount) ||
+      setHidden('data[print_book][generative_ai_questionnaire][text][amount_and_editing]', changes.aiTextAmount)
+    if (ok) filled.push('aiTextAmount')
+    else skipped.push('aiTextAmount')
   }
   if (changes.aiTextTool !== undefined) {
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][text][tools][0]',
-      changes.aiTextTool,
-    )
-    filled.push('aiTextTool')
+    if (setHidden('data[print_book][generative_ai_questionnaire][text][tools][0]', changes.aiTextTool)) {
+      filled.push('aiTextTool')
+    } else skipped.push('aiTextTool')
   }
   if (changes.aiImagesAmount !== undefined) {
-    setSelectById('generative-ai-questionnaire-images', changes.aiImagesAmount)
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][images][amount_and_editing]',
-      changes.aiImagesAmount,
-    )
-    filled.push('aiImagesAmount')
+    const ok = setSelectById('generative-ai-questionnaire-images', changes.aiImagesAmount) ||
+      setHidden('data[print_book][generative_ai_questionnaire][images][amount_and_editing]', changes.aiImagesAmount)
+    if (ok) filled.push('aiImagesAmount')
+    else skipped.push('aiImagesAmount')
   }
   if (changes.aiImagesTool !== undefined) {
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][images][tools][0]',
-      changes.aiImagesTool,
-    )
-    filled.push('aiImagesTool')
+    if (setHidden('data[print_book][generative_ai_questionnaire][images][tools][0]', changes.aiImagesTool)) {
+      filled.push('aiImagesTool')
+    } else skipped.push('aiImagesTool')
   }
   if (changes.aiTranslationsAmount !== undefined) {
-    setSelectById('generative-ai-questionnaire-translations', changes.aiTranslationsAmount)
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][translations][amount_and_editing]',
-      changes.aiTranslationsAmount,
-    )
-    filled.push('aiTranslationsAmount')
+    const ok = setSelectById('generative-ai-questionnaire-translations', changes.aiTranslationsAmount) ||
+      setHidden('data[print_book][generative_ai_questionnaire][translations][amount_and_editing]', changes.aiTranslationsAmount)
+    if (ok) filled.push('aiTranslationsAmount')
+    else skipped.push('aiTranslationsAmount')
   }
   if (changes.containsAiContent !== undefined) {
-    setHidden(
-      'data[print_book][generative_ai_questionnaire][contains_ai_content]',
-      changes.containsAiContent ? 'YES' : 'NO',
-    )
-    filled.push('containsAiContent')
+    if (setHidden('data[print_book][generative_ai_questionnaire][contains_ai_content]',
+      changes.containsAiContent ? 'YES' : 'NO')) filled.push('containsAiContent')
+    else skipped.push('containsAiContent')
   }
 
   if (changes.assignFreeIsbn) {
