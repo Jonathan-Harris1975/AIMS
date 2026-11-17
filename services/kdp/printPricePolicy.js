@@ -52,9 +52,22 @@ export function calculatePrintPrice(format, pages, market) {
   if (price > ceiling || royalty + 0.001 < profitFloor) {
     throw new Error("Print list price would exceed the sensible retail ceiling or violate the minimum royalty.");
   }
+  // Additional testing headroom scales with verified final printed pages.
+  // The static cap remains a hard safety ceiling, never a universal target.
+  const maxPriceUplift = (format === "paperback" ? 1 : 2) + Math.ceil(pages / 100);
+  const maximumPrice = Number(Math.min(ceiling, price + maxPriceUplift).toFixed(2));
+  const estimatedRoyaltyAtMaximum = Math.round((.60 * maximumPrice - printCost) * 100) / 100;
   return {
     market, format, pages, printCost: Math.round(printCost * 1000) / 1000,
     price: price.toFixed(2), estimatedRoyalty: royalty,
+    minimumPrice: price.toFixed(2), maximumPrice: maximumPrice.toFixed(2),
+    estimatedRoyaltyAtMaximum,
+    priceRangeBasis: "final_print_pdf_page_count_6x9_black_ink_white_paper",
+    priceRationale: `${format} ${pages} final PDF pages, ${market} manufacturing cost ${printCost.toFixed(2)}. ` +
+      `A ${market === "GBP" ? "£4.50" : "$6"} direct-Amazon royalty floor, 10% headroom and upwards .99 rounding ` +
+      `give the lower price. A page-count-based testing allowance gives the upper price, ` +
+      `never exceeding the ${ceiling.toFixed(2)} ${market} hard retail cap. ` +
+      "Verified market demand, not page count alone, decides a price within this range.",
     royaltyRate: .60, minimumViablePrice: Math.ceil(minimumViablePrice * 100) / 100,
     sensibleRetailCeiling: ceiling, pricingPolicyVersion: KDP_PRINT_PRICING_POLICY_VERSION,
     retailHeadroom: KDP_PRINT_RETAIL_HEADROOM, calculatedAt: new Date().toISOString(),
