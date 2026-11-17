@@ -73,3 +73,31 @@ test("configuration cannot raise the official two-title weekly limit", () => {
   }
   assert.throws(() => getPrintRolloutCapacity({ weeklyLimit: 12 }), /weekly limit/);
 });
+
+test("R2-backed preflight blocks a missing private source object instead of claiming it is ready", () => {
+  const first = book(1, 240);
+  const seventh = book(7, 185);
+  const presentKeys = new Set([first.manuscriptR2Key]);
+  const report = buildPrintPreflight([first, seventh], { existingSourceKeys: presentKeys });
+  assert.equal(report.sourceObjectExistenceChecked, true);
+  assert.equal(report.missingSourceObjects, 1);
+  assert.equal(report.kdpWritesPerformed, false);
+  for (const format of ["paperback", "hardcover"]) {
+    const valid = report.records.find((r) => r.ebookId === 1 && r.format === format);
+    const missing = report.records.find((r) => r.ebookId === 7 && r.format === format);
+    assert.equal(valid.sourcePdfPresent, true);
+    assert.equal(valid.state, "source_pdf_review_required");
+    assert.equal(missing.sourcePdfPresent, false);
+    assert.equal(missing.state, "catalogue_blocked");
+    assert.ok(missing.blockers.includes("missing_private_source_pdf_object"));
+    assert.deepEqual(report.byFormat[format].preparationQueue, [1]);
+  }
+});
+
+test("missing source inventory is explicitly unverified, not silently treated as a verified R2 listing", () => {
+  const report = buildPrintPreflight([book(1)]);
+  assert.equal(report.sourceObjectExistenceChecked, false);
+  assert.equal(report.missingSourceObjects, null);
+  assert.equal(report.records[0].sourcePdfPresent, null);
+  assert.throws(() => buildPrintPreflight([book(1)], { existingSourceKeys: [] }), /Set/);
+});
