@@ -5,7 +5,7 @@ process.env.SITE_BASE_URL = "https://jonathan-harris.online";
 process.env.R2_PUBLIC_BASE_URL_TRANSCRIPT = "https://transcripts.jonathan-harris.online";
 process.env.PODCAST_TRANSCRIPT_HTML_BASE_URL = "https://jonathan-harris.online/transcripts";
 
-const { generateFeedXML, podcastChannelImageUrl } = await import("../services/rss-feed-podcast/generateFeed.js");
+const { generateFeedXML, podcastChannelImageUrl, podseoEnclosureUrl } = await import("../services/rss-feed-podcast/generateFeed.js");
 
 test("generateFeedXML keeps episode page, audio enclosure, and transcript URLs distinct", () => {
   const xml = generateFeedXML([
@@ -27,7 +27,7 @@ test("generateFeedXML keeps episode page, audio enclosure, and transcript URLs d
   ]);
 
   assert.match(xml, /<link>https:\/\/jonathan-harris\.online\/podcast\/episodes\/ai-accountability-costs-and-local-control\/<\/link>/);
-  assert.match(xml, /<enclosure url="https:\/\/podcast\.jonathan-harris\.online\/TT-2026-04-17\.mp3" length="123456" type="audio\/mpeg" \/>/);
+  assert.match(xml, /<enclosure url="https:\/\/hopr\.fm\/k\/e4dxbwh0\/https:\/\/podcast\.jonathan-harris\.online\/TT-2026-04-17\.mp3" length="123456" type="audio\/mpeg" \/>/);
   assert.match(xml, /<podcast:transcript url="https:\/\/jonathan-harris\.online\/transcripts\/TT-2026-04-17\.html" type="text\/html" \/>/);
   assert.doesNotMatch(xml, /<link>https:\/\/transcripts\.jonathan-harris\.online\/TT-2026-04-17\.txt<\/link>/);
 });
@@ -101,4 +101,27 @@ test("podcast show cover always migrates the old configured URL without changing
     if (originalImage === undefined) delete process.env.PODCAST_IMAGE_URL;
     else process.env.PODCAST_IMAGE_URL = originalImage;
   }
+});
+
+test("PodSEO prefix is only on audio and is applied once", () => {
+  const source = "https://podcast.jonathan-harris.online/TT-2026-11-13.mp3?file=1&part=2";
+  const prefixed = podseoEnclosureUrl(source);
+  assert.equal(prefixed, "https://hopr.fm/k/e4dxbwh0/" + source);
+  assert.equal(podseoEnclosureUrl(prefixed), prefixed);
+  assert.throws(() => podseoEnclosureUrl("http://insecure.example/audio.mp3"), /HTTPS/);
+  assert.throws(() => podseoEnclosureUrl("https://hopr.fm/k/some-other-key/https://example.com/audio.mp3"), /different hopr.fm tracking key/);
+
+  const xml = generateFeedXML([{
+    sessionId: "TT-2026-11-13",
+    title: "Podcast analytics verification",
+    description: "Test episode with ampersands in the source URL.",
+    podcastUrl: source,
+    episodePageUrl: "https://jonathan-harris.online/podcast/episodes/podcast-analytics-verification/",
+    transcriptHtmlUrl: "https://jonathan-harris.online/transcripts/TT-2026-11-13.html",
+    productionComplete: true,
+    fileSize: 1234,
+  }]);
+  assert.match(xml, /<enclosure url="https:\/\/hopr\.fm\/k\/e4dxbwh0\/https:\/\/podcast\.jonathan-harris\.online\/TT-2026-11-13\.mp3\?file=1&amp;part=2"/);
+  assert.match(xml, /<link>https:\/\/jonathan-harris\.online\/podcast\/episodes\/podcast-analytics-verification\/<\/link>/);
+  assert.match(xml, /<podcast:transcript url="https:\/\/jonathan-harris\.online\/transcripts\/TT-2026-11-13\.html"/);
 });
