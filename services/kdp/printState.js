@@ -94,19 +94,21 @@ export async function reservePrintQuota(ebookId, format, action, { week = utcPri
   if (!["create", "submit"].includes(action) || !/^\d{4}-\d{2}-\d{2}$/.test(week) ||
       !Number.isInteger(limit) || limit < 1 || limit > 2) throw new TypeError("Invalid KDP print quota reservation.");
   await ensurePrintStateTables();
-  const existing = await queryKdpD1("SELECT state FROM kdp_print_quota_events" +
-    " WHERE week_utc=? AND format=? AND action=? AND ebook_id=?", [week,format,action,ebookId]);
-  if (existing.results?.length) return { reserved: false, reason: "already_reserved", state: existing.results[0].state };
+  // Claim the unique edition+format+week event FIRST. If two workers race
+  // for the same title, only one can proceed to increment the counter.
+  const event = await queryKdpD1("INSERT OR IGNORE INTO kdp_print_quota_events" +
+    " (week_utc,format,action,ebook_id) VALUES (?,?,?,?)", [week,format,action,ebookId]);
+  if (Number(event.meta?.changes) !== 1) return { reserved: false, reason: "already_reserved" };
+  // Crash between event claim and counter increment burns this edition slot
+  // conservatively; it never authorises an additional KDP write.
   await queryKdpD1("INSERT OR IGNORE INTO kdp_print_quota_counters" +
     " (week_utc,format,action,reserved) VALUES (?,?,?,0)", [week,format,action]);
   const update = await queryKdpD1("UPDATE kdp_print_quota_counters SET reserved=reserved+1" +
     " WHERE week_utc=? AND format=? AND action=? AND reserved<?", [week,format,action,limit]);
-  if (Number(update.meta?.changes) !== 1) return { reserved: false, reason: "weekly_quota_exhausted" };
-  // Crash after increment but before this insert loses capacity, not a safe
-  // reservation; do not release quota automatically, as the remote write may
-  // already have occurred.
-  await queryKdpD1("INSERT INTO kdp_print_quota_events (week_utc,format,action,ebook_id)" +
-    " VALUES (?,?,?,?)", [week,format,action,ebookId]);
+  if (Number(update.meta?.changes) !== 1) {
+    await markPrintQuota(ebookId,format,action,"blocked",week);
+    return { reserved: false, reason: "weekly_quota_exhausted" };
+  }
   return { reserved: true, week, action, format };
 }
 
