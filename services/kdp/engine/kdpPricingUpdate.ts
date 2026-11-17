@@ -109,6 +109,8 @@ async function isPricingPageReady(page: Page): Promise<boolean> {
       !!document.getElementById('price-input-usd') ||
       !!document.querySelector('input[name="data[print_book][list_price][USD][amount]"]') ||
       !!document.querySelector('input[name="data[print_book][list_price][US][amount]"]') ||
+      !!document.querySelector('input[name="data[hardcover_book][list_price][USD][amount]"]') ||
+      !!document.querySelector('input[name="data[hardcover_book][list_price][US][amount]"]') ||
       !!document.querySelector('input[name="data[digital][royalty_plan]"]') ||
       !!document.querySelector('input[name="data[digital][channels][amazon][US][price_vat_inclusive]"]') ||
       !!document.querySelector('input[name="data[digital][royalty_rate]-radio"]') ||
