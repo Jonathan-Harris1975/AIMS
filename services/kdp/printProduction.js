@@ -62,13 +62,13 @@ export function categorySpecsFromKindle(categories = []) {
   const specs = [];
   for (const entry of categories || []) {
     const path = String(entry).split(/\s*›\s*/).map(x => x.trim()).filter(Boolean);
-    if (path[0] !== "Books" || path.length < 3) continue;
+    if (!["Books","Kindle Books"].includes(path[0]) || path.length < 3) continue;
     const nodes = path.slice(1).filter(x => x !== "Books").slice(0,4);
     if (nodes.length >= 2) specs.push({ path:nodes });
     if (specs.length >= 3) break;
   }
-  // Use an evidence-grounded category path only. A Kindle-only taxonomy
-  // cannot be blindly translated into the physical Books hierarchy.
+  // Preserve the signed-in Kindle hierarchy while stripping only the root;
+  // the KDP print category wizard must itself confirm the matching path.
   if (!specs.length) throw new Error("Existing Kindle print-compatible categories cannot be verified.");
   return specs;
 }
