@@ -326,6 +326,43 @@ test("podcast website report lane produces RAMS-readable source-owner findings w
   assert.ok(findings.every((finding) => finding.ramsPolicy?.codePatchAllowed === false));
 });
 
+test("podcast audit reads the canonical published R2 feed and falls back to the public feed", async () => {
+  const { __podcastWebsiteReportsTestHooks: hooks } = await import("../audits/utils/podcastWebsiteReports.js");
+  const xml = "<rss><channel><item><title>Fixture episode</title></item></channel></rss>";
+  const requests = [];
+  const r2 = {
+    getObjectAsText: async (...args) => { requests.push(args); return xml; },
+    buildPublicUrl: (_alias, key) => `https://podcast-rss-feeds.jonathan-harris.online/${key}`,
+  };
+  const fromR2 = await hooks.readPodcastRssXml({ r2, configuredUrl: "" });
+  assert.deepEqual(requests, [["podcastRss", "turing-torch.xml"]]);
+  assert.equal(fromR2.xml, xml);
+  assert.match(fromR2.method, /turing-torch\\.xml/);
+  assert.deepEqual(fromR2.attempts, []);
+
+  const fallbackUrls = [];
+  const unavailableR2 = {
+    getObjectAsText: async () => { throw new Error("R2 temporarily unavailable"); },
+  };
+  const fetchFeed = async (url) => {
+    fallbackUrls.push(url);
+    return { ok: true, text: async () => xml };
+  };
+  const defaultFallback = await hooks.readPodcastRssXml({ r2: unavailableR2, fetchFeed, configuredUrl: "" });
+  assert.deepEqual(fallbackUrls, ["https://podcast-rss-feeds.jonathan-harris.online/turing-torch.xml"]);
+  assert.equal(defaultFallback.xml, xml);
+  assert.equal(defaultFallback.attempts.length, 1);
+  assert.match(defaultFallback.attempts[0], /turing-torch\\.xml/);
+
+  const customFallback = await hooks.readPodcastRssXml({
+    r2: unavailableR2,
+    fetchFeed,
+    configuredUrl: "https://custom.example.test/podcasts/",
+  });
+  assert.equal(customFallback.feedUrl, "https://custom.example.test/podcasts/turing-torch.xml");
+  assert.equal(fallbackUrls.at(-1), customFallback.feedUrl);
+});
+
 test("/audits/podcast-website/health mounts the separate podcast and transcript report lane", async () => {
   const { default: router } = await import(`../audits/routes/index.js?podcast-report-route=${Date.now()}`);
   const app = express();
