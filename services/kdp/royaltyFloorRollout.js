@@ -12,6 +12,7 @@ const LEDGER_KEY = 'pricing/royalty-floor/ledger.json';
 const REPORT_KEY = 'pricing/royalty-floor/latest.json';
 const SUBMISSION_GAP_MS = 60 * 60 * 1000;
 const VERIFY_GAP_MS = 4 * 60 * 60 * 1000;
+const BLOCK_RETRY_GAP_MS = 24 * 60 * 60 * 1000;
 const ATTENTION_AFTER_MS = 5 * 24 * 60 * 60 * 1000;
 const ASIN = /^B0[A-Z0-9]{8}$/;
 const TITLE_ID = /^[A-Z0-9]{10,20}$/;
@@ -101,12 +102,15 @@ export async function reconcileRoyaltyFloor({
     }
     const persist = async () => { ledger.updatedAt = now().toISOString(); await save(LEDGER_KEY, ledger); };
     const results = [];
+    let verifications = 0;
     // A timed-out submission is never replayed. Verify its outcome against KDP
     // and the public UK listing before proceeding or raising an operator issue.
     for (const row of plan.rows) {
       const entry = ledger.entries[row.titleId];
       if (!entry || !['submitting', 'submitted', 'submission_uncertain'].includes(entry.status)) continue;
       if (+now() - Date.parse(entry.startedAt) < VERIFY_GAP_MS) continue;
+      if (verifications >= 2) break;
+      verifications++;
       if (+now() - Date.parse(entry.startedAt) > ATTENTION_AFTER_MS) {
         entry.status = 'needs_attention'; entry.reason = 'publication_not_verified'; await persist();
         results.push({ titleId: row.titleId, status: entry.status }); continue;
@@ -134,8 +138,10 @@ export async function reconcileRoyaltyFloor({
       }
     }
     const pending = plan.rows.filter((row) => row.needsChange &&
-      !['verified', 'submitting', 'submitted', 'submission_uncertain', 'needs_attention']
+      !['submitting', 'submitted', 'submission_uncertain', 'needs_attention']
         .includes(ledger.entries[row.titleId]?.status) &&
+      (ledger.entries[row.titleId]?.status !== 'verified' ||
+        Date.parse(plan.syncedAt) > Date.parse(ledger.entries[row.titleId].verifiedAt || '')) &&
       (!ledger.entries[row.titleId]?.nextAttemptAt ||
         Date.parse(ledger.entries[row.titleId].nextAttemptAt) <= +now()));
     let applied = false;
@@ -146,7 +152,7 @@ export async function reconcileRoyaltyFloor({
       const price = confirmedPrice(current, row.asin);
       if (!price || price.price === null || !Number.isSafeInteger(price.floor)) {
         ledger.entries[row.titleId] = { status: 'blocked', reason: 'current_identity_plan_or_price_unverifiable',
-          nextAttemptAt: new Date(+now() + VERIFY_GAP_MS).toISOString() };
+          nextAttemptAt: new Date(+now() + BLOCK_RETRY_GAP_MS).toISOString() };
         blocked = true; await persist();
         results.push({ titleId: row.titleId, status: 'blocked', reason: ledger.entries[row.titleId].reason });
       } else if (price.price >= price.floor) {
@@ -186,7 +192,8 @@ export async function reconcileRoyaltyFloor({
         }
       }
     }
-    const report = { ok: !blocked && !results.some((r) => r.status === 'needs_attention'),
+    const report = { ok: !blocked && !results.some((r) =>
+      ['needs_attention', 'submission_uncertain', 'verification_pending'].includes(r.status)),
       dryRun: false, kdpWritesPerformed: applied, total: plan.total,
       belowFloorAtSnapshot: plan.belowFloor, unverifiedPlanAtSnapshot: plan.unverifiedPlan,
       completed: Object.values(ledger.entries).filter((entry) => entry.status === 'verified').length,
