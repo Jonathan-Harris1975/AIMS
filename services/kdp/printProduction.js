@@ -1,0 +1,247 @@
+// Live, bounded KDP paperback/hardcover production worker. The existing
+// authenticated browser engine performs the remote KDP work; MAST merely
+// dispatches this route. Every potentially ambiguous remote action consumes a
+// durable quota reservation and is never retried blindly.
+import { claimDurableLease, releaseDurableLease } from "../shared/utils/durableLease.js";
+import { putPrivateJson } from "../shared/utils/r2-client.js";
+import { listKdpEbooks } from "./catalogue.js";
+import { createPrintAssets } from "./printAssets.js";
+import { planPrintPrices } from "./printPricePolicy.js";
+import { getPrintRolloutCapacity, parsePrintWeeklyLimit } from "./printPreflight.js";
+import { canAttemptPrintJob, ensurePrintStateTables, getPrintJob, markPrintQuota,
+  reservePrintQuota, savePrintJob, utcPrintWeek, writePrintEditionState } from "./printState.js";
+import { createTitle, publishBook } from "./engine/kdpPublish.ts";
+import { listBookshelf, syncBookMetadata } from "./engine/kdpMetadata.ts";
+
+const MAX_BOOKS = 2;
+const MAX_FORMAT_START_MINUTE = 23 * 60 + 10;
+const SPECIAL_FIRST_BOOK = 7;
+const STORAGE_ROOT = "print/production/reports/";
+
+export function localPrintClock(at = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", weekday: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(at);
+  const fields = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  return { weekday: fields.weekday.toLowerCase(), minute: Number(fields.hour) * 60 + Number(fields.minute) };
+}
+
+export function printWindowAllowsAction(at = new Date(), { start = false } = {}) {
+  const clock = localPrintClock(at);
+  if (!["monday", "tuesday", "wednesday", "thursday"].includes(clock.weekday)) return false;
+  return clock.minute >= 22 * 60 + 15 && clock.minute < (start ? MAX_FORMAT_START_MINUTE : 23 * 60 + 45);
+}
+
+function cleanTitle(value) {
+  return String(value || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+export function existingPrintMatches(shelf, book, format) {
+  if (!Array.isArray(shelf?.refs) || !shelf.refs.length ||
+      !Number.isInteger(shelf.pagesScanned) || shelf.pagesScanned < 1) {
+    throw new Error("Cannot establish a complete signed-in KDP Bookshelf inventory.");
+  }
+  const printRefs = shelf.refs.filter(r => r.format === format);
+  // A print ref with no title cannot be safely ruled out as the same book.
+  if (printRefs.some(r => !r.title)) throw new Error("KDP Bookshelf includes print editions with unverified title identity.");
+  return printRefs.filter(r => cleanTitle(r.title) === cleanTitle(book.title));
+}
+
+export function choosePrintCandidates(books) {
+  const seen = new Set();
+  return [...books].filter(book => {
+    if (!Number.isSafeInteger(book.ebookId) || seen.has(book.ebookId)) throw new Error("Invalid KDP catalogue identity.");
+    seen.add(book.ebookId);
+    return true;
+  }).sort((a,b) => (a.ebookId === SPECIAL_FIRST_BOOK ? -1 : b.ebookId === SPECIAL_FIRST_BOOK ? 1 : a.ebookId - b.ebookId));
+}
+
+function bookMetadata(book) {
+  const names = book.author.trim().split(/\s+/);
+  return {
+    title: book.title, description: book.description || book.summary,
+    keywords: (book.keywords || []).filter(Boolean).slice(0, 7),
+    primaryAuthor: { firstName: names.shift() || "", lastName: names.join(" ") },
+  };
+}
+
+function printSettings() {
+  return { trimWidthIn: 6, trimHeightIn: 9, inkAndPaper: "BW_WHITE",
+    interiorHasBleed: false, coverFinish: "matte", hasPublisherBarcode: false };
+}
+
+function shortError(error) {
+  return String(error?.message || error || "Unknown KDP print production failure.").slice(0, 900);
+}
+
+async function recordRun(data) {
+  const day = new Date().toISOString().slice(0,10);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const key = STORAGE_ROOT + day + "/" + timestamp + ".json";
+  await putPrivateJson("kdp", key, data);
+  return { bucket: "kdp", key };
+}
+
+async function produceOne(book, format, shelf, options) {
+  let job = await getPrintJob(book.ebookId, format);
+  if (!canAttemptPrintJob(job)) {
+    return { ebookId: book.ebookId, format, status: "already_in_progress_or_submitted", state: job?.state };
+  }
+  if (!printWindowAllowsAction(options.now(), { start: true })) {
+    return { ebookId: book.ebookId, format, status: "print_window_closed" };
+  }
+  let assets;
+  let action = null;
+  const week = utcPrintWeek(options.now());
+  try {
+    const matches = existingPrintMatches(shelf, book, format);
+    if (matches.length && (!job?.titleId || matches.length !== 1 || matches[0].titleId !== job.titleId)) {
+      await savePrintJob(book.ebookId, format, { state: "uncertain", errorCode: "existing_kdp_print_title_unreconciled" });
+      return { ebookId: book.ebookId, format, status: "existing_kdp_print_title_unreconciled" };
+    }
+    assets = await options.prepare(book, format);
+    const manifest = assets.manifest;
+    const manifestKey = "print/assets/" + book.ebookId + "/" + format + "/manifest.json";
+    const plan = planPrintPrices(format, manifest.finalPageCount);
+    if (!job?.titleId) {
+      await savePrintJob(book.ebookId, format, { state: "assets_ready", manifestKey });
+      await writePrintEditionState(book.ebookId, format, "qa_passed");
+      if (!printWindowAllowsAction(options.now(), { start: true })) {
+        return { ebookId: book.ebookId, format, status: "assets_ready_window_closed" };
+      }
+      const claim = await reservePrintQuota(book.ebookId, format, "create", {
+        week, limit: options.weeklyLimit,
+      });
+      if (!claim.reserved) return { ebookId: book.ebookId, format, status: claim.reason };
+      action = "create";
+      // Persist intent before clicking Create. Crash/timeouts remain UNCERTAIN.
+      await savePrintJob(book.ebookId, format, { state: "creating", manifestKey });
+      const created = await options.create(format);
+      if (!created?.titleId) throw new Error("KDP did not return an exact title ID after creating a print draft.");
+      job = await savePrintJob(book.ebookId, format, { state: "draft", titleId: created.titleId, manifestKey });
+      await markPrintQuota(book.ebookId, format, "create", "done", week);
+      await writePrintEditionState(book.ebookId, format, "draft");
+      action = null;
+    } else {
+      // Reuse the persisted draft after a known pre-submission failure. Never
+      // create another KDP title for the same book+format.
+      job = await savePrintJob(book.ebookId, format, { state: "draft", manifestKey });
+    }
+    if (!printWindowAllowsAction(options.now(), { start: true })) {
+      return { ebookId: book.ebookId, format, status: "draft_saved_window_closed", titleId: job.titleId };
+    }
+    const claim = await reservePrintQuota(book.ebookId, format, "submit", {
+      week, limit: options.weeklyLimit,
+    });
+    if (!claim.reserved) return { ebookId: book.ebookId, format, status: claim.reason, titleId: job.titleId };
+    action = "submit";
+    await savePrintJob(book.ebookId, format, { state: "submitting", titleId: job.titleId, manifestKey });
+    const request = {
+      format, titleId: job.titleId, create: false, dryRun: false, publish: true,
+      details: bookMetadata(book),
+      content: { interiorPath: assets.interiorPath, coverPath: assets.coverPath, printSettings: printSettings() },
+      pricing: plan.pricing,
+    };
+    const result = await options.publish(request);
+    const isbn = result?.steps?.find(s => s.step === "content")?.detail?.isbn || null;
+    if (!result?.published || result.errors?.length || !isbn) {
+      // The click outcome can be ambiguous even when a step says failed.
+      await markPrintQuota(book.ebookId, format, "submit", "uncertain", week);
+      await savePrintJob(book.ebookId, format, { state: "uncertain", titleId: job.titleId,
+        isbn, manifestKey, errorCode: "kdp_submit_or_isbn_unverified" });
+      await writePrintEditionState(book.ebookId, format, "uncertain", isbn);
+      return { ebookId: book.ebookId, format, status: "submission_unverified",
+        titleId: job.titleId, errors: result?.errors || [] };
+    }
+    await markPrintQuota(book.ebookId, format, "submit", "done", week);
+    await savePrintJob(book.ebookId, format, { state: "submitted", titleId: job.titleId, isbn, manifestKey });
+    await writePrintEditionState(book.ebookId, format, "submitted", isbn);
+    return { ebookId: book.ebookId, format, status: "submitted_to_kdp_review",
+      titleId: job.titleId, isbn, pages: manifest.finalPageCount,
+      ukPrintPrice: plan.uk.price, usPrintPrice: plan.us.price };
+  } catch (error) {
+    const errorText = shortError(error);
+    // A failure in source/cover production is safe to retry. A failure once
+    // Create/Publish has been attempted must stay uncertain until reconciled.
+    const uncertain = Boolean(action);
+    if (uncertain) await markPrintQuota(book.ebookId, format, action, "uncertain", week).catch(() => {});
+    const state = uncertain ? "uncertain" : job?.titleId ? "draft" : "blocked";
+    try {
+      await savePrintJob(book.ebookId, format, { state, titleId: job?.titleId || undefined, errorCode: errorText });
+      await writePrintEditionState(book.ebookId, format, uncertain ? "uncertain" : "blocked");
+    } catch { /* Keep the original error; any state write failure is also a terminal failure. */ }
+    return { ebookId: book.ebookId, format, status: state, error: errorText };
+  } finally {
+    await assets?.cleanup?.().catch(() => {});
+  }
+}
+
+export async function runPrintProduction({
+  dryRun = false, ebookId = null, now = () => new Date(),
+  listBooks = listKdpEbooks, inspectBookshelf = listBookshelf,
+  prepare = createPrintAssets, create = createTitle, publish = publishBook,
+  claimLease = claimDurableLease, releaseLease = releaseDurableLease,
+} = {}) {
+  if (dryRun) return { ok: true, dryRun: true, kdpWritesPerformed: false,
+    message: "The production run is not a KDP write in dry-run mode." };
+  if (!printWindowAllowsAction(now())) return { ok: false, status: "outside_print_window", kdpWritesPerformed: false };
+  const lease = await claimLease({
+    namespace: "kdp-print", key: "live-production", pendingTtlMs: 100 * 60_000,
+  });
+  if (!lease.claimed) return { ok: false, status: "already_running", kdpWritesPerformed: false };
+  let report = null;
+  try {
+    if (lease.lease.backend !== "r2") throw new Error("Remote R2 lease is mandatory for live print publication.");
+    await ensurePrintStateTables();
+    const shelf = await inspectBookshelf(); // Signed-in KDP gate and duplicate check.
+    const books = choosePrintCandidates(await listBooks());
+    if (shelf.refs.length < books.length) {
+      throw new Error("Signed-in KDP Bookshelf scan is smaller than the catalogue; completeness is not verified.");
+    }
+    const weekLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
+    const capacity = getPrintRolloutCapacity({ observedAt: now().toISOString(), weeklyLimit: weekLimit });
+    const eligible = ebookId == null ? books : books.filter(book => book.ebookId === Number(ebookId));
+    if (!eligible.length) throw new Error("No matching existing KDP ebook found.");
+    const outcomes = [];
+    let booksTried = 0;
+    let writes = false;
+    for (const book of eligible) {
+      if (booksTried >= MAX_BOOKS || !printWindowAllowsAction(now(), { start: true })) break;
+      booksTried++;
+      for (const format of ["paperback", "hardcover"]) {
+        if (!printWindowAllowsAction(now(), { start: true })) break;
+        const item = await produceOne(book, format, shelf, {
+          now, prepare, create: async f => { writes = true; return create(f); },
+          publish: async request => { writes = true; return publish(request); },
+          weeklyLimit: weekLimit,
+        });
+        outcomes.push(item);
+      }
+    }
+    report = {
+      ok: outcomes.length > 0 && outcomes.every(x => [
+        "submitted_to_kdp_review", "already_in_progress_or_submitted",
+        "weekly_quota_exhausted", "draft_saved_window_closed", "assets_ready_window_closed",
+      ].includes(x.status)),
+      schemaVersion: 1, checkedAt: now().toISOString(), weekUtc: utcPrintWeek(now()),
+      kdpWritesPerformed: writes, maxBooksPerRun: MAX_BOOKS, capacity,
+      booksConsidered: booksTried, results: outcomes,
+      submitted: outcomes.filter(x => x.status === "submitted_to_kdp_review").length,
+      blocked: outcomes.filter(x => ["blocked","uncertain","submission_unverified"].includes(x.status)).length,
+      publicPurchaseAvailabilityVerified: false,
+    };
+    report.reportRef = await recordRun(report);
+    return report;
+  } finally {
+    await releaseLease(lease.lease, { reportRef: report?.reportRef || null });
+  }
+}
+
+// The scheduler must never treat a successful KDP Publish click as an Amazon
+// retail page. Independent listing verification is handled separately.
+export async function signedInPrintStatus(titleId, format) {
+  const book = await syncBookMetadata(titleId, format);
+  return { titleId, format, title: book.title, isbn: book.isbn,
+    printAsin: book.asin || null, publishingStatus: book.publishingStatus,
+    manuscriptStatus: book.manuscriptStatus, coverStatus: book.coverStatus };
+}
