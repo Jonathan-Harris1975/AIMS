@@ -85,7 +85,8 @@ export function researchFailureDetail(error, stage) {
 }
 
 export function countTechnicalFailures(results = []) {
-  return results.filter((result) => result.optimisation?.technical === true).length;
+  return results.filter((result) => result.optimisation?.technical === true ||
+    result.updateDispatch?.ok === false).length;
 }
 
 export async function runResearchTick({
@@ -213,7 +214,10 @@ export async function runResearchTick({
       } catch (error) {
         return recordFailure("proposal", error, result);
       }
-      if (result.optimisation?.status === "approved") result.update = await queueUpdate(week, book, result.optimisation);
+      if (result.optimisation?.status === "approved") {
+        try { result.update = await queueUpdate(week, book, result.optimisation); }
+        catch (error) { return recordFailure("queue", error, result); }
+      }
       state.results.push(result);
       state.inProgress = null;
       state.cursor = book.ebookId;
