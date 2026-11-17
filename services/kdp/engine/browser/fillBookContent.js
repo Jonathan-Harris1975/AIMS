@@ -7,9 +7,16 @@
     el.dispatchEvent(new Event('change', { bubbles: true }))
   }
 
+  // The KDP hardcover content form uses hardcover_book in some layouts.
+  // Only select a field that actually exists; never claim a write from a missing input.
+  const namesFor = (name) => name.includes('[print_book]')
+    ? [name.replace('[print_book]', '[hardcover_book]'), name]
+    : [name]
+
   const clickRadio = (name, value) => {
-    const el = document.querySelector(`input[name="${name}"][value="${value}"]`)
-    if (el) {
+    for (const candidate of namesFor(name)) {
+      const el = document.querySelector(`input[name="${candidate}"][value="${value}"]`)
+      if (!el) continue
       el.checked = true
       dispatch(el)
       return true
@@ -18,8 +25,9 @@
   }
 
   const setHidden = (name, value) => {
-    const el = document.querySelector(`input[name="${name}"]`)
-    if (el) {
+    for (const candidate of namesFor(name)) {
+      const el = document.querySelector(`input[name="${candidate}"]`)
+      if (!el) continue
       el.value = String(value)
       dispatch(el)
       return true
