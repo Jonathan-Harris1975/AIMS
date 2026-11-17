@@ -4,6 +4,7 @@ import { classifyKdpPrintOutcome, resolveInterruptedPrintTitle,
   reconcileInterruptedPrintJobs } from "../services/kdp/printReconciliation.js";
 import { existingPrintMatches } from "../services/kdp/printProduction.js";
 import { requiredPrintOptionNames } from "../services/kdp/engine/kdpContentUpdate.ts";
+import { parsePrintDatabaseTime } from "../services/kdp/printState.js";
 
 const book = { ebookId: 7, title: "The Artificial Intelligence Revolution" };
 const shelf = {
@@ -109,4 +110,12 @@ test("NO-AI print books do not require non-existent AI text/image tool selection
   assert.ok(yes.has("aiTextAmount"));
   assert.ok(yes.has("aiTextTool"));
   assert.ok(!yes.has("aiImagesTool"));
+});
+
+test("D1 SQLite timestamps are interpreted as UTC for retry/backoff safety", () => {
+  assert.equal(parsePrintDatabaseTime("2026-11-17 17:22:00"),
+    Date.parse("2026-11-17T17:22:00Z"));
+  assert.equal(parsePrintDatabaseTime("2026-11-17T17:22:00Z"),
+    Date.parse("2026-11-17T17:22:00Z"));
+  assert.ok(Number.isNaN(parsePrintDatabaseTime(null)));
 });
