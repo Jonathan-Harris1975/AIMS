@@ -124,6 +124,7 @@ async function uploadCoverFile(page: Page, format: KdpBookFormat, filePath: stri
   const coverInput = page.locator(format === 'hardcover'
     ? '#data-hardcover-book-publisher-cover-file-upload-AjaxInput'
     : '#data-print-book-publisher-cover-file-upload-AjaxInput')
+  if (!(await coverInput.count())) throw new KdpClientError(`No ${format} cover upload input on KDP content page.`)
   await coverInput.waitFor({ state: 'attached', timeout: 30_000 })
   await coverInput.setInputFiles(filePath)
 
@@ -244,6 +245,7 @@ export type CompletePrintContentResult = {
   coverUploaded: boolean
   isbn: string | null
   errors: string[]
+  warnings?: string[]
   recoveryLog?: RecoveryAttempt[]
 }
 
@@ -254,6 +256,10 @@ async function completePrintContentOnce(
   spec: CompletePrintContentSpec,
 ): Promise<Omit<CompletePrintContentResult, 'recoveryLog'>> {
   const errors: string[] = []
+  const warnings: string[] = []
+  let previewApprovedThisRun = false
+  let uploadedInteriorThisRun = false
+  let uploadedCoverThisRun = false
 
   if (format !== 'paperback' && format !== 'hardcover') {
     throw new KdpClientError('Complete print content supports paperback and hardcover only.')
@@ -268,9 +274,19 @@ async function completePrintContentOnce(
   }
 
   const settings = { ...spec.printSettings, assignFreeIsbn: true }
-  const applied = await fillPrintContentOnPage(page, settings)
-  if (applied.skipped.length) {
-    errors.push(`KDP did not expose requested print options: ${applied.skipped.join(', ')}`)
+  const applied = await fillPrintContentOnPage(page, settings, format)
+  const requiredOptions = new Set([
+    'trimSize', 'inkAndPaper', 'interiorHasBleed',
+    'containsAiContent', 'aiTextAmount', 'aiTextTool',
+    'aiImagesAmount', 'aiImagesTool', 'aiTranslationsAmount',
+  ])
+  const missingRequired = applied.skipped.filter((key) => requiredOptions.has(key))
+  const missingOptional = applied.skipped.filter((key) => !requiredOptions.has(key))
+  if (missingRequired.length) {
+    errors.push(`KDP did not expose required print options: ${missingRequired.join(', ')}`)
+  }
+  if (missingOptional.length) {
+    warnings.push(`Optional print options not exposed: ${missingOptional.join(', ')}`)
   }
   await page.waitForTimeout(2000)
   await saveContentPage(page).catch(() => {})
@@ -287,8 +303,10 @@ async function completePrintContentOnce(
   status = await readContentFileStatus(page)
   if (isSuccess(status.manuscriptStatus)) {
     const preApproved = await approveManuscriptIfNeeded(page)
-    if (!preApproved) errors.push('Could not approve existing manuscript before cover upload.')
-    else await saveContentPage(page).catch(() => {})
+    if (preApproved) {
+      previewApprovedThisRun = true
+      await saveContentPage(page).catch(() => {})
+    }
   }
 
   if (spec.coverPath && needsUpload(status, 'cover')) {
@@ -297,6 +315,7 @@ async function completePrintContentOnce(
     }
     try {
       await uploadCoverFile(page, format, spec.coverPath)
+      uploadedCoverThisRun = true
       status = await readContentFileStatus(page)
       await saveContentPage(page).catch(() => {})
     } catch (e) {
@@ -310,6 +329,7 @@ async function completePrintContentOnce(
     }
     try {
       await uploadInteriorFile(page, format, spec.interiorPath)
+      uploadedInteriorThisRun = true
       status = await readContentFileStatus(page)
       await saveContentPage(page).catch(() => {})
     } catch (e) {
@@ -318,8 +338,13 @@ async function completePrintContentOnce(
   }
 
   const approved = await approveManuscriptIfNeeded(page)
-  if (!approved) {
-    errors.push('Could not independently confirm print previewer approval.')
+  if (approved) previewApprovedThisRun = true
+  if (!previewApprovedThisRun) {
+    if (uploadedInteriorThisRun || uploadedCoverThisRun) {
+      errors.push('KDP previewer approval is required after uploading new print files.')
+    } else {
+      warnings.push('KDP previewer had no pending approval action; verify existing draft approval before submission.')
+    }
   }
   await clickSaveOnContentPage(page)
 
@@ -339,12 +364,15 @@ async function completePrintContentOnce(
     isSuccess(status.manuscriptStatus) || refreshed?.manuscriptStatus === 'SUCCESS'
 
   return {
-    // A matching filename alone is not evidence that KDP finished processing.
+    // Existing SUCCESS uploads do not need a filename match against a new local file.
+    // For files actually uploaded this run require KDP SUCCESS and a compatible filename.
     interiorUploaded: Boolean(!spec.interiorPath || (interiorOk &&
-      (!refreshed?.interiorFileName || refreshed.interiorFileName.includes(interiorName)))),
+      (!uploadedInteriorThisRun || !refreshed?.interiorFileName ||
+        refreshed.interiorFileName.toLowerCase().includes(interiorName.toLowerCase())))),
     coverUploaded: Boolean(!spec.coverPath || coverOk),
     isbn: refreshed?.isbn || isbn,
     errors,
+    warnings,
   }
 }
 
@@ -382,9 +410,10 @@ export async function completePrintContentOnPage(
 export async function fillPrintContentOnPage(
   page: Page,
   settings: KdpPrintContentSettings,
+  format: KdpBookFormat = 'paperback',
 ): Promise<{ filled: string[]; skipped: string[] }> {
   return page.evaluate(
-    `(${FILL_CONTENT_FN})(${JSON.stringify(settings)})`,
+    `(${FILL_CONTENT_FN})(${JSON.stringify(settings)}, ${JSON.stringify(format)})`,
   ) as Promise<{ filled: string[]; skipped: string[] }>
 }
 
@@ -407,7 +436,7 @@ export async function uploadBookContentOnPage(
   }
 
   if (options.printSettings && Object.keys(options.printSettings).length > 0) {
-    await fillPrintContentOnPage(page, options.printSettings)
+    await fillPrintContentOnPage(page, options.printSettings, format)
     await page.waitForTimeout(2000)
   }
 
