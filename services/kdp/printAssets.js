@@ -65,14 +65,13 @@ async function pdfInfo(file) {
 
 async function fontQA(file) {
   const rows = (await runBin("pdffonts", [file])).trim().split("\n").slice(2).filter(Boolean);
-  if (!rows.length || rows.some(row => !/\s+yes\s+/.test(row))) {
-    // pdffonts columns: name, type, encoding, emb, sub, uni, object ID.
-    const unembedded = rows.filter(row => !/^\S+\s+.+?\s+(?:yes|no)\s+(?:yes|no)\s+(?:yes|no)\s+\d+\s+\d+\s*$/.test(row));
-    if (!rows.length || unembedded.length) throw new Error("Print PDF font embedding cannot be verified.");
-  }
+  // pdffonts columns are "name type encoding emb sub uni object ID"; a font
+  // type can itself contain spaces, so a fixed numeric column index is unsafe.
+  if (!rows.length) throw new Error("Print PDF fonts could not be inspected.");
   for (const row of rows) {
-    const columns = row.trim().split(/\s{2,}/);
-    if (columns.length >= 4 && columns[3] !== "yes") throw new Error("Print PDF contains unembedded fonts.");
+    const match = row.trim().match(/\s(yes|no)\s+(yes|no)\s+(yes|no)\s+\d+\s+\d+\s*$/i);
+    if (!match) throw new Error("Print PDF font embedding report is unreadable.");
+    if (match[1].toLowerCase() !== "yes") throw new Error("Print PDF contains an unembedded font.");
   }
   return { embeddedFonts: true };
 }
