@@ -57,3 +57,21 @@ test("missing print form fields are reported as skipped rather than claimed fill
   const result = fn({ trimWidthIn: 6, trimHeightIn: 9, interiorHasBleed: false });
   assert.deepEqual(Array.from(result.skipped), ["trimSize", "interiorHasBleed"]);
 });
+
+test("hardcover pricing selects an actual hardcover USD field, not a Kindle price", () => {
+  const pricingSource = fs.readFileSync(
+    path.join(dir, "../services/kdp/engine/browser/fillBookPricing.js"), "utf8",
+  );
+  const input = { value: "", dispatchEvent() {} };
+  const selector = 'input[name="data[hardcover_book][list_price][USD][amount]"]';
+  const document = {
+    querySelector(candidate) { return candidate === selector ? input : null; },
+    querySelectorAll() { return []; },
+    getElementById() { return null; },
+  };
+  const fn = vm.runInNewContext(`(${pricingSource})`, { document, Event: class Event {} });
+  const applied = fn("hardcover", { listPriceUsd: "16.99" });
+  assert.deepEqual(Array.from(applied.filled), ["listPriceUsd"]);
+  assert.deepEqual(Array.from(applied.skipped), []);
+  assert.equal(input.value, "16.99");
+});
