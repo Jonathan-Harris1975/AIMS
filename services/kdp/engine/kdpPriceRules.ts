@@ -27,6 +27,39 @@ export function uk70RoyaltyFloorMinor(fileSizeKb: string | number | null | undef
   return Math.ceil((minimumMinor + 1) / 100) * 100 - 1
 }
 
+/**
+ * Commercial UK test range for a specific signed-in Kindle delivery file.
+ * The minimum is the mandatory £4.50 estimated 70% royalty safeguard.
+ * The maximum is a conservative, file-size-tiered EXPERIMENT ceiling, not
+ * Amazon's published maximum and not a claim that larger files are better.
+ * Market evidence selects a price inside these bounds; do not raise to the
+ * ceiling simply because a file is larger.
+ *
+ * For the actual 309–464 KB catalogue, maximums span £7.99–£10.99 while
+ * every current minimum rounds to £6.99. Missing sizes fail closed.
+ */
+export function uk70RoyaltyPriceRange(fileSizeKb: string | number | null | undefined) {
+  const minimumMinor = uk70RoyaltyFloorMinor(fileSizeKb)
+  if (minimumMinor === null || minimumMinor > 1299) return null
+  const kb = Number(String(fileSizeKb).trim())
+  const deliveryCostMinor = Math.max(1, Math.round(((kb + 1) * 10) / 1024))
+  const sizeTier = Math.min(6, Math.max(1, 1 + Math.floor((kb - 300) / 50)))
+  const maximumMinor = Math.min(1299, minimumMinor + sizeTier * 100)
+  return {
+    fileSizeKb: kb, deliveryCostMinor, minimumMinor, maximumMinor,
+    minimumPrice: (minimumMinor / 100).toFixed(2),
+    maximumPrice: (maximumMinor / 100).toFixed(2),
+    estimatedRoyaltyAtMinimum: Number((0.70 * (minimumMinor - deliveryCostMinor) / 100).toFixed(2)),
+    priceRangeBasis: 'verified_kdp_file_size_uk_70_percent',
+    priceRationale: `UK 70% eBook: ${kb} KB KDP delivery file, ${(deliveryCostMinor / 100).toFixed(2)} GBP estimated delivery; ` +
+      '£4.50 minimum royalty determines the lower limit. A conservative size-tiered testing allowance ' +
+      'sets the upper limit, capped at the official £12.99 70% price-band maximum. ' +
+      'File size does not measure content quality or customer demand.',
+    rulesReviewedAt: KDP_PRICE_RULES_REVIEWED_AT,
+    rulesSource: KDP_PRICE_RULES_SOURCE,
+  }
+}
+
 export type KdpPriceBand = {
   marketplace: string
   currency: string
