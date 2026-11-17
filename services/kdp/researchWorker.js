@@ -113,12 +113,26 @@ export async function runResearchTick({
       const audit = await getAudit(started);
       if (!validMondayAudit(audit, started)) return { status: "monday_audit_unavailable" };
       if (state.week && !state.completed) await archive(state.week, state);
-      const selection = selectWeeklyBatch(await getBooks(), state.cursor || 0, batchSize(env));
+      const currentCatalogue = await getBooks();
+      const limit = batchSize(env);
+      const selection = selectWeeklyBatch(currentCatalogue, state.cursor || 0, limit);
       if (!selection.books.length) return { status: "no_eligible_books" };
+      // Resume unfinished work first. Retest up to 20% of the last batch's
+      // technical failures so one broken title cannot starve the whole catalogue.
+      const byId = new Map(currentCatalogue.map((item) => [item.ebookId, item]));
+      const carryPending = (state.pending || []).map((item) => byId.get(item.ebookId)).filter(Boolean);
+      const failed = (state.results || []).filter((item) => item.optimisation?.technical === true ||
+        item.updateDispatch?.ok === false).map((item) => byId.get(item.ebookId)).filter(Boolean)
+        .slice(0, Math.max(1, Math.ceil(limit / 5)));
+      const next = new Map();
+      for (const item of [...carryPending, ...failed, ...selection.books]) {
+        if (next.size >= limit) break;
+        if (Number.isSafeInteger(item.ebookId) && item.ebookId > 0) next.set(item.ebookId, item);
+      }
       state.week = week;
       state.cycle = cycle;
       state.auditRunId = audit.runId;
-      state.pending = selection.books;
+      state.pending = [...next.values()];
       state.auditEvidence = (audit.publicAudit?.listings || []).map((row) => ({
         ebookId: row.ebookId, publicListing: row.publicListing,
       }));
