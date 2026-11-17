@@ -101,17 +101,29 @@ export async function startAsyncServiceRouteJob({ service, lane, payload = {}, r
   const jobType = asyncServiceJobType(service, lane);
   const statusUrl = statusUrlFor(req, service, lane, sessionId, statusBasePath);
   const payloadWithSession = { ...payload, sessionId };
-  // An idempotent scheduled retry must return the original terminal job
-  // receipt, including its sessionId and actual result, not start fresh paid
-  // content generation. Keep the existing default for routes that allow an
-  // explicit retry after a terminal failure.
+  // A confirmed published result is immutable for this schedule window.
+  // Failed, ambiguous or unconfirmed results may resume under the same
+  // deterministic ID, but never beyond three total attempts. Durable Zernio
+  // slot leases remain the publication-level duplicate barrier.
   if (reuseTerminal) {
     const previous = await getPublicJobFresh(jobType, sessionId);
-    if (previous && ["completed", "failed"].includes(previous.status)) {
+    const result = previous?.result;
+    const published = previous?.status === "completed"
+      && result?.ok === true
+      && result?.partialFailure !== true
+      && result?.confirmed !== false
+      && result?.reason !== "same-slot-already-running";
+    const terminal = ["completed", "failed"].includes(previous?.status);
+    const exhausted = terminal && !published && Number(previous?.attempt || 0) >= 3;
+    if (published || exhausted) {
       return {
         ...publicShape(service, lane, previous, req, statusBasePath),
+        ok: published,
         started: false, duplicateJob: true, accepted: false,
-        message: "Original service job has already settled; inspect its terminal status.",
+        retryExhausted: exhausted,
+        message: published
+          ? "Original confirmed service job already completed; no duplicate publication."
+          : "Original service job is unconfirmed or failed; bounded attempts exhausted.",
       };
     }
   }
