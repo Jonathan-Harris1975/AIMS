@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { artworkQaRegenerationLimit, selectPublishableSocialArtworkCandidate, buildQaRepairPrompt } from "../services/artwork/utils/artwork.js";
+import { artworkQaRegenerationLimit, selectPublishableSocialArtworkCandidate, selectRepairableSocialArtworkCandidate, buildFinalSocialArtworkRescuePrompt, buildQaRepairPrompt } from "../services/artwork/utils/artwork.js";
 import { buildArtworkVisualQaPrompt } from "../services/artwork/utils/artworkVisualQa.js";
 import { readFile } from "node:fs/promises";
 import { getArtworkProviderAttempts } from "../services/artwork/utils/openrouterImagePayload.js";
@@ -46,6 +46,24 @@ test("Zernio uses the best generated image from the observed soft-QA results ins
   assert.equal(selected?.base64, "primary-generated-image");
   assert.equal(selected?.provider?.id, "image");
   assert.deepEqual(selected?.qa?.hardDefects, []);
+});
+
+test("Tuesday's 66/72, relevance-68 near-miss receives one repair opportunity, not an unsafe publication", () => {
+  const nearMiss = {
+    ...observedPrimary,
+    qa: { ...observedPrimary.qa, score: 66, relevance: 68, textSafety: 97,
+      defects: ["Stock-photo man", "PC tower clutter", "Mosaic obscures semantic neighbourhoods"] },
+  };
+  assert.equal(selectPublishableSocialArtworkCandidate([nearMiss]), null);
+  assert.equal(selectRepairableSocialArtworkCandidate([nearMiss]), nearMiss);
+  const prompt = buildFinalSocialArtworkRescuePrompt("Semantic embeddings group similar meanings", nearMiss.qa);
+  assert.match(prompt, /Mosaic obscures semantic neighbourhoods/);
+  assert.match(prompt, /Semantic embeddings group similar meanings/);
+  assert.match(prompt, /No unrelated stock-photo people/);
+  assert.equal(selectRepairableSocialArtworkCandidate([{ ...nearMiss, qa: {
+    ...nearMiss.qa, hardDefects: ["Prominent readable text"] } }]), null);
+  assert.equal(selectRepairableSocialArtworkCandidate([{ ...nearMiss, qa: {
+    ...nearMiss.qa, relevance: 42 } }]), null);
 });
 
 test("Zernio never soft-accepts generated artwork with a hard pixel defect", () => {
@@ -127,6 +145,9 @@ test("approved image upload is retried without another paid generation and last-
   assert.match(source, /uploadApprovedSocialArtwork\(key, image, safeSession, safeLane\)/);
   assert.match(source, /uploadBuffer\("blogImages", key, image\.buffer, image\.mimeType\)/);
   assert.match(source, /type: "curated_static_fallback"/);
+  const shared = await readFile(new URL("../services/artwork/utils/artwork.js", import.meta.url), "utf8");
+  assert.match(shared, /maxQaRegenerations: 0, providerAttempts: 1/);
+  assert.match(shared, /SOCIAL_ARTWORK_FINAL_QA_RESCUE_ENABLED/);
   assert.match(source, /persist: true/);
   assert.match(defaults, /^SOCIAL_ARTWORK_VISUAL_QA_MAX_REGENERATIONS=1$/m);
   assert.match(defaults, /^ZERNIO_ARTWORK_UPLOAD_ATTEMPTS=3$/m);
@@ -154,7 +175,8 @@ test("social recovery changes the failed IT scene instead of repeating screens a
   const prompt = buildQaRepairPrompt("Agent supervision is about when a reviewer intervenes, not merely running jobs in a rack.",
     { defects: ["tiny unreadable labels", "generic server room", "no visible allow-versus-intervene decision"] }, "social");
   assert.match(prompt, /source-specific human decision/i);
-  assert.match(prompt, /Overrule any earlier staging involving server racks/i);
+  assert.match(prompt, /Reject generic server racks/i);
+  assert.match(prompt, /never invent a stock-photo presenter/i);
   assert.match(prompt, /No visible text, pseudo-text/i);
   assert.match(prompt, /Agent supervision is about when a reviewer intervenes/i);
   assert.doesNotMatch(buildQaRepairPrompt("test artwork", {}, "podcast"), /Overrule any earlier staging/);
