@@ -72,6 +72,19 @@ function batchSize(env) {
   return value;
 }
 
+const MAX_TECHNICAL_ATTEMPTS_PER_BOOK = 2;
+
+// Persist identifiers, not provider text or source snippets, in operational failure records.
+export function researchFailureDetail(error, stage) {
+  const code = String(error?.code || error?.name || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || 'unknown';
+  const status = Number(error?.statusCode ?? error?.status);
+  return { stage, code, ...(Number.isInteger(status) && status >= 100 && status <= 599 ? { httpStatus: status } : {}) };
+}
+
+export function countTechnicalFailures(results = []) {
+  return results.filter((result) => result.optimisation?.technical === true).length;
+}
+
 export async function runResearchTick({
   now = () => new Date(), env = process.env, readState = () => readJson(KEY),
   writeState = (state) => putPrivateJson("kdp", KEY, state),
@@ -106,12 +119,42 @@ export async function runResearchTick({
         ebookId: row.ebookId, publicListing: row.publicListing,
       }));
       state.results = [];
+      state.inProgress = null;
+      state.technicalRetry = null;
+      state.lastTechnicalFailure = null;
       state.completed = false;
       await writeState(state);
     }
-    if (state.completed) return { status: "already_complete", week, cycle, listingUpdates: 0, proposalCounts: countProposals(state.results) };
+    if (state.completed) return { status: "already_complete", week, cycle, listingUpdates: 0,
+      proposalCounts: countProposals(state.results), technicalFailures: countTechnicalFailures(state.results) };
     if (state.pending.length && inWeeklyWindow(now(), "update") && londonWeek(now()) === week) {
       const book = state.pending[0];
+      const recordFailure = async (stage, error, partial = {}) => {
+        const attempts = state.technicalRetry?.ebookId === book.ebookId ? state.technicalRetry.attempts + 1 : 1;
+        const detail = researchFailureDetail(error, stage);
+        state.lastTechnicalFailure = { ebookId: book.ebookId, ...detail, attempts, at: now().toISOString() };
+        state.technicalRetry = { ebookId: book.ebookId, attempts };
+        if (attempts >= MAX_TECHNICAL_ATTEMPTS_PER_BOOK) {
+          state.results.push({ ...partial, ebookId: book.ebookId, optimisation: {
+            status: "blocked", reason: "technical_failure", technical: true, failure: detail,
+          } });
+          state.pending.shift();
+          state.cursor = book.ebookId;
+          state.inProgress = null;
+          state.technicalRetry = null;
+        }
+        state.updatedAt = now().toISOString();
+        await writeState(state);
+        if (!state.pending.length) {
+          state.completed = true;
+          await archive(week, state);
+          await writeState(state);
+        }
+        return { status: state.completed ? "complete" : "pending", week, cycle,
+          processed: state.results.length, pending: state.pending.length,
+          technicalFailures: countTechnicalFailures(state.results), lastTechnicalFailure: state.lastTechnicalFailure,
+          technicalRetryScheduled: attempts < MAX_TECHNICAL_ATTEMPTS_PER_BOOK };
+      };
       const maxRequests = Number(env.KDP_RESEARCH_MONTHLY_SEARCH_LIMIT || 900);
       if (!Number.isSafeInteger(maxRequests) || maxRequests < 1 || maxRequests > 1000) throw new Error("Invalid monthly research limit");
       const beforeRequest = async () => {
@@ -128,7 +171,8 @@ export async function runResearchTick({
       };
       let result = state.inProgress;
       if (!result || result.ebookId !== book.ebookId) {
-        result = await discover(book, { apiKey: env.TAVILY_SEARCH_API, now, beforeRequest });
+        try { result = await discover(book, { apiKey: env.TAVILY_SEARCH_API, now, beforeRequest }); }
+        catch (error) { return recordFailure("discovery", error); }
         state.inProgress = result;
         await writeState(state);
       }
@@ -141,7 +185,8 @@ export async function runResearchTick({
           result.competitors[market] = [...leads, ...(result.competitors[market] || [])].filter((lead, i, all) => all.findIndex((x) => x.asin === lead.asin) === i);
         }
       }
-      result.competitorEvidence = await captureEvidence(result);
+      try { result.competitorEvidence = await captureEvidence(result); }
+      catch (error) { return recordFailure("competitor_evidence", error, result); }
       if (Object.values(result.competitorEvidence.markets).some((market) => market.status === "blocked")) {
         return { status: "amazon_blocked", week, ebookId: book.ebookId };
       }
@@ -154,22 +199,32 @@ export async function runResearchTick({
             : null;
         }
         result.optimisation = await draft(book, result, await getMetadata(), { now: now(), liveListing });
-      } catch {
-        result.optimisation = { status: "blocked", reason: "proposal_unavailable", listingUpdated: false };
+      } catch (error) {
+        return recordFailure("proposal", error, result);
       }
       if (result.optimisation?.status === "approved") result.update = await queueUpdate(week, book, result.optimisation);
       state.results.push(result);
       state.inProgress = null;
       state.cursor = book.ebookId;
       state.pending.shift();
+      state.technicalRetry = null;
       state.updatedAt = now().toISOString();
       // Cursor and result are committed together. A crash can repeat a search,
       // but cannot silently skip an ebook or trigger a KDP listing update.
       await writeState(state);
+      // A final research tick can otherwise leave a prepared update stranded
+      // until after Thursday's submission cutoff. Reconcile immediately.
+      if (result.update?.status === "prepared") {
+        try { result.updateDispatch = await updateTick(); }
+        catch (error) { result.updateDispatch = { ok: false, status: "update_dispatch_failed",
+          failure: researchFailureDetail(error, "update_dispatch") }; }
+        await writeState(state);
+      }
     }
     if (!state.pending.length) { state.completed = true; await archive(week, state); await writeState(state); }
     return { status: state.completed ? "complete" : "pending", week, cycle, processed: state.results.length, pending: state.pending.length,
-      listingUpdates: 0, proposalCounts: countProposals(state.results) };
+      listingUpdates: 0, proposalCounts: countProposals(state.results),
+      technicalFailures: countTechnicalFailures(state.results) };
   } finally { await release(acquired.lease); }
 }
 
@@ -186,8 +241,12 @@ export async function runResearchBatch({ tick = runResearchTick, pause = (ms) =>
   for (;;) {
     const result = await tick();
     if (result.status === "pending") { await pause(5 * 60_000); continue; }
-    if (["complete", "already_complete"].includes(result.status)) return { ok: true, ...result };
-    // Missing prerequisites are explicit skips, not failed jobs that trigger retries.
-    return { ok: true, skipped: true, reason: result.status, ...result };
+    if (["complete", "already_complete"].includes(result.status)) return {
+      ...result, ok: !(result.technicalFailures > 0),
+    };
+    if (result.status === "already_running") return { ...result, ok: true };
+    // A missing audit, search key, provider outage or blocked marketplace must
+    // fail the MAST terminal check. Calling that a successful skip hid failures.
+    return { ...result, ok: false };
   }
 }
