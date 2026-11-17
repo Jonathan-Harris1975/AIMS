@@ -143,10 +143,14 @@ export async function reconcilePrintPricing({
       const key = job.ebookId + ":" + job.format;
       const book = byId.get(job.ebookId);
       const entry = ledger.entries[key];
+      // Unknown remote submission outcomes remain blocked until verified.
+      // Never infer permission to replay from the passage of seven days.
+      if (entry?.status === "needs_attention") continue;
+      const interval = entry?.status === "blocked" ? 24 * 60 * 60_000 : REVIEW_INTERVAL_MS;
       if (entry && !STATUS_PENDING.has(entry.status) &&
           entry.policyVersion === KDP_PRINT_PRICING_POLICY_VERSION &&
           Number.isFinite(Date.parse(entry.checkedAt)) &&
-          +now() - Date.parse(entry.checkedAt) < REVIEW_INTERVAL_MS) continue;
+          +now() - Date.parse(entry.checkedAt) < interval) continue;
       if (STATUS_PENDING.has(entry?.status) && +now() - Date.parse(entry.startedAt) < PRICE_VERIFY_WAIT_MS) {
         results.push({ key, status: "awaiting_kdp_price_propagation" }); continue;
       }
@@ -223,15 +227,20 @@ export async function reconcilePrintPricing({
       await persist();
       results.push({ key, status: ledger.entries[key].status, changes });
     }
+    const outstanding = Object.entries(ledger.entries).filter(([, entry]) =>
+      ["blocked","needs_attention","submission_uncertain"].includes(entry.status))
+      .map(([key, entry]) => ({ key, status: entry.status, reason: entry.reason || null }));
     const report = {
-      ok: !results.some(row => ["blocked","needs_attention","submission_uncertain"].includes(row.status)),
+      ok: !results.some(row => ["blocked","needs_attention","submission_uncertain"].includes(row.status)) &&
+        outstanding.length === 0,
+      unresolved: outstanding,
       schemaVersion: 1, kdpWritesPerformed: submitted,
       publishedPrintEditions: live.length,
       examined: results.length, results, checkedAt: now().toISOString(),
       pricingPolicyVersion: KDP_PRINT_PRICING_POLICY_VERSION,
       confirmedSignedIn: results.filter(row => ["already_sensible","verified_signed_in"].includes(row.status)).length,
       pending: results.filter(row => ["queued","submitted","awaiting_signed_in_price","awaiting_kdp_price_propagation"].includes(row.status)).length,
-      blocked: results.filter(row => ["blocked","needs_attention","submission_uncertain"].includes(row.status)).length,
+      blocked: outstanding.length,
     };
     await save(REPORT_KEY, report);
     return report;
