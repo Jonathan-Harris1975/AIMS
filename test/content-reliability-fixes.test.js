@@ -341,8 +341,8 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(client, /export async function deletePost/);
   assert.match(client, /"x-request-id": requestId/);
   assert.match(scheduler, /zernio-daily-artwork-unavailable/);
-  assert.match(scheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
-  assert.doesNotMatch(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
+  assert.match(scheduler, /allowFallback: false/);
+  assert.match(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
   assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
 });
@@ -396,7 +396,8 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_MINI_SERIES_IMAGE_URL: "https://images.jonathan-harris.online/site-logo",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
     ZERNIO_PODCAST_PROMO_IMAGE_URL: "https://images.jonathan-harris.online/Podcast",
-    ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "true",
+    // Legacy deployment examples cannot re-enable this removed fallback path.
+    // The production policy is checked explicitly below, not inherited from templates.
     ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "false",
     ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
@@ -431,4 +432,5 @@ test("critical orchestration defaults stay aligned across deployment templates",
   for (const [key, value] of Object.entries(expected)) {
     for (const config of configs) assert.equal(config[key], value, `${key} must match every deployment template`);
   }
+  assert.equal(configs[2].ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, "false");
 });
