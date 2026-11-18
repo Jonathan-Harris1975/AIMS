@@ -6,6 +6,7 @@ import {
   deliverKdpOtpFromTextBee,
   extractAmazonOtp,
   getKdpOtpChallengeStatus,
+  getKdpOtpDeliveryStatus,
 } from "../services/kdp/otpBroker.js";
 
 const originalAllowlist = process.env.KDP_OTP_ALLOWED_SENDERS;
@@ -76,4 +77,22 @@ test("only one OTP challenge can be active at once", () => {
   challenge.cancel();
   assert.deepEqual(getKdpOtpChallengeStatus(), { active: false });
   return cancellation;
+});
+
+test("OTP delivery diagnostics expose only safe acceptance outcomes, never codes or sender IDs", async () => {
+  process.env.KDP_OTP_ALLOWED_SENDERS = "Amazon";
+  const challenge = beginKdpOtpChallenge({ timeoutMs: 30_000 });
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Other", message: "Amazon code 123456",
+  }).reason, "sender_not_allowed");
+  assert.equal(getKdpOtpDeliveryStatus().reason, "sender_not_allowed");
+  assert.equal(getKdpOtpDeliveryStatus().accepted, false);
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Amazon", message: "Amazon code 123456",
+  }).accepted, true);
+  assert.equal(await challenge.promise, "123456");
+  assert.equal(getKdpOtpDeliveryStatus().reason, "consumed");
+  assert.equal(getKdpOtpDeliveryStatus().accepted, true);
+  assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("123456"), false);
+  assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("Amazon"), false);
 });
