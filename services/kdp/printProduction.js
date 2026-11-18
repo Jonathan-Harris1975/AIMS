@@ -21,6 +21,18 @@ const MAX_FORMAT_START_MINUTE = 22 * 60 + 50;
 const SPECIAL_FIRST_BOOK = 7;
 const STORAGE_ROOT = "print/production/reports/";
 
+export function successfulPrintRun(outcomes, submittedBefore, expectedEditions) {
+  if (!Array.isArray(outcomes) || !Number.isSafeInteger(submittedBefore) ||
+      !Number.isSafeInteger(expectedEditions) || expectedEditions < 1 ||
+      submittedBefore < 0 || submittedBefore > expectedEditions) return false;
+  const accepted = new Set([
+    "submitted_to_kdp_review", "already_in_progress_or_submitted",
+    "weekly_quota_exhausted", "draft_saved_window_closed", "assets_ready_window_closed",
+  ]);
+  return outcomes.every(item => accepted.has(item.status)) &&
+    (outcomes.length > 0 || submittedBefore === expectedEditions);
+}
+
 export function localPrintClock(at = new Date()) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/London", weekday: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
@@ -336,11 +348,17 @@ export async function runPrintProduction({
       }
     }
     const quotaUsageAfter = await getPrintQuotaUsage(utcPrintWeek(now()));
+    const expectedEditions = eligible.length * 2;
+    const eligibleIds = new Set(eligible.map(book => book.ebookId));
+    const submittedBefore = knownRefs.filter(ref => eligibleIds.has(ref.ebookId) &&
+      ["submitted", "live_verified"].includes(ref.state)).length;
+    const submittedNow = outcomes.filter(x => x.status === "submitted_to_kdp_review").length;
     report = {
-      ok: outcomes.every(x => [
-        "submitted_to_kdp_review", "already_in_progress_or_submitted",
-        "weekly_quota_exhausted", "draft_saved_window_closed", "assets_ready_window_closed",
-      ].includes(x.status)),
+      ok: successfulPrintRun(outcomes, submittedBefore, expectedEditions),
+      status: outcomes.length ? "attempted" : submittedBefore === expectedEditions
+        ? "catalogue_already_submitted" : "zero_editions_processed_with_backlog",
+      expectedEditions, submittedBefore,
+      remainingToSubmit: Math.max(0, expectedEditions - submittedBefore - submittedNow),
       schemaVersion: 1, checkedAt: now().toISOString(), weekUtc: utcPrintWeek(now()),
       kdpWritesPerformed: writes, maxBooksPerRun: MAX_BOOKS, capacity,
       quotaUsageBefore, quotaUsageAfter, externalWeeklyLimitDetected: platformLimitDetected,
