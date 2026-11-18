@@ -29,10 +29,22 @@ test("production forbids reusable artwork across all editorial channels", () => 
   assert.match(source("services/newsletter/engine/buildNewsletter.js"), /const requireHeroImage = true/);
 });
 
-test("all Zernio social content gets its own newly generated artwork in production", () => {
+test("only ebook promotion posts reuse the original book cover", () => {
   const scheduler = source("services/zernio/utils/socialScheduler.js");
-  assert.match(scheduler, /ZERNIO-EBOOK-\$\{dayKey\.toUpperCase\(\)\}-\$\{publishDate\}/);
-  assert.match(scheduler, /zernio-ebook-artwork-unavailable/);
+  const ebookStart = scheduler.indexOf("async function buildAndScheduleEbookWeeklyImpl");
+  const ebookEnd = scheduler.indexOf("function parseQuizQuestionCard", ebookStart);
+  assert.ok(ebookStart > -1 && ebookEnd > ebookStart);
+  const ebooks = scheduler.slice(ebookStart, ebookEnd);
+  assert.match(ebooks, /const imageUrl = featuredBook\.coverArtUrl;/);
+  assert.match(ebooks, /post\.imageUrl = featuredBook\.coverArtUrl;/);
+  assert.match(ebooks, /post\.imageStatus = "original-book-cover"/);
+  assert.match(ebooks, /zernio-ebook-original-cover-required/);
+  assert.doesNotMatch(ebooks, /createSocialArtwork\(/);
+  assert.doesNotMatch(ebooks, /options\.imageUrl \|\| featuredBook\.coverArtUrl/);
+});
+
+test("other Zernio post formats require newly generated artwork", () => {
+  const scheduler = source("services/zernio/utils/socialScheduler.js");
   assert.match(scheduler, /artwork\.fallback \|\| artwork\.imageStatus !== "generated"/);
   assert.match(scheduler, /zernio-quiz-artwork-structure-invalid/);
   assert.doesNotMatch(scheduler, /allowFallback: true/);
