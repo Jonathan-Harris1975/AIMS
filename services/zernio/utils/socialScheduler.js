@@ -2674,7 +2674,7 @@ async function buildAndScheduleWeeklyMiniSeriesImpl(options = {}) {
   }
 
   for (const item of prepared) {
-    if (!options.imageUrl && !dryRun) {
+    if (!(process.env.NODE_ENV === "test" && options.imageUrl) && !dryRun) {
       const sourceEvidence = (item.sources || []).slice(0, 3).map((source) => ({
         title: source.title || "",
         summary: source.summary || source.rewritten || "",
@@ -3087,12 +3087,13 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const apiKey = resolveSchedulerApiKey(options);
   const feedUrl = options.feedUrl || PODCAST_PROMO_CONFIG.feedUrl;
   const sessionId = `ZERNIO-PODCAST-PROMO-${publishDate}`;
+  const suppliedImage = dryRun || process.env.NODE_ENV === "test" ? options.imageUrl || "" : "";
   const slotClaim = await claimZernioSlot({
     scope: "podcast:thursday-promo",
     scheduledDateTime,
     profileName,
     accountId,
-    imageUrl: options.imageUrl || "",
+    imageUrl: suppliedImage,
     dryRun,
     apiKey,
     force: options.force,
@@ -3125,7 +3126,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
     title: generated.title,
     topic: generated.topic,
     content: ensureHashtags(`${generated.content}\n\n${promotionLink.label}: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
-    imageUrl: options.imageUrl || "",
+    imageUrl: suppliedImage,
   };
   if (!normaliseSimple(generated.content).includes(normaliseSimple(episode.title))) {
     const err = new Error("Podcast advert must name the actual published episode, not a speculative upcoming title.");
@@ -3169,7 +3170,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
       fallbackUrl: PODCAST_PROMO_CONFIG.fallbackImageUrl,
       allowFallback: false,
     });
-    if (!artwork.ok || !artwork.publicUrl) {
+    if (!artwork.ok || !artwork.publicUrl || artwork.fallback || artwork.imageStatus !== "generated") {
       const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no usable image URL returned"}`);
       err.statusCode = 503;
       err.code = "zernio-podcast-artwork-unavailable";
@@ -3607,8 +3608,8 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
-  let questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
-  let answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
+  let questionImageUrl = dryRun ? (options.questionImageUrl || QUIZ_CONFIG.questionImageUrl) : (process.env.NODE_ENV === "test" ? options.questionImageUrl || "" : "");
+  let answerImageUrl = dryRun ? (options.answerImageUrl || QUIZ_CONFIG.answerImageUrl) : (process.env.NODE_ENV === "test" ? options.answerImageUrl || "" : "");
   // Curated artwork must not bypass fresh quiz rendering.
   const artworkWarnings = [];
 
@@ -3754,7 +3755,7 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
         err.code = "zernio-quiz-artwork-structure-invalid";
         throw err;
       } else {
-        if (!options.questionImageUrl) {
+        if (!questionImageUrl) {
           const questionArtwork = await createQuizArtwork({
             sessionId: `ZERNIO-QUIZ-${questionPublishDate}`,
             cardType: "question",
@@ -3787,7 +3788,7 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
           if (questionArtwork.fallback && questionArtwork.warning) artworkWarnings.push(questionArtwork.warning);
         }
 
-        if (!options.answerImageUrl) {
+        if (!answerImageUrl) {
           const answerArtwork = await createQuizArtwork({
             sessionId: `ZERNIO-QUIZ-${questionPublishDate}`,
             cardType: "answer",
