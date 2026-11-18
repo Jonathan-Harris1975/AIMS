@@ -438,10 +438,12 @@ test("buildAndScheduleEbookWeekly keeps one featured book, appends scheduler has
     weekStartDate: "2026-05-04",
     dryRun: true,
     featuredBook: FEATURED_BOOK,
+    imageUrl: "https://images.example.com/wrong-promotional-image.png",
   });
 
   for (const day of ["tuesday", "thursday", "saturday"]) {
     const post = result.posts[day].post;
+    assert.equal(post.imageStatus, "original-book-cover");
     assert.equal(post.firstComment, `Featured book: ${FEATURED_BOOK.title}\nRead more: ${FEATURED_BOOK.bookUrl}`);
     assert.equal(post.imageUrl, FEATURED_BOOK.coverArtUrl);
     assert.match(post.content, /#ArtificialIntelligence/);
