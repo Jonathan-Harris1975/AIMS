@@ -6,6 +6,7 @@ import {
   deliverKdpOtpFromTextBee,
   extractAmazonOtp,
   getKdpOtpChallengeStatus,
+  getKdpOtpDeliveryStatus,
 } from "../services/kdp/otpBroker.js";
 
 const originalAllowlist = process.env.KDP_OTP_ALLOWED_SENDERS;
@@ -76,4 +77,39 @@ test("only one OTP challenge can be active at once", () => {
   challenge.cancel();
   assert.deepEqual(getKdpOtpChallengeStatus(), { active: false });
   return cancellation;
+});
+
+test("OTP delivery diagnostics expose only safe acceptance outcomes, never codes or sender IDs", async () => {
+  process.env.KDP_OTP_ALLOWED_SENDERS = "Amazon";
+  const challenge = beginKdpOtpChallenge({ timeoutMs: 30_000 });
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Other", message: "Amazon code 123456",
+  }).reason, "sender_not_allowed");
+  assert.equal(getKdpOtpDeliveryStatus().reason, "sender_not_allowed");
+  assert.equal(getKdpOtpDeliveryStatus().accepted, false);
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Amazon", message: "Amazon code 123456",
+  }).accepted, true);
+  assert.equal(await challenge.promise, "123456");
+  assert.equal(getKdpOtpDeliveryStatus().reason, "consumed");
+  assert.equal(getKdpOtpDeliveryStatus().accepted, true);
+  assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("123456"), false);
+  assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("Amazon"), false);
+});
+
+test("stale retry from an earlier login cannot satisfy the current OTP challenge", async () => {
+  process.env.KDP_OTP_ALLOWED_SENDERS = "Amazon";
+  const challenge = beginKdpOtpChallenge({ timeoutMs: 30_000 });
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Amazon", message: "Amazon security code 123456",
+    receivedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+  }).reason, "stale_message");
+  assert.equal(getKdpOtpChallengeStatus().active, true);
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Amazon", message: "Amazon security code 987654",
+    receivedAt: new Date().toISOString(),
+  }).accepted, true);
+  assert.equal(await challenge.promise, "987654");
+  assert.equal(getKdpOtpDeliveryStatus().reason, "consumed");
+  assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("987654"), false);
 });

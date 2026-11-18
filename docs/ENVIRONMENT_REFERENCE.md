@@ -277,8 +277,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `KDP_CONTENT_MAX_BYTES` | Yes | services/kdp/storage.js:7 |
 | `KDP_D1_DATABASE_ID` | Yes | services/kdp/catalogue.js:6<br>services/kdp/catalogue.js:142<br>services/kdp/catalogue.js:143 |
 | `KDP_D1_TIMEOUT_MS` | No | services/kdp/catalogue.js:20 |
-| `KDP_OTP_ALLOWED_SENDERS` | Yes | services/kdp/index.js:16<br>services/kdp/otpBroker.js:16 |
-| `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:9 |
+| `KDP_OTP_ALLOWED_SENDERS` | Yes | services/kdp/index.js:16<br>services/kdp/otpBroker.js:26 |
+| `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Yes | services/kdp/otpBroker.js:19 |
 | `KDP_PASSWORD` | Yes | services/kdp/index.js:15 |
 | `KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT` | No | services/kdp/operations.js:186<br>services/kdp/printProduction.js:305 |
 | `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` | No | services/kdp/optimisationProposal.js:115 |
