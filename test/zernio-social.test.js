@@ -515,7 +515,7 @@ test("Zernio refuses a static image even when the fallback flag is enabled", asy
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
   process.env.ZERNIO_API_BASE_URL = mockBase;
-  process.env.ZERNIO_API_KEY = testCredential("zernio-fallback-blocked");
+  process.env.ZERNIO_API_KEY = testCredential("zernio-fallback");
   process.env.ZERNIO_REQUIRED_PLATFORMS = "facebook";
   process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
   process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK = "true";
