@@ -192,9 +192,10 @@ export async function writePrintEditionState(ebookId, format, state, isbn = null
 
 export async function listKnownPrintJobs() {
   await ensurePrintStateTables();
-  const result = await queryKdpD1("SELECT ebook_id, format, title_id FROM kdp_print_automation WHERE title_id IS NOT NULL");
+  const result = await queryKdpD1("SELECT ebook_id, format, title_id, state FROM kdp_print_automation WHERE title_id IS NOT NULL");
   return (result.results || []).map(row => ({
     ebookId: Number(row.ebook_id), format: String(row.format), titleId: String(row.title_id),
+    state: String(row.state),
   }));
 }
 
