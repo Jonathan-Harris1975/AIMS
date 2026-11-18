@@ -1,9 +1,19 @@
 import { randomUUID } from "node:crypto";
 
-const DEFAULT_CHALLENGE_TIMEOUT_MS = 180_000;
+const DEFAULT_CHALLENGE_TIMEOUT_MS = 300_000;
 const MIN_CHALLENGE_TIMEOUT_MS = 30_000;
 const MAX_CHALLENGE_TIMEOUT_MS = 300_000;
 let activeChallenge = null; // process-local; single active challenge (see services/kdp/README.md)
+let lastDelivery = null; // Outcome only: never store the SMS, OTP or sender.
+
+function deliveryResult(accepted, reason, challengeId = null) {
+  lastDelivery = { accepted, reason, at: new Date().toISOString() };
+  return accepted ? { accepted: true, challengeId } : { accepted: false, reason };
+}
+
+export function getKdpOtpDeliveryStatus() {
+  return lastDelivery ? { ...lastDelivery } : null;
+}
 
 function challengeTimeoutMs() {
   const configured = Number(process.env.KDP_OTP_CHALLENGE_TIMEOUT_MS);
@@ -90,27 +100,27 @@ export function beginKdpOtpChallenge({ timeoutMs = challengeTimeoutMs() } = {}) 
 }
 
 export function deliverKdpOtpFromTextBee(payload) {
-  if (!activeChallenge) return { accepted: false, reason: "no_active_challenge" };
+  if (!activeChallenge) return deliveryResult(false, "no_active_challenge");
   if (Date.now() >= Date.parse(activeChallenge.expiresAt)) {
     const expired = activeChallenge;
     clearTimeout(expired.timer);
     activeChallenge = null;
     expired.rejectOtp(new Error("KDP OTP challenge timed out."));
-    return { accepted: false, reason: "challenge_expired" };
+    return deliveryResult(false, "challenge_expired");
   }
-  if (!isAllowedSender(payload?.sender)) return { accepted: false, reason: "sender_not_allowed" };
+  if (!isAllowedSender(payload?.sender)) return deliveryResult(false, "sender_not_allowed");
   if (typeof payload?.message !== "string" || !/\bamazon\b/i.test(payload.message)) {
-    return { accepted: false, reason: "non_amazon_message" };
+    return deliveryResult(false, "non_amazon_message");
   }
 
   const code = findCodeNearLabel(payload.message);
-  if (!code) return { accepted: false, reason: "verification_code_not_found" };
+  if (!code) return deliveryResult(false, "verification_code_not_found");
 
   const challenge = activeChallenge;
   clearTimeout(challenge.timer);
   activeChallenge = null;
   challenge.resolveOtp(code);
-  return { accepted: true, challengeId: challenge.challengeId };
+  return deliveryResult(true, "consumed", challenge.challengeId);
 }
 
 export function getKdpOtpChallengeStatus() {
@@ -128,5 +138,6 @@ export const __otpBrokerTestHooks = {
   reset() {
     if (activeChallenge) clearTimeout(activeChallenge.timer);
     activeChallenge = null;
+    lastDelivery = null;
   },
 };
