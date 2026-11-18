@@ -262,49 +262,42 @@ test("Zernio exact schedules use London time and recover missed slots with a saf
   assert.match(env, /^ZERNIO_API_RETRY_ATTEMPTS=5$/m);
 });
 
-test("Zernio keeps fresh generated artwork primary and permits the curated stored image as resilience fallback", async () => {
+test("All editorial image lanes reject reusable static or diagnostic fallback images", async () => {
   const png = createDeterministicAiFallbackPng({ width: 640, height: 360, seed: "newsletter-ai-edge" });
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.ok(png.length > 20_000);
 
   const blogArtwork = await readFile(new URL("../services/artwork/createBlogArtwork.js", import.meta.url), "utf8");
   const socialArtwork = await readFile(new URL("../services/artwork/createSocialArtwork.js", import.meta.url), "utf8");
+  const podcastArtwork = await readFile(new URL("../services/artwork/createPodcastArtwork.js", import.meta.url), "utf8");
   const zernioScheduler = await readFile(new URL("../services/zernio/utils/socialScheduler.js", import.meta.url), "utf8");
-  const zernioConfig = await readFile(new URL("../services/zernio/utils/config.js", import.meta.url), "utf8");
   const weeklyBlog = await readFile(new URL("../services/blog/weekly/buildWeeklyBlogPost.js", import.meta.url), "utf8");
   const socialBlog = await readFile(new URL("../services/blog/social/buildDailySocialBlogPost.js", import.meta.url), "utf8");
   const hero = await readFile(new URL("../services/newsletter/engine/heroImage.js", import.meta.url), "utf8");
   const env = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
   assert.match(blogArtwork, /artwork\.blog\.deterministic_ai_diagnostic/);
-  assert.match(socialArtwork, /artwork\.social\.deterministic_ai_diagnostic/);
-  assert.match(blogArtwork, /SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK/);
-  assert.match(blogArtwork, /if \(\["social-blog", "newsletter"\]\.includes\(mode\)\) return false/);
-  assert.doesNotMatch(blogArtwork, /boolEnv\("NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK"/);
-  assert.match(blogArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
-  assert.match(socialArtwork, /ZERNIO_ALLOW_DETERMINISTIC_FALLBACK/);
+  assert.match(blogArtwork, /function allowDeterministicFallback/);
+  assert.match(blogArtwork, /return false;/);
+  assert.match(socialArtwork, /artwork\.social\.fresh_image_required/);
+  assert.doesNotMatch(socialArtwork, /artwork\.social\.curated_fallback/);
   assert.match(socialArtwork, /allowFallback = false/);
-  assert.match(socialArtwork, /if \(!allowFallback\)/);
-  assert.match(socialArtwork, /ok: publishableFallback,[\s\S]*diagnosticUrl: publicUrl,[\s\S]*publicUrl: publishableFallback \? publicUrl : ""/);
-  assert.match(zernioScheduler, /fallbackUrl: lane\.imageUrl/);
-  assert.match(zernioScheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
-  assert.match(zernioScheduler, /artwork\.fallback/);
+  assert.match(podcastArtwork, /imageGenerationStatus: "failed"/);
+  assert.doesNotMatch(podcastArtwork, /pickDeterministicFallbackUrl/);
+  assert.match(zernioScheduler, /allowFallback: false/);
+  assert.match(zernioScheduler, /artwork\.fallback \|\| artwork\.imageStatus !== "generated"/);
   assert.match(weeklyBlog, /reason: "artwork-unavailable"/);
   assert.doesNotMatch(socialBlog, /DEFAULT_SOCIAL_FALLBACK_IMAGE_URL/);
-  assert.doesNotMatch(socialBlog, /imageStatus: "curated-static-fallback"/);
   assert.match(socialBlog, /reason: "artwork-fallback-unavailable-after-retries"/);
   assert.match(socialBlog, /if \(isGeneratedSocialBlogArtwork\(art\)\)/);
-  assert.doesNotMatch(zernioConfig, /ZERNIO_BLOG_RSS_IMAGE_URL, DEFAULT_STORED_IMAGE_URL/);
-  assert.match(zernioConfig, /ZERNIO_MINI_SERIES_IMAGE_URL, ""/);
-  assert.doesNotMatch(zernioConfig, /DEFAULT_STORED_IMAGE_URL/);
   assert.doesNotMatch(hero, /blog-fallback-hero\.png/);
-  assert.match(env, /^BLOG_FALLBACK_IMAGE_URL=$/m);
-  assert.match(env, /^BLOG_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
-  assert.match(env, /^BLOG_SOCIAL_FALLBACK_IMAGE_URL=https:\/\/images\.jonathan-harris\.online\/site-logo$/m);
-  assert.match(env, /^NEWSLETTER_AI_EDGE_FALLBACK_IMAGE_URL=$/m);
-  assert.match(env, /^SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
-  assert.match(env, /^NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=true$/m);
-  assert.match(env, /^ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=true$/m);
-  assert.match(env, /^ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false$/m);
+  for (const setting of [
+    "BLOG_ALLOW_DETERMINISTIC_FALLBACK=false",
+    "NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=false",
+    "SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false",
+    "NEWSLETTER_HERO_IMAGE_REQUIRED=true",
+    "ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=false",
+    "ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false",
+  ]) assert.ok(env.split("\n").includes(setting), `Production must enforce ${setting}`);
 });
 
 
@@ -348,8 +341,8 @@ test("mini-series creation retries weak plans and duplicate parts, then fails cl
   assert.match(client, /export async function deletePost/);
   assert.match(client, /"x-request-id": requestId/);
   assert.match(scheduler, /zernio-daily-artwork-unavailable/);
-  assert.match(scheduler, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
-  assert.doesNotMatch(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
+  assert.match(scheduler, /allowFallback: false/);
+  assert.match(scheduler, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(env, /^ZERNIO_MINI_SERIES_THEME_ATTEMPTS=3$/m);
   assert.match(env, /^ZERNIO_MINI_SERIES_DISTINCTNESS_ATTEMPTS=3$/m);
 });
@@ -403,7 +396,8 @@ test("critical orchestration defaults stay aligned across deployment templates",
     ZERNIO_MINI_SERIES_IMAGE_URL: "https://images.jonathan-harris.online/site-logo",
     ZERNIO_PODCAST_PROMO_TIME: "18:30",
     ZERNIO_PODCAST_PROMO_IMAGE_URL: "https://images.jonathan-harris.online/Podcast",
-    ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK: "true",
+    // Legacy deployment examples cannot re-enable this removed fallback path.
+    // The production policy is checked explicitly below, not inherited from templates.
     ZERNIO_ALLOW_DETERMINISTIC_FALLBACK: "false",
     ZERNIO_SCHEDULE_RECOVERY_ENABLED: "true",
     ZERNIO_SCHEDULE_MIN_LEAD_MS: "900000",
@@ -438,4 +432,5 @@ test("critical orchestration defaults stay aligned across deployment templates",
   for (const [key, value] of Object.entries(expected)) {
     for (const config of configs) assert.equal(config[key], value, `${key} must match every deployment template`);
   }
+  assert.equal(configs[2].ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, "false");
 });

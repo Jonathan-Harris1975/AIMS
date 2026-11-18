@@ -15,35 +15,27 @@ function context() {
 }
 function dependencies(generateHero) {
   const stored = [], checkpoints = [];
-  return { stored, checkpoints, generateHero, requireHeroImage: false,
+  return { stored, checkpoints, generateHero,
     checkpoint: async value => { checkpoints.push(value); },
     storeIssue: async value => { stored.push(value); return { prefix: "approved-issue", htmlUrl: "https://newsletter.example/issue" }; } };
 }
 
-test("failed artwork is omitted while approved copy is published in the existing text-first layout", async () => {
+test("failed artwork blocks newsletter publication without replacing the image", async () => {
   const deps = dependencies(async () => ({ ok: false, imageUrl: "https://images.example/rejected.png", artworkDiagnostics: { stage: "visual_qa" } }));
   const result = await finishNewsletterBuild(context(), deps);
-  assert.equal(result.ok, true);
-  assert.equal(result.metadata.qa.passed, true);
-  assert.equal(result.metadata.heroImageUrl, null);
-  assert.equal(result.metadata.heroImageStatus, "editorial-text-only");
-  assert.equal(result.metadata.artwork.diagnostics.stage, "visual_qa");
-  assert.match(deps.stored[0].emailHtml, /Evidence before promises/);
-  assert.doesNotMatch(deps.stored[0].emailHtml, /rejected\.png|<img/);
-  assert.equal(deps.stored.length, 1);
-  let regenerationCalls = 0;
-  const resumed = dependencies(async () => { regenerationCalls++; throw new Error("Must not regenerate artwork during recovery"); });
-  const again = await finishNewsletterBuild({ ...context(), heroImageResult: deps.checkpoints[0].heroImageResult }, resumed);
-  assert.equal(again.ok, true);
-  assert.equal(regenerationCalls, 0);
-  assert.equal(again.metadata.heroImageStatus, "editorial-text-only");
+  assert.equal(result.ok, false);
+  assert.equal(result.quarantined, true);
+  assert.equal(result.artworkDiagnostics.stage, "visual_qa");
+  assert.equal(deps.stored.length, 0);
+  assert.equal(deps.checkpoints.length, 0);
 });
 
-test("an artwork service exception does not suppress approved editorial content", async () => {
+test("artwork service exceptions block newsletter publication", async () => {
   const deps = dependencies(async () => { throw new Error("Provider unavailable"); });
-  assert.equal((await finishNewsletterBuild(context(), deps)).ok, true);
-  assert.equal(deps.stored.length, 1);
-  assert.equal(deps.stored[0].metadata.artwork.diagnostics.errorType, "Error");
+  const result = await finishNewsletterBuild(context(), deps);
+  assert.equal(result.ok, false);
+  assert.equal(result.quarantined, true);
+  assert.equal(deps.stored.length, 0);
 });
 
 test("a strict artwork policy still holds publication without an approved image", async () => {

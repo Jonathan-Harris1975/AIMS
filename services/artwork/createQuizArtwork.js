@@ -99,33 +99,14 @@ export async function createQuizArtwork({
 
     return { ok: true, key, publicUrl, source };
   } catch (err) {
-    const curatedFallback = allowFallback ? validFallbackUrl(fallbackUrl) : "";
-    error("artwork.quiz.fail", {
+
+    error("artwork.quiz.fresh_image_required", {
       sessionId: safeSession,
       cardType: safeType,
       bucketAlias: "blogImages",
+      fallbackRequested: Boolean(allowFallback && validFallbackUrl(fallbackUrl)),
       error: err?.message || String(err),
-      fallbackUrl: curatedFallback || undefined,
     });
-
-    if (curatedFallback) {
-      warn("artwork.quiz.curated_fallback", {
-        sessionId: safeSession,
-        cardType: safeType,
-        fallbackUrl: curatedFallback,
-        originalError: err?.message || String(err),
-      });
-      return {
-        ok: true,
-        error: undefined,
-        originalError: err?.message || String(err),
-        warning: `Fresh quiz ${safeType} artwork was unavailable; the stored ${safeType} image was used.`,
-        publicUrl: curatedFallback,
-        fallback: true,
-        imageStatus: "curated-static-fallback",
-      };
-    }
-
     return {
       ok: false,
       error: err?.message || String(err),
