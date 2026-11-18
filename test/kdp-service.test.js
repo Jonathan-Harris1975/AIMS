@@ -89,8 +89,8 @@ test("KDP TextBee handoff does not accept codes from non-allow-listed senders", 
       message: "Your Amazon security code is 123456",
     });
 
-  assert.equal(response.status, 202);
-  assert.deepEqual(response.body, { ok: true, accepted: false, reason: "sender_not_allowed" });
+  assert.equal(response.status, 422);
+  assert.deepEqual(response.body, { ok: false, accepted: false, reason: "sender_not_allowed" });
   challenge.cancel();
   await cancellation;
 });
@@ -111,4 +111,15 @@ test("KDP status reports non-secret OTP rejection reason for production diagnosi
   assert.equal(JSON.stringify(response.body).includes("Unknown Sender"), false);
   challenge.cancel();
   await cancellation;
+});
+
+test("KDP OTP rejects absent challenges with an upstream-retryable status", async () => {
+  process.env.KDP_OTP_ALLOWED_SENDERS = "Amazon";
+  const response = await request(createApp()).post("/kdp/otp/textbee").send({
+    webhookEvent: "MESSAGE_RECEIVED", idempotencyKey: "test-no-challenge",
+    sender: "Amazon", message: "Amazon security code 654321",
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(response.body, { ok: false, accepted: false, reason: "no_active_challenge" });
+  assert.equal(JSON.stringify(response.body).includes("654321"), false);
 });
