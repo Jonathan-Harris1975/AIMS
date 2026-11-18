@@ -30,7 +30,7 @@ Set these Koyeb environment variables/secrets:
 | `KDP_USERNAME` | Amazon/KDP account username (Koyeb secret) |
 | `KDP_PASSWORD` | Amazon/KDP account password (Koyeb secret) |
 | `KDP_OTP_ALLOWED_SENDERS` | Comma-separated allow-list of Amazon SMS sender values observed in TextBee |
-| `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Optional OTP timeout; defaults to 180 seconds |
+| `KDP_OTP_CHALLENGE_TIMEOUT_MS` | Optional OTP timeout; defaults to 300 seconds (5 minutes) |
 | `KDP_D1_DATABASE_ID` | Website ebook catalogue D1 ID; defaults to the existing KDP catalogue database |
 | `KDP_CONTENT_MAX_BYTES` | Optional maximum staged manuscript/cover size; defaults to 200 MiB |
 | `R2_BUCKET_KDP` | Private R2 bucket name; set to `kdp` |
@@ -55,7 +55,7 @@ TextBee's public callback is hosted by HIVE-UI at:
 
 Configure TextBee to send `MESSAGE_RECEIVED` events and set a signing secret of at least 20 characters as HIVE-UI's `TEXTBEE_WEBHOOK_SECRET`. Configure HIVE-UI's `AIMS_ADMIN_TOKEN` with the AIMS `AIMS_API_KEY` value. HIVE-UI verifies the TextBee HMAC over raw request bytes before forwarding an event to the bearer-authenticated AIMS route `POST /kdp/otp/textbee`.
 
-OTP messages and codes are never logged or persisted. The broker is process-local with one active challenge, so run one AIMS replica and serialize KDP writes. Move the broker to shared, TTL-capable state with atomic one-use delivery before scaling to multiple replicas.
+OTP messages and codes are never logged or persisted. The broker records only the latest non-secret delivery outcome (e.g. sender_not_allowed/no_active_challenge/consumed) on `/kdp/status` for troubleshooting. The broker is process-local with one active challenge, so run one AIMS replica and serialize KDP writes. Move the broker to shared, TTL-capable state with atomic one-use delivery before scaling to multiple replicas.
 
 ## Routes
 
