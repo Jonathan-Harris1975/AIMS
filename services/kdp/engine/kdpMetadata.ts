@@ -243,11 +243,19 @@ export async function collectBookshelfRefsViaBrowser(page: Page, {
     if (pagesScanned === 200) throw new KdpClientError('KDP Bookshelf exceeded the pagination limit.')
     await throttle()
     await next.click({ timeout: 15_000 })
-    await page.waitForFunction(`(() => {
-      const scan = (${SCAN_BOOKSHELF_FN})()
-      return scan.refs.length > 0 && scan.refs.map((r) => r.titleId + ':' + r.format).sort().join(',') !== ${JSON.stringify(signature)}
-    })()`, undefined, { timeout: 30_000 })
-    await page.waitForLoadState('networkidle', { timeout: 60_000 })
+    try {
+      await page.waitForFunction(`(() => {
+        const scan = (${SCAN_BOOKSHELF_FN})()
+        return scan.refs.length > 0 && scan.refs.map((r) => r.titleId + ':' + r.format).sort().join(',') !== ${JSON.stringify(signature)}
+      })()`, undefined, { timeout: 30_000 })
+      await page.waitForLoadState('networkidle', { timeout: 60_000 })
+    } catch (error) {
+      // An expired authenticated session can redirect at pagination time.
+      // Raise an auth error so the existing browser wrapper refreshes login
+      // once, instead of stranding pricing and print jobs on a generic timeout.
+      if (page.url().toLowerCase().includes('signin')) throw new KdpAuthError()
+      throw error
+    }
   }
   throw new KdpClientError('KDP Bookshelf scan did not complete.')
 }
@@ -369,6 +377,22 @@ export async function fetchBookMetadata(
     }).catch(() => null)
     if (requestPage.url().toLowerCase().includes('signin')) throw new KdpAuthError()
     if (response?.ok()) {
+      // The royalty selector may only appear after the signed-in page hydrates.
+      // Wait for one *selected* supported plan; never infer it from price,
+      // unselected radio options or the catalogue. Keep the wait bounded.
+      await requestPage.waitForFunction(`(() => {
+        const names = [
+          'data[digital][royalty_rate]-radio',
+          'data[digital][royalty_plan]',
+          'data[digital][royalty_rate]',
+        ]
+        const value = names.map(name => document.querySelector('input[name="' + name + '"]:checked')?.value?.trim())
+          .find(Boolean) ||
+          document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() ||
+          document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim() || ''
+        return /^(?:35|70)(?:_PERCENT)?$/.test(value)
+      })()`, undefined, { timeout: 6_000 }).catch(() => null)
+      if (requestPage.url().toLowerCase().includes('signin')) throw new KdpAuthError()
       const rendered = await requestPage.evaluate(`(() => {
         const plan = [
           'data[digital][royalty_rate]-radio',
