@@ -171,8 +171,8 @@ export async function buildNewsletter({ profileId = "ai-edge", sessionId: reques
 
 export async function finishNewsletterBuild({ profile, sessionId, now, qaResult, lead, stories, promotion, droppedForDiversity, recentHistory = null, heroImageResult: savedHero }, {
   generateHero = generateHeroImage, checkpoint = writeEditorialCheckpoint, storeIssue = storeNewsletterIssue,
-  requireHeroImage = /^(1|true|yes|on)$/i.test(String(process.env.NEWSLETTER_HERO_IMAGE_REQUIRED || "false")),
 } = {}) {
+  const requireHeroImage = true; // Newsletters are never sent without an approved, issue-specific image.
   if (qaResult?.ok !== true || qaResult.quarantined !== false) {
     return { ok: false, sessionId, quarantined: true, error: "Newsletter editorial approval is required before publication." };
   }
