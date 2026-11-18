@@ -254,6 +254,24 @@ test("digital growth evidence bundle is bounded before model dispatch", () => {
   assert.ok(bounded.allRoutes.length <= 50);
 });
 
+test("authoritative crawl facts retain late newsletter links and schema through prompt compaction", () => {
+  const payload = {
+    priorityPages: [{route:"/",status:200,schemaTypes:["Person","Organization","WebSite"],
+      ctas:[...Array.from({length:20},(_,i)=>({label:`Menu ${i}`,href:`/nav/${i}`})),
+        {label:"Get the glossary",href:"https://example.test/newsletter/"}]}],
+    repoSignals:{large:"x".repeat(10000)},
+  };
+  const compact = __digitalGrowthAnalysisTestHooks.compactPayload(payload);
+  const bounded = __digitalGrowthAnalysisTestHooks.enforcePayloadBudget(compact, 2000);
+  const context = __digitalGrowthAnalysisTestHooks.assessmentContext(bounded);
+  assert.deepEqual(context.observedPageFacts[0].schemaTypes,["Person","Organization","WebSite"]);
+  assert.equal(context.observedPageFacts[0].ctaCount,21);
+  assert.deepEqual(context.observedPageFacts[0].journeyLinks,[{label:"Get the glossary",href:"https://example.test/newsletter/"}]);
+  assert.ok(!JSON.stringify(context.observedPageFacts).includes("depth limit"));
+  const council = __websiteAuditCouncilTestHooks.compactDigital({priorityPages:payload.priorityPages});
+  assert.deepEqual(council.observedPageFacts,context.observedPageFacts);
+});
+
 test("pipeline source enforces RAMS-before-cleanup and retains evidence on failure", () => {
   const source = fs.readFileSync("audits/utils/websiteAuditPipeline.js", "utf8");
   const dispatchAt = source.indexOf("ramsDispatch = await dispatchWebsiteAuditToRams");
