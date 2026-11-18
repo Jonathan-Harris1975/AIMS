@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **541**
-- Present in curated templates: **406**
-- Not present in curated templates: **135**
+- Runtime variables referenced in production code: **536**
+- Present in curated templates: **404**
+- Not present in curated templates: **132**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -55,8 +55,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ARTWORK_PROVIDER_TIMEOUT_MS` | No | services/artwork/artwork.js:39<br>services/artwork/utils/artwork.js:48<br>services/artwork/utils/openrouterImagePayload.js:173 |
 | `ARTWORK_REQUEST_TIMEOUT_MS` | Yes | services/artwork/artwork.js:38<br>services/artwork/utils/artwork.js:47<br>services/artwork/utils/openrouterImagePayload.js:173 |
 | `ARTWORK_RETRY_DELAY_MS` | No | services/artwork/utils/openrouterImagePayload.js:159 |
-| `ARTWORK_TASK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createSocialArtwork.js:14 |
-| `ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createPodcastArtwork.js:13<br>services/artwork/createQuizArtwork.js:11<br>services/artwork/createSocialArtwork.js:14 |
+| `ARTWORK_TASK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createSocialArtwork.js:13 |
+| `ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createBlogArtwork.js:19<br>services/artwork/createPodcastArtwork.js:13<br>services/artwork/createQuizArtwork.js:11<br>services/artwork/createSocialArtwork.js:13 |
 | `ARTWORK_VISUAL_QA_ENABLED` | Yes | services/artwork/artwork.js:206<br>services/artwork/utils/artwork.js:222 |
 | `ARTWORK_VISUAL_QA_MAX_REGENERATIONS` | Yes | services/artwork/artwork.js:338<br>services/artwork/utils/artwork.js:282 |
 | `ARTWORK_VISUAL_QA_MIN_RELEVANCE` | No | services/artwork/utils/artworkVisualQa.js:13 |
@@ -77,7 +77,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AWS_REGION` | Yes | services/blotato/utils/localCreditFallbackVideo.js:16<br>services/tts/utils/ttsProcessor.js:23 |
 | `BACKFILL_TRANSCRIPT_HTML` | Yes | scripts/bootstrap.js:156 |
 | `BACKFILL_TRANSCRIPT_HTML_TIMEOUT_MS` | No | scripts/bootstrap.js:161 |
-| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:86 |
+| `BLOG_ARTWORK_BUCKET_ALIAS` | Yes | services/artwork/createBlogArtwork.js:87 |
 | `BLOG_PREFIX` | Yes | services/blog/routes/rss.js:9<br>services/blog/weekly/buildWeeklyBlogPost.js:487 |
 | `BLOG_RSS_DESCRIPTION` | No | services/blog/rss/publishBlogRssFeed.js:147 |
 | `BLOG_RSS_FEED_URL` | No | services/blog/rss/publishBlogRssFeed.js:132 |
@@ -301,10 +301,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `MIN_SUMMARY_CHARS` | Yes | services/rss-feed-creator/utils/rss-prompts.js:17<br>services/rss-feed-creator/utils/rss-prompts.js:18 |
 | `NEWSLETTER_CONFIRMATION_BASE_URL` | Yes | services/newsletter/jotformIntake.js:108<br>services/newsletter/routes/subscriptions.js:52 |
 | `NEWSLETTER_CONSENT_TEXT_VERSION` | Yes | services/newsletter/jotformIntake.js:105<br>services/newsletter/jotformIntake.js:127 |
-| `NEWSLETTER_HERO_IMAGE_REQUIRED` | No | services/newsletter/engine/buildNewsletter.js:174 |
 | `NEWSLETTER_PRIVACY_NOTICE_VERSION` | Yes | services/newsletter/jotformIntake.js:106<br>services/newsletter/jotformIntake.js:128 |
 | `NEWSLETTER_TARGETED_COUNCIL_SHADOW_ENABLED` | Yes | services/newsletter/engine/councilShadow.js:124 |
-| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:33<br>+23 more |
+| `NODE_ENV` | Yes | logger.js:8<br>scripts/deploySmoke.js:4<br>scripts/performanceGate.js:5<br>scripts/startupCheck.js:34<br>scripts/startupCheck.js:75<br>server.js:33<br>+28 more |
 | `ONEUP_EBOOK_CATALOGUE_PATH` | No | services/zernio/utils/ebookCatalogue.js:42 |
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:14 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:15 |
@@ -352,9 +351,6 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_EDITORIAL_MAX_TOKENS` | Yes | services/script/utils/editorialPass.js:86 |
 | `PODCAST_EDITORIAL_TIMEOUT_MS` | Yes | services/script/utils/editorialPass.js:87 |
 | `PODCAST_EDIT_TMP_DIR` | Yes | services/tts/utils/editingProcessor.js:22 |
-| `PODCAST_FALLBACK_EPISODE_IMAGE_URL` | No | services/artwork/createPodcastArtwork.js:28 |
-| `PODCAST_FALLBACK_IMAGE_URL` | Yes | services/artwork/createPodcastArtwork.js:27 |
-| `PODCAST_FALLBACK_IMAGE_URLS` | No | services/artwork/createPodcastArtwork.js:22 |
 | `PODCAST_FETCH_TIMEOUT_MS` | Yes | services/tts/utils/podcastProcessor.js:57 |
 | `PODCAST_FFMPEG_TIMEOUT_MS` | Yes | services/tts/utils/editingProcessor.js:24<br>services/tts/utils/podcastProcessor.js:58 |
 | `PODCAST_LINK` | Yes | services/rss-feed-creator/utils/feedGenerator.js:33 |
@@ -467,10 +463,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `WEBSITE_REBUILD_HOOK_FALLBACK` | Yes | scripts/backfill-blog-main-site-links.js:21<br>services/blog/social/buildDailySocialBlogPost.js:245<br>services/blog/weekly/buildWeeklyBlogPost.js:221<br>services/podcast/runPodcastPipeline.js:74 |
 | `X` | No | config/thresholds.js:6<br>config/thresholds.js:16 |
 | `ZERNIO_ACCOUNT_ID` | Yes | services/zernio/utils/config.js:63 |
-| `ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK` | Yes | services/zernio/utils/socialScheduler.js:1777<br>services/zernio/utils/socialScheduler.js:2700<br>services/zernio/utils/socialScheduler.js:3170<br>services/zernio/utils/socialScheduler.js:3584 |
 | `ZERNIO_API_BASE_URL` | Yes | services/zernio/utils/config.js:54<br>services/zernio/utils/zernioClient.js:36 |
-| `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:14 |
-| `ZERNIO_ARTWORK_UPLOAD_ATTEMPTS` | No | services/artwork/createSocialArtwork.js:44 |
+| `ZERNIO_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createSocialArtwork.js:13 |
+| `ZERNIO_ARTWORK_UPLOAD_ATTEMPTS` | No | services/artwork/createSocialArtwork.js:35 |
 | `ZERNIO_BLOG_RSS_FEED_URL` | Yes | services/zernio/utils/blogRssFeed.js:80<br>services/zernio/utils/config.js:96 |
 | `ZERNIO_BLOG_RSS_FETCH_TIMEOUT_MS` | No | services/zernio/utils/blogRssFeed.js:85 |
 | `ZERNIO_BLOG_RSS_HASHTAG_LIMIT` | No | services/zernio/utils/config.js:106 |
