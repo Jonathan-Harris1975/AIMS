@@ -3251,8 +3251,14 @@ async function buildAndScheduleEbookWeeklyImpl(options = {}) {
 
   const featuredBook = resolved.book;
   warnings.push(...(resolved.warnings || []));
-  if (!featuredBook.coverArtUrl) {
-    warnings.push("Featured ebook has no coverArtUrl, so Zernio will create text-only posts.");
+  // Ebooks are the sole exception to the fresh-artwork policy:
+  // every ebook promotion must use the actual original book cover.
+  // Missing cover art is a publishing failure, not permission to post text-only.
+  if (!featuredBook.coverArtUrl || !/^https?:\/\//i.test(String(featuredBook.coverArtUrl))) {
+    const err = new Error("The featured ebook has no valid original coverArtUrl; refusing to publish without the actual book cover.");
+    err.statusCode = 422;
+    err.code = "zernio-ebook-original-cover-required";
+    throw err;
   }
   if (!featuredBook.manuscriptUrl) {
     warnings.push("Featured ebook has no manuscriptUrl in the local catalogue.");
@@ -3266,7 +3272,7 @@ async function buildAndScheduleEbookWeeklyImpl(options = {}) {
     const dayKey = dayConfig.key;
     const publishDate = addDays(weekStartDate, dayConfig.offset);
     let scheduledDateTime = resolveEbookScheduledDateTime(options, dayKey, publishDate);
-    let imageUrl = dryRun ? (options.imageUrl || featuredBook.coverArtUrl || "") : (process.env.NODE_ENV === "test" ? options.imageUrl || "" : "");
+    const imageUrl = featuredBook.coverArtUrl;
     const slotClaim = await claimZernioSlot({
       scope: `ebooks:${dayKey}`,
       scheduledDateTime,
@@ -3374,33 +3380,10 @@ async function buildAndScheduleEbookWeeklyImpl(options = {}) {
       // rule Zernio cannot recover for us: the ebook URL must be in main copy.
       enforceEbookMainPostUrl(post, featuredBook, { dayKey });
 
-      if (!imageUrl && !dryRun) {
-        const artPrompt = [
-          "Create a NEW, unique square editorial image for this particular ebook promotion.",
-          "Do not reuse, recreate or imitate the existing book cover, a weekday card, a logo or a stock AI visual.",
-          `Book subject: ${featuredBook.title}.`,
-          `Post angle: ${post.topic || post.title}.`,
-          `Relevant copy: ${stripHashtags(post.content || "").slice(0, 850)}.`,
-          "Depict a credible, source-grounded AI mechanism, decision or real-world consequence.",
-          "No text, pseudo-text, brand logos, watermarks, poster layout or generic server racks.",
-        ].join(" ");
-        const artwork = await createSocialArtwork({
-          sessionId: `ZERNIO-EBOOK-${dayKey.toUpperCase()}-${publishDate}`,
-          lane: `ebook-${dayKey}`,
-          date: publishDate,
-          prompt: artPrompt,
-          allowFallback: false,
-        });
-        if (!artwork?.ok || !artwork.publicUrl || artwork.fallback || artwork.imageStatus !== "generated") {
-          const err = new Error(artwork?.error || `The ${dayKey} ebook promotion did not produce a fresh image.`);
-          err.statusCode = 502;
-          err.code = "zernio-ebook-artwork-unavailable";
-          throw err;
-        }
-        imageUrl = artwork.publicUrl;
-        post.imageUrl = imageUrl;
-        post.imageStatus = "generated";
-      }
+      // Editorial review may rewrite post fields; always restore the genuine
+      // cover before Zernio sees the post, and never call an image model here.
+      post.imageUrl = featuredBook.coverArtUrl;
+      post.imageStatus = "original-book-cover";
 
       const scheduling = await scheduleToZernio({
         post,
