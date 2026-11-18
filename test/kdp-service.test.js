@@ -94,3 +94,21 @@ test("KDP TextBee handoff does not accept codes from non-allow-listed senders", 
   challenge.cancel();
   await cancellation;
 });
+
+test("KDP status reports non-secret OTP rejection reason for production diagnosis", async () => {
+  process.env.KDP_OTP_ALLOWED_SENDERS = "Amazon";
+  const challenge = beginKdpOtpChallenge({ timeoutMs: 30_000 });
+  const cancellation = challenge.promise.catch(() => undefined);
+  await request(createApp()).post("/kdp/otp/textbee").send({
+    webhookEvent: "MESSAGE_RECEIVED", idempotencyKey: "test-rejection",
+    sender: "Unknown Sender", message: "Amazon security code 654321",
+  });
+  const response = await request(createApp()).get("/kdp/status");
+  assert.equal(response.status, 200);
+  assert.equal(response.body.otpDelivery.reason, "sender_not_allowed");
+  assert.equal(response.body.otpDelivery.accepted, false);
+  assert.equal(JSON.stringify(response.body).includes("654321"), false);
+  assert.equal(JSON.stringify(response.body).includes("Unknown Sender"), false);
+  challenge.cancel();
+  await cancellation;
+});
