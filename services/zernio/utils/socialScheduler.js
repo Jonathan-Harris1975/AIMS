@@ -1567,7 +1567,7 @@ async function buildAndScheduleDailyLaneImpl(laneKey, options = {}) {
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
-  let imageUrl = options.imageUrl || (dryRun ? lane.imageUrl : "");
+  let imageUrl = dryRun ? (options.imageUrl || lane.imageUrl) : (process.env.NODE_ENV === "test" ? options.imageUrl || "" : "");
 
   const slotClaim = await claimZernioSlot({
     scope: `daily:${laneKey}`,
@@ -1763,7 +1763,7 @@ async function buildAndScheduleDailyLaneImpl(laneKey, options = {}) {
       editorialReservation = reservation.reservation;
     }
 
-    if (!options.imageUrl && !dryRun) {
+    if (!imageUrl && !dryRun) {
       const imagePrompt = buildDailyLaneArtworkPrompt({ laneKey, post, verifiedQuote });
       const artworkFactory = process.env.NODE_ENV === "test" && typeof options.artworkFactory === "function"
         ? options.artworkFactory
@@ -1774,10 +1774,10 @@ async function buildAndScheduleDailyLaneImpl(laneKey, options = {}) {
         date: publishDate,
         prompt: imagePrompt,
         fallbackUrl: lane.imageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+        allowFallback: false,
       });
 
-      if (!artwork?.ok || !artwork.publicUrl) {
+      if (!artwork?.ok || !artwork.publicUrl || artwork.fallback || artwork.imageStatus !== "generated") {
         const err = new Error(artwork?.error || `The ${lane.label} lane did not produce a usable image.`);
         err.statusCode = 502;
         err.code = "zernio-daily-artwork-unavailable";
@@ -2674,7 +2674,7 @@ async function buildAndScheduleWeeklyMiniSeriesImpl(options = {}) {
   }
 
   for (const item of prepared) {
-    if (!options.imageUrl && !dryRun) {
+    if (!(process.env.NODE_ENV === "test" && options.imageUrl) && !dryRun) {
       const sourceEvidence = (item.sources || []).slice(0, 3).map((source) => ({
         title: source.title || "",
         summary: source.summary || source.rewritten || "",
@@ -2697,9 +2697,9 @@ infrastructure grounded in this part's evidence.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
         fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+        allowFallback: false,
       });
-      if (!artwork?.ok || !artwork.publicUrl) {
+      if (!artwork?.ok || !artwork.publicUrl || artwork.fallback || artwork.imageStatus !== "generated") {
         const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a usable image.`;
         warn("zernio.mini_series.artwork_failed", {
           weekStartDate,
@@ -3087,12 +3087,13 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
   const apiKey = resolveSchedulerApiKey(options);
   const feedUrl = options.feedUrl || PODCAST_PROMO_CONFIG.feedUrl;
   const sessionId = `ZERNIO-PODCAST-PROMO-${publishDate}`;
+  const suppliedImage = dryRun || process.env.NODE_ENV === "test" ? options.imageUrl || "" : "";
   const slotClaim = await claimZernioSlot({
     scope: "podcast:thursday-promo",
     scheduledDateTime,
     profileName,
     accountId,
-    imageUrl: options.imageUrl || "",
+    imageUrl: suppliedImage,
     dryRun,
     apiKey,
     force: options.force,
@@ -3125,7 +3126,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
     title: generated.title,
     topic: generated.topic,
     content: ensureHashtags(`${generated.content}\n\n${promotionLink.label}: ${destination}`, PODCAST_PROMO_CONFIG.hashtags, { maxTags: 3 }),
-    imageUrl: options.imageUrl || "",
+    imageUrl: suppliedImage,
   };
   if (!normaliseSimple(generated.content).includes(normaliseSimple(episode.title))) {
     const err = new Error("Podcast advert must name the actual published episode, not a speculative upcoming title.");
@@ -3167,9 +3168,9 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
       fallbackUrl: PODCAST_PROMO_CONFIG.fallbackImageUrl,
-      allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+      allowFallback: false,
     });
-    if (!artwork.ok || !artwork.publicUrl) {
+    if (!artwork.ok || !artwork.publicUrl || artwork.fallback || artwork.imageStatus !== "generated") {
       const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no usable image URL returned"}`);
       err.statusCode = 503;
       err.code = "zernio-podcast-artwork-unavailable";
@@ -3250,8 +3251,14 @@ async function buildAndScheduleEbookWeeklyImpl(options = {}) {
 
   const featuredBook = resolved.book;
   warnings.push(...(resolved.warnings || []));
-  if (!featuredBook.coverArtUrl) {
-    warnings.push("Featured ebook has no coverArtUrl, so Zernio will create text-only posts.");
+  // Ebooks are the sole exception to the fresh-artwork policy:
+  // every ebook promotion must use the actual original book cover.
+  // Missing cover art is a publishing failure, not permission to post text-only.
+  if (!featuredBook.coverArtUrl || !/^https?:\/\//i.test(String(featuredBook.coverArtUrl))) {
+    const err = new Error("The featured ebook has no valid original coverArtUrl; refusing to publish without the actual book cover.");
+    err.statusCode = 422;
+    err.code = "zernio-ebook-original-cover-required";
+    throw err;
   }
   if (!featuredBook.manuscriptUrl) {
     warnings.push("Featured ebook has no manuscriptUrl in the local catalogue.");
@@ -3265,7 +3272,7 @@ async function buildAndScheduleEbookWeeklyImpl(options = {}) {
     const dayKey = dayConfig.key;
     const publishDate = addDays(weekStartDate, dayConfig.offset);
     let scheduledDateTime = resolveEbookScheduledDateTime(options, dayKey, publishDate);
-    const imageUrl = options.imageUrl || featuredBook.coverArtUrl || "";
+    const imageUrl = featuredBook.coverArtUrl;
     const slotClaim = await claimZernioSlot({
       scope: `ebooks:${dayKey}`,
       scheduledDateTime,
@@ -3372,6 +3379,11 @@ async function buildAndScheduleEbookWeeklyImpl(options = {}) {
       // Councils are allowed to rewrite content, so re-assert the one business
       // rule Zernio cannot recover for us: the ebook URL must be in main copy.
       enforceEbookMainPostUrl(post, featuredBook, { dayKey });
+
+      // Editorial review may rewrite post fields; always restore the genuine
+      // cover before Zernio sees the post, and never call an image model here.
+      post.imageUrl = featuredBook.coverArtUrl;
+      post.imageStatus = "original-book-cover";
 
       const scheduling = await scheduleToZernio({
         post,
@@ -3579,9 +3591,9 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
   const accountId = normaliseZernioAccountId(options.accountId || getZernioAccountId());
   const apiKey = resolveSchedulerApiKey(options);
   const dryRun = Boolean(options.dryRun);
-  let questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
-  let answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
-  const allowCuratedArtworkFallback = booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false);
+  let questionImageUrl = dryRun ? (options.questionImageUrl || QUIZ_CONFIG.questionImageUrl) : (process.env.NODE_ENV === "test" ? options.questionImageUrl || "" : "");
+  let answerImageUrl = dryRun ? (options.answerImageUrl || QUIZ_CONFIG.answerImageUrl) : (process.env.NODE_ENV === "test" ? options.answerImageUrl || "" : "");
+  // Curated artwork must not bypass fresh quiz rendering.
   const artworkWarnings = [];
 
   const questionSlotClaim = await claimZernioSlot({
@@ -3721,17 +3733,12 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
           parsedOptionCount: parsedQuiz.options.length,
           correctLetter: correct.letter || null,
         });
-        if (!allowCuratedArtworkFallback || !questionImageUrl || !answerImageUrl) {
-          const err = new Error("Quiz structure was not safe for themed artwork generation and no stored fallback image was available.");
-          err.statusCode = 422;
-          err.code = "zernio-quiz-artwork-structure-invalid";
-          throw err;
-        }
-        questionPost.imageStatus = "curated-static-fallback";
-        answerPost.imageStatus = "curated-static-fallback";
-        artworkWarnings.push("Fresh quiz artwork could not be built safely from the generated structure; the stored question and answer images were used.");
+        const err = new Error("Quiz structure is invalid; fresh question and answer artwork cannot be generated.");
+        err.statusCode = 422;
+        err.code = "zernio-quiz-artwork-structure-invalid";
+        throw err;
       } else {
-        if (!options.questionImageUrl) {
+        if (!questionImageUrl) {
           const questionArtwork = await createQuizArtwork({
             sessionId: `ZERNIO-QUIZ-${questionPublishDate}`,
             cardType: "question",
@@ -3749,10 +3756,10 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
               footer: "Comment your answer below.",
             },
             fallbackUrl: QUIZ_CONFIG.questionImageUrl,
-            allowFallback: allowCuratedArtworkFallback,
+            allowFallback: false,
           });
 
-          if (!questionArtwork?.ok || !questionArtwork.publicUrl) {
+          if (!questionArtwork?.ok || !questionArtwork.publicUrl || questionArtwork.fallback) {
             const err = new Error(questionArtwork?.error || "Quiz question themed artwork generation failed and no stored fallback image was available.");
             err.statusCode = 502;
             err.code = "zernio-quiz-question-artwork-unavailable";
@@ -3764,7 +3771,7 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
           if (questionArtwork.fallback && questionArtwork.warning) artworkWarnings.push(questionArtwork.warning);
         }
 
-        if (!options.answerImageUrl) {
+        if (!answerImageUrl) {
           const answerArtwork = await createQuizArtwork({
             sessionId: `ZERNIO-QUIZ-${questionPublishDate}`,
             cardType: "answer",
@@ -3784,10 +3791,10 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
               footer: "Did you get it right?",
             },
             fallbackUrl: QUIZ_CONFIG.answerImageUrl,
-            allowFallback: allowCuratedArtworkFallback,
+            allowFallback: false,
           });
 
-          if (!answerArtwork?.ok || !answerArtwork.publicUrl) {
+          if (!answerArtwork?.ok || !answerArtwork.publicUrl || answerArtwork.fallback) {
             const err = new Error(answerArtwork?.error || "Quiz answer themed artwork generation failed and no stored fallback image was available.");
             err.statusCode = 502;
             err.code = "zernio-quiz-answer-artwork-unavailable";

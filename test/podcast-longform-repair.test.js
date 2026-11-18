@@ -249,7 +249,7 @@ async function pipelineWithStubs(script) {
     "../../logger.js": 'export const info = () => {}; export const warn = info; export const error = info;',
     "../script/index.js": `export const getScriptForPodcast = async () => { const value = globalThis[${safeSymbol}].script;
 if (value instanceof Error) throw value; return value; };`,
-    "../artwork/index.js": 'export const processArtwork = async () => ({ ok:true, source:"generated", key:"art", publicUrl:"https://example.com/art" });',
+    "../artwork/index.js": 'export const processArtwork = async () => ({ ok:true, source:"generated", imageGenerationStatus:"generated", key:"art", publicUrl:"https://example.com/art" });',
     "../tts/index.js": `export const orchestrateTTS = (...args) => globalThis[${safeSymbol}].tts(...args);`,
     "../rss-feed-podcast/index.js": 'export const runRssFeedCreator = async () => ({ ok:true, episode:{url:"https://example.com/episode"} });',
     "../shared/utils/cleanupSession.js": 'export default async () => {};',

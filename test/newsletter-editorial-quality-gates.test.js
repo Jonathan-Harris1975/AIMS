@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadRecentEditorialHistory, canonicalStoryUrl } from '../services/newsletter/engine/editorialHistory.js';
-import { rankAndSelectStories } from '../services/newsletter/engine/rank.js';
+import { rankAndSelectStories, scoreNewsletterStory } from '../services/newsletter/engine/rank.js';
 import { extractArticleEvidence, fetchArticleEvidence, isSafeArticleUrl } from '../services/newsletter/engine/articleEvidence.js';
 import { validateRecentCoverage, validatePracticalValue, validatePromotionalResidue,
   validateQuantitativeEvidence } from '../services/newsletter/engine/validators.js';
@@ -72,6 +72,25 @@ describe('AI Edge editorial quality gates', () => {
         'https://www.anthropic.com/news/model'),
     ];
     assert.match(rankAndSelectStories(items, { storyCount: 2, now: NOW }).lead.title, /Anthropic/);
+  });
+
+  test('independent AI developments outrank annotation vendors writing their own explainers', () => {
+    const items = [
+      story('Medical Data Annotation: The Ground Truth Problem Nobody Solves',
+        'https://www.shaip.com/blog/medical-data-annotation-expert-disagreement-ground-truth/'),
+      story('The Role of ECG Waveform Annotation in Training Cardiology AI',
+        'https://www.cogitotech.com/blog/role-of-ecg-waveform-annotation-in-training-cardiology-ai/'),
+      story('Independent research on AI security and privacy',
+        'https://www.technologyreview.com/2026/11/17/independent-research/'),
+    ];
+    const ranked = rankAndSelectStories(items, { storyCount: 3, now: NOW });
+    assert.match(ranked.lead.title, /Independent research/);
+    assert.equal(ranked.stories.length, 2);
+    const vendor = story('Medical Data Annotation: Ground Truth', 'https://www.shaip.com/blog/annotation');
+    const independent = story('Medical Data Annotation: Ground Truth', 'https://www.example.com/analysis');
+    assert.equal(scoreNewsletterStory(independent, { now: NOW }) - scoreNewsletterStory(vendor, { now: NOW }), 45);
+    assert.equal(scoreNewsletterStory(story('New AI model launched', 'https://www.shaip.com/news/launch'), { now: NOW }),
+      scoreNewsletterStory(story('New AI model launched', 'https://www.example.com/news/launch'), { now: NOW }));
   });
 
   test('factual grounding prefers original article quantities over a misleading RSS preview', () => {

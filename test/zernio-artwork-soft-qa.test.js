@@ -145,12 +145,12 @@ test("evergreen QA assesses the actual post-specific decision and not generic te
   assert.match(prompt, /radiologist inspecting a scan/);
 });
 
-test("approved image upload is retried without another paid generation and last-resort fallback is audited", async () => {
+test("approved image upload is retried without another paid generation and failure is audited", async () => {
   const source = await readFile(new URL("../services/artwork/createSocialArtwork.js", import.meta.url), "utf8");
   const defaults = await readFile(new URL("../config/production.defaults.env", import.meta.url), "utf8");
   assert.match(source, /uploadApprovedSocialArtwork\(key, image, safeSession, safeLane\)/);
   assert.match(source, /uploadBuffer\("blogImages", key, image\.buffer, image\.mimeType\)/);
-  assert.match(source, /type: "curated_static_fallback"/);
+  assert.match(source, /type: "fresh_artwork_required"/);
   const shared = await readFile(new URL("../services/artwork/utils/artwork.js", import.meta.url), "utf8");
   assert.match(shared, /maxQaRegenerations: 0, providerAttempts: 1/);
   assert.match(shared, /selectRepairableSocialArtworkCandidate\(qaCandidates\)/);
