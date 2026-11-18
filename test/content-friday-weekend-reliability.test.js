@@ -36,7 +36,7 @@ test("weekend video routes use target-day identities, not an extra Friday paid-r
     assert.ok(ops.includes(`"/blotato/weekend/${day}/${slot}/schedule"`));
     assert.match(defaults, new RegExp(`^BLOTATO_SCHEDULE_${day.toUpperCase()}_${slot.toUpperCase()}=\\d{2}:\\d{2}$`, "m"));
   }
-  assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=2$/m);
+  assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=4$/m);
   assert.match(defaults, /^BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP=1250$/m);
 });
 
