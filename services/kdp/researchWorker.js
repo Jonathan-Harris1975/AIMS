@@ -216,8 +216,26 @@ export async function runResearchTick({
       }
       try { result.competitorEvidence = await captureEvidence(result); }
       catch (error) { return recordFailure("competitor_evidence", error, result); }
-      if (Object.values(result.competitorEvidence.markets).some((market) => market.status === "blocked")) {
-        return { status: "amazon_blocked", week, ebookId: book.ebookId };
+      // Amazon may deny competitor product-page capture while its own public
+      // Kindle listing and independent dated topic sources remain verifiable.
+      // Do not keep the entire 40-book research queue stuck on this one title.
+      // Preserve the original capture failure in the durable research record,
+      // but never pass incomplete competitor evidence to the pricing reviewer.
+      const amazonBlocked = Object.values(result.competitorEvidence.markets)
+        .some((market) => market.status === "blocked");
+      const draftResearch = amazonBlocked
+        ? {
+            ...result,
+            competitorEvidence: {
+              ...result.competitorEvidence,
+              markets: Object.fromEntries(Object.entries(result.competitorEvidence.markets)
+                .map(([marketplace, market]) => [marketplace, { ...market, listings: [] }])),
+            },
+          }
+        : result;
+      if (amazonBlocked) {
+        result.limitations = [...(result.limitations || []),
+          "Amazon competitor pages blocked: comparable-price proposals disabled; evidence-backed metadata review may continue."];
       }
       try {
         let liveListing = state.auditEvidence?.find((row) => row.ebookId === book.ebookId);
@@ -227,7 +245,7 @@ export async function runResearchTick({
             ? currentAudit.publicAudit?.listings?.find((row) => row.ebookId === book.ebookId)
             : null;
         }
-        result.optimisation = await draft(book, result, await getMetadata(), { now: now(), liveListing });
+        result.optimisation = await draft(book, draftResearch, await getMetadata(), { now: now(), liveListing });
       } catch (error) {
         return recordFailure("proposal", error, result);
       }

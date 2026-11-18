@@ -118,3 +118,52 @@ test('the next week resumes unfinished titles and bounded technical failures bef
   await runResearchTick({ ...h.options, env: { ...env, KDP_RESEARCH_BATCH_SIZE: '3' } });
   assert.deepEqual(initialPlan, [2, 1, 3]);
 });
+
+test('Amazon competitor block cannot starve metadata review or the next book', async () => {
+  let metadataReviewerCalls = 0;
+  const originalCompetitor = { asin: 'B012345679', status: 'captured',
+    title: 'A competing book', description: 'An unverified comparable', price: '$9.99',
+    priceSource: 'kindle_price_element' };
+  const h = setup({
+    captureEvidence: async () => ({ markets: {
+      US: { status: 'blocked', listings: [originalCompetitor] },
+      UK: { status: 'skipped_after_block', listings: [] },
+    } }),
+    draft: async (candidateBook, research) => {
+      metadataReviewerCalls++;
+      assert.equal(candidateBook.ebookId, 1);
+      assert.equal(research.competitorEvidence.markets.US.listings.length, 0);
+      assert.equal(research.competitorEvidence.markets.UK.listings.length, 0);
+      return { status: 'approved', titleId: 'A123456789012',
+        keywords: ['evidence-supported search phrase'], description: null, prices: {} };
+    },
+  });
+  const result = await runResearchTick(h.options);
+  assert.equal(result.status, 'complete');
+  assert.equal(metadataReviewerCalls, 1);
+  assert.equal(h.state().cursor, 1);
+  assert.equal(h.state().pending.length, 0);
+  assert.equal(h.state().results.length, 1);
+  assert.equal(h.state().results[0].competitorEvidence.markets.US.status, 'blocked');
+  assert.deepEqual(h.state().results[0].competitorEvidence.markets.US.listings, [originalCompetitor]);
+  assert.match(h.state().results[0].limitations.at(-1), /comparable-price proposals disabled/);
+  assert.equal(h.state().results[0].update.status, 'prepared');
+  assert.equal(h.events.filter(e => e === 'updateTick').length, 2);
+});
+
+test('Amazon competitor block records an honest no-change result when evidence is inadequate', async () => {
+  let queued = 0;
+  const h = setup({
+    captureEvidence: async () => ({ markets: {
+      US: { status: 'blocked', listings: [] },
+      UK: { status: 'skipped_after_block', listings: [] },
+    } }),
+    draft: async () => ({ status: 'blocked', reason: 'insufficient_content_or_dated_sources' }),
+    queueUpdate: async () => { queued++; },
+  });
+  const result = await runResearchTick(h.options);
+  assert.equal(result.status, 'complete');
+  assert.equal(h.state().results[0].optimisation.reason, 'insufficient_content_or_dated_sources');
+  assert.equal(queued, 0);
+  assert.equal(h.state().pending.length, 0);
+});
