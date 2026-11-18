@@ -176,12 +176,11 @@ export async function finishNewsletterBuild({ profile, sessionId, now, qaResult,
   if (qaResult?.ok !== true || qaResult.quarantined !== false) {
     return { ok: false, sessionId, quarantined: true, error: "Newsletter editorial approval is required before publication." };
   }
-  // Optional artwork may improve an approved issue; failed pixels must never
-  // suppress verified copy or be published as a substitute image.
+  // A new, issue-specific hero is mandatory. Only resume from a checkpoint
+  // containing a verified generated image; text-only is not publication success.
   let heroImageResult = savedHero;
   const reusable = savedHero?.ok && savedHero.imageUrl && savedHero.imageStatus === "generated";
-  const textOnlyCheckpoint = !requireHeroImage && savedHero?.ok === false && !savedHero.imageUrl && savedHero?.imageStatus === "editorial-text-only";
-  if (!reusable && !textOnlyCheckpoint) {
+  if (!reusable) {
     const heroRequest = { profile, heroHeadline: qaResult.newsletter.heroHeadline,
       leadStory: selectNewsletterArtLead({ lead, stories, bigThree: qaResult.newsletter.bigThree }),
       bigThree: qaResult.newsletter.bigThree, sessionId };
@@ -194,15 +193,14 @@ export async function finishNewsletterBuild({ profile, sessionId, now, qaResult,
         artworkDiagnostics: { stage: "generation", reasonCodes: ["artwork_service_exception"], errorType } };
     }
   }
-  if (!heroImageResult?.ok) {
-    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, required: requireHeroImage,
+  if (!heroImageResult?.ok || heroImageResult.imageStatus !== "generated" || !heroImageResult.imageUrl) {
+    warn("newsletter.build.hero_image_missing", { sessionId, profileId: profile.id, required: true,
       artworkDiagnostics: heroImageResult?.artworkDiagnostics || null });
-    if (requireHeroImage) return {
+    return {
       ok: false, sessionId, profileId: profile.id, quarantined: true, qa: qaResult, newsletter: qaResult.newsletter,
       artworkDiagnostics: heroImageResult?.artworkDiagnostics || null,
-      error: `Newsletter editorial content passed but hero image generation failed: ${heroImageResult?.error || "No approved image."}`,
+      error: `Newsletter editorial content passed but fresh hero image generation failed: ${heroImageResult?.error || "No approved generated image."}`,
     };
-    heroImageResult = { ...heroImageResult, ok: false, imageUrl: null, imageStatus: "editorial-text-only" };
   }
 
   const finalNewsletter = { ...qaResult.newsletter, heroImageUrl: heroImageResult.ok ? heroImageResult.imageUrl : null };
