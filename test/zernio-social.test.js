@@ -438,10 +438,12 @@ test("buildAndScheduleEbookWeekly keeps one featured book, appends scheduler has
     weekStartDate: "2026-05-04",
     dryRun: true,
     featuredBook: FEATURED_BOOK,
+    imageUrl: "https://images.example.com/wrong-promotional-image.png",
   });
 
   for (const day of ["tuesday", "thursday", "saturday"]) {
     const post = result.posts[day].post;
+    assert.equal(post.imageStatus, "original-book-cover");
     assert.equal(post.firstComment, `Featured book: ${FEATURED_BOOK.title}\nRead more: ${FEATURED_BOOK.bookUrl}`);
     assert.equal(post.imageUrl, FEATURED_BOOK.coverArtUrl);
     assert.match(post.content, /#ArtificialIntelligence/);
@@ -510,7 +512,7 @@ test("buildAndScheduleDailyLane validates Facebook targeting before live schedul
   ]);
 });
 
-test("Zernio reaches the provider with curated fallback artwork when generation is unavailable", async () => {
+test("Zernio refuses a static image even when the fallback flag is enabled", async () => {
   restoreEnv();
   applyBaseEnv();
   process.env.OPENROUTER_API_BASE = mockBase;
@@ -520,9 +522,9 @@ test("Zernio reaches the provider with curated fallback artwork when generation 
   process.env.ZERNIO_VALIDATE_TARGET_ACCOUNTS = "true";
   process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK = "true";
   const artworkCalls = [];
-
-  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-artwork-fallback=${Date.now()}`);
-  const result = await mod.buildAndScheduleDailyLane("monday", {
+  const originalRequests = scheduledRequests.length;
+  const mod = await import(`../services/zernio/utils/socialScheduler.js?zernio-artwork-blocked=${Date.now()}`);
+  await assert.rejects(mod.buildAndScheduleDailyLane("monday", {
     publishDate: "2026-04-13",
     profileName: "General",
     accountId: "fb-page-1",
@@ -533,20 +535,13 @@ test("Zernio reaches the provider with curated fallback artwork when generation 
         ok: true,
         fallback: true,
         imageStatus: "curated-static-fallback",
-        warning: "Generated artwork unavailable; curated lane image used.",
         publicUrl: "https://images.jonathan-harris.online/Monday",
       };
     },
-  });
-
-  assert.equal(result.scheduled, true);
+  }), /did not produce a usable image/);
   assert.equal(artworkCalls.length, 1);
-  assert.equal(artworkCalls[0].allowFallback, true);
-  assert.equal(artworkCalls[0].fallbackUrl, "https://images.jonathan-harris.online/Monday");
-  assert.match(result.warnings.join("\n"), /curated lane image used/i);
-  assert.deepEqual(scheduledRequests.at(-1).body.mediaItems, [
-    { type: "image", url: "https://images.jonathan-harris.online/Monday" },
-  ]);
+  assert.equal(artworkCalls[0].allowFallback, false);
+  assert.equal(scheduledRequests.length, originalRequests);
 });
 
 test("Zernio schedules fresh generated artwork while stored-image fallback remains disabled by default", async () => {
@@ -825,9 +820,9 @@ test("Sunday spotlight avoids fabricated likenesses and daily evergreen artwork 
   assert.match(source, /no books, papers, notebooks, theses, whiteboards, chalkboards/i);
   assert.match(source, /createSocialArtwork\(/);
   assert.match(source, /fallbackUrl: lane\.imageUrl/);
-  assert.match(source, /allowFallback: booleanValue\(process\.env\.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false\)/);
+  assert.match(source, /allowFallback: false/);
   assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl/);
-  assert.doesNotMatch(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
+  assert.match(source, /!artwork\?\.ok \|\| !artwork\.publicUrl \|\| artwork\.fallback/);
   assert.match(source, /post\.imagePrompt = imagePrompt/);
   assert.match(source, /zernio-daily-artwork-unavailable/);
 });

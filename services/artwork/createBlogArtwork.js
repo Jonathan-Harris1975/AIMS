@@ -78,8 +78,9 @@ function allowDeterministicFallback(mode) {
   // artwork and its corrective retry have failed.
   // SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK is retired: diagnostic geometry
   // cannot substitute for the required source-specific editorial artwork.
-  if (["social-blog", "newsletter"].includes(mode)) return false;
-  return boolEnv("BLOG_ALLOW_DETERMINISTIC_FALLBACK", false);
+  // Every blog and newsletter image must be original to its current item.
+  // Diagnostics can still be retained, but they must never be publishable.
+  return false;
 }
 
 function resolveBlogArtworkBucketKey() {
