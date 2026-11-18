@@ -1,5 +1,5 @@
 import express from "express";
-import { deliverKdpOtpFromTextBee, getKdpOtpChallengeStatus } from "./otpBroker.js";
+import { deliverKdpOtpFromTextBee, getKdpOtpChallengeStatus, getKdpOtpDeliveryStatus } from "./otpBroker.js";
 import kdpOperations from "./operations.js";
 import { getKdpReadiness } from "./readiness.js";
 
@@ -15,6 +15,7 @@ router.get("/status", (_req, res) => {
     credentialsConfigured: Boolean(process.env.KDP_USERNAME && process.env.KDP_PASSWORD),
     otpWebhookConfigured: Boolean(process.env.KDP_OTP_ALLOWED_SENDERS),
     otpChallenge: getKdpOtpChallengeStatus(),
+    otpDelivery: getKdpOtpDeliveryStatus(),
     readiness,
     phase: "publishing-and-audit",
   });
