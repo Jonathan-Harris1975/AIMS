@@ -108,6 +108,18 @@ export function deliverKdpOtpFromTextBee(payload) {
     expired.rejectOtp(new Error("KDP OTP challenge timed out."));
     return deliveryResult(false, "challenge_expired");
   }
+  // TextBee may retry previously undelivered webhooks. A stale Amazon code
+  // must never be applied to a later, unrelated sign-in challenge. Allow one
+  // minute of clock skew between the device and AIMS.
+  if (payload?.receivedAt !== undefined) {
+    const receivedAt = Date.parse(payload.receivedAt);
+    const challengeStart = Date.parse(activeChallenge.startedAt);
+    if (!Number.isFinite(receivedAt) ||
+        receivedAt < challengeStart - 60_000 ||
+        receivedAt > Date.now() + 60_000) {
+      return deliveryResult(false, "stale_message");
+    }
+  }
   if (!isAllowedSender(payload?.sender)) return deliveryResult(false, "sender_not_allowed");
   if (typeof payload?.message !== "string" || !/\bamazon\b/i.test(payload.message)) {
     return deliveryResult(false, "non_amazon_message");
