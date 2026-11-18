@@ -105,25 +105,31 @@ test("monthly quota is persisted before provider calls and prevents the next cal
   assert.equal(saved.lastTechnicalFailure.code, "research_monthly_limit");
 });
 
-test("Amazon blocks stop the batch and retries reuse the saved search", async () => {
+test("Amazon blocks disable competitor pricing without starving the metadata research cursor", async () => {
   const date = new Date("2026-10-27T12:00:00Z");
   const env = { TAVILY_SEARCH_API: "test", R2_ENDPOINT: "test", R2_ACCESS_KEY_ID: "test", R2_SECRET_ACCESS_KEY: "test",
     R2_BUCKET_META_SYSTEM: "test" };
-  let saved = null, searches = 0, blocked = true;
+  let saved = null, searches = 0, reviews = 0;
   const options = {
     updateTick: async () => ({}), now: () => date, env, getMetadata: async () => null, readState: async () => saved && structuredClone(saved),
     writeState: async (s) => { saved = structuredClone(s); }, archive: async () => {},
     getAudit: async () => ({ ok: true, complete: true, mode: "public", runId: "1", createdAt: "2026-10-26T12:00:00Z", completedAt: "2026-10-26T12:10:00Z" }),
     getBooks: async () => [{ ebookId: 1, asin: "B012345678" }],
     discover: async () => { searches++; return { ebookId: 1 }; },
-    captureEvidence: async () => ({ markets: { US: { status: blocked ? "blocked" : "captured" } } }),
+    captureEvidence: async () => ({ markets: { US: { status: "blocked", listings: [{ asin: "B012345679", price: "$9.99" }] } } }),
+    draft: async (_book, research) => {
+      reviews++;
+      assert.deepEqual(research.competitorEvidence.markets.US.listings, []);
+      return { status: "blocked", reason: "insufficient_content_or_dated_sources" };
+    },
     claim: async () => ({ claimed: true, lease: { backend: "r2" } }), release: async () => {},
   };
-  assert.equal((await runResearchTick(options)).status, "amazon_blocked");
-  assert.equal(saved.cursor, 0);
-  blocked = false;
   assert.equal((await runResearchTick(options)).status, "complete");
+  assert.equal(saved.cursor, 1);
+  assert.equal(saved.results[0].competitorEvidence.markets.US.status, "blocked");
+  assert.equal(saved.results[0].optimisation.reason, "insufficient_content_or_dated_sources");
   assert.equal(searches, 1);
+  assert.equal(reviews, 1);
 });
 
 test("a later signed-in audit does not hide the valid Monday public report", async () => {
