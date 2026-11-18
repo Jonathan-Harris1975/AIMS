@@ -29,6 +29,22 @@ test("production forbids reusable artwork across all editorial channels", () => 
   assert.match(source("services/newsletter/engine/buildNewsletter.js"), /const requireHeroImage = true/);
 });
 
+test("deployment templates never re-enable static artwork fallbacks", () => {
+  for (const name of ["config/production.defaults.env", "env.template", ".env.example", "services/comms-hub/env.template"]) {
+    const settings = source(name).split("\n");
+    for (const required of [
+      "BLOG_ALLOW_DETERMINISTIC_FALLBACK=false",
+      "SOCIAL_BLOG_ALLOW_DETERMINISTIC_FALLBACK=false",
+      "NEWSLETTER_ALLOW_DETERMINISTIC_FALLBACK=false",
+      "NEWSLETTER_HERO_IMAGE_REQUIRED=true",
+      "ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=false",
+      "ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false",
+      "BLOTATO_DAILY_PAID_RENDER_CAP=4",
+      "BLOTATO_FAILED_RENDER_REPLACEMENTS=1",
+    ]) assert.ok(settings.includes(required), `Stale ${required} in ${name}`);
+  }
+});
+
 test("only ebook promotion posts reuse the original book cover", () => {
   const scheduler = source("services/zernio/utils/socialScheduler.js");
   const ebookStart = scheduler.indexOf("async function buildAndScheduleEbookWeeklyImpl");
