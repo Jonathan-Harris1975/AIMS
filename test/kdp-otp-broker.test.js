@@ -96,3 +96,20 @@ test("OTP delivery diagnostics expose only safe acceptance outcomes, never codes
   assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("123456"), false);
   assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("Amazon"), false);
 });
+
+test("stale retry from an earlier login cannot satisfy the current OTP challenge", async () => {
+  process.env.KDP_OTP_ALLOWED_SENDERS = "Amazon";
+  const challenge = beginKdpOtpChallenge({ timeoutMs: 30_000 });
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Amazon", message: "Amazon security code 123456",
+    receivedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+  }).reason, "stale_message");
+  assert.equal(getKdpOtpChallengeStatus().active, true);
+  assert.equal(deliverKdpOtpFromTextBee({
+    sender: "Amazon", message: "Amazon security code 987654",
+    receivedAt: new Date().toISOString(),
+  }).accepted, true);
+  assert.equal(await challenge.promise, "987654");
+  assert.equal(getKdpOtpDeliveryStatus().reason, "consumed");
+  assert.equal(JSON.stringify(getKdpOtpDeliveryStatus()).includes("987654"), false);
+});
