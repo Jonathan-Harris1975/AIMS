@@ -1774,7 +1774,7 @@ async function buildAndScheduleDailyLaneImpl(laneKey, options = {}) {
         date: publishDate,
         prompt: imagePrompt,
         fallbackUrl: lane.imageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+        allowFallback: false,
       });
 
       if (!artwork?.ok || !artwork.publicUrl) {
@@ -2697,7 +2697,7 @@ infrastructure grounded in this part's evidence.",
           "No visible text, labels, logos or typography.",
         ].join("\n"),
         fallbackUrl: MINI_SERIES_CONFIG.fallbackImageUrl,
-        allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+        allowFallback: false,
       });
       if (!artwork?.ok || !artwork.publicUrl) {
         const errorMessage = artwork?.error || `Mini-series part ${item.index + 1} did not produce a usable image.`;
@@ -3167,7 +3167,7 @@ export async function buildAndSchedulePodcastThursdayPromo(options = {}) {
         "Avoid generic glowing brains, circuit-head silhouettes, floating decorative networks, stock-office scenes and decorative AI wallpaper.",
       ].filter(Boolean).join("\n"),
       fallbackUrl: PODCAST_PROMO_CONFIG.fallbackImageUrl,
-      allowFallback: booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false),
+      allowFallback: false,
     });
     if (!artwork.ok || !artwork.publicUrl) {
       const err = new Error(`Thursday podcast promotion artwork unavailable: ${artwork.error || "no usable image URL returned"}`);
@@ -3581,7 +3581,7 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
   const dryRun = Boolean(options.dryRun);
   let questionImageUrl = options.questionImageUrl || QUIZ_CONFIG.questionImageUrl;
   let answerImageUrl = options.answerImageUrl || QUIZ_CONFIG.answerImageUrl;
-  const allowCuratedArtworkFallback = booleanValue(process.env.ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK, false);
+  // Curated artwork must not bypass fresh quiz rendering.
   const artworkWarnings = [];
 
   const questionSlotClaim = await claimZernioSlot({
@@ -3721,15 +3721,10 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
           parsedOptionCount: parsedQuiz.options.length,
           correctLetter: correct.letter || null,
         });
-        if (!allowCuratedArtworkFallback || !questionImageUrl || !answerImageUrl) {
-          const err = new Error("Quiz structure was not safe for themed artwork generation and no stored fallback image was available.");
-          err.statusCode = 422;
-          err.code = "zernio-quiz-artwork-structure-invalid";
-          throw err;
-        }
-        questionPost.imageStatus = "curated-static-fallback";
-        answerPost.imageStatus = "curated-static-fallback";
-        artworkWarnings.push("Fresh quiz artwork could not be built safely from the generated structure; the stored question and answer images were used.");
+        const err = new Error("Quiz structure is invalid; fresh question and answer artwork cannot be generated.");
+        err.statusCode = 422;
+        err.code = "zernio-quiz-artwork-structure-invalid";
+        throw err;
       } else {
         if (!options.questionImageUrl) {
           const questionArtwork = await createQuizArtwork({
@@ -3749,7 +3744,7 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
               footer: "Comment your answer below.",
             },
             fallbackUrl: QUIZ_CONFIG.questionImageUrl,
-            allowFallback: allowCuratedArtworkFallback,
+            allowFallback: false,
           });
 
           if (!questionArtwork?.ok || !questionArtwork.publicUrl) {
@@ -3784,7 +3779,7 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
               footer: "Did you get it right?",
             },
             fallbackUrl: QUIZ_CONFIG.answerImageUrl,
-            allowFallback: allowCuratedArtworkFallback,
+            allowFallback: false,
           });
 
           if (!answerArtwork?.ok || !answerArtwork.publicUrl) {
