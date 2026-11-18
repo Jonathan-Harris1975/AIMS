@@ -4,7 +4,7 @@ import { calculatePrintCover, parsePdfInfo, validatePrintSourceText } from "../s
 import { calculatePrintPrice, planPrintPrices } from "../services/kdp/printPricePolicy.js";
 import { utcPrintWeek, canAttemptPrintJob } from "../services/kdp/printState.js";
 import { categorySpecsFromKindle, existingPrintMatches, choosePrintCandidates, printWindowAllowsAction, isPlatformQuotaRejection,
-  runPrintProduction } from "../services/kdp/printProduction.js";
+  runPrintProduction, successfulPrintRun } from "../services/kdp/printProduction.js";
 import { normalizeAiDeclaration } from "../services/kdp/printAiDisclosure.js";
 import { publicPurchaseControls, verifyPrintIdentity } from "../services/kdp/printVerification.js";
 
@@ -124,4 +124,16 @@ test("platform weekly limit denials trigger the unattended print circuit breaker
   assert.equal(isPlatformQuotaRejection(["Too many new titles"]),true);
   assert.equal(isPlatformQuotaRejection(new Error("Network timeout")),false);
   assert.equal(isPlatformQuotaRejection([{message:"Missing print cover"}]),false);
+});
+
+test("print production cannot report empty success while 80 catalogue editions remain", () => {
+  assert.equal(successfulPrintRun([], 0, 80), false);
+  assert.equal(successfulPrintRun([], 77, 80), false);
+  assert.equal(successfulPrintRun([], 80, 80), true);
+  assert.equal(successfulPrintRun([], 2, 2), true);
+  assert.equal(successfulPrintRun([], 3, 2), false);
+  assert.equal(successfulPrintRun([{status: "submitted_to_kdp_review"}], 0, 80), true);
+  assert.equal(successfulPrintRun([{status: "weekly_quota_exhausted"}], 0, 80), true);
+  assert.equal(successfulPrintRun([{status: "blocked"}], 0, 80), false);
+  assert.equal(successfulPrintRun([{status: "submission_unverified"}], 0, 80), false);
 });
