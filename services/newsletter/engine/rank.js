@@ -11,6 +11,10 @@ const SIGNAL_TERMS = [
 const TRUSTED_EDITORIAL = /(^|\.)((technologyreview|nature|bbc|reuters|apnews|arstechnica|theverge|wired)\.com|bbc\.co\.uk|reuters\.com|spectrum\.ieee\.org|aihub\.org|oreilly\.com)$/i;
 const PRIMARY_RESEARCH = /(^|\.)(openai\.com|anthropic\.com|deepmind\.google|huggingface\.co|arxiv\.org|acm\.org|ieee\.org)$/i;
 const COMMERCIAL_COPY = /\b(complete guide|ultimate guide|top \d+|best practices|our solution|our platform|services? provider|why you should buy|book a demo|contact sales|buy now)\b/i;
+// A vendor's own explainer is useful background, but should rarely displace
+// independently reported developments as the lead story.
+const ANNOTATION_VENDOR = /(^|\\.)(shaip\\.com|cogitotech\\.com)$/i;
+const VENDOR_EXPLAINER = /\\b(annotation|labelling|labeling|ground truth|training data|guide|services)\\b/i;
 const SIGNIFICANT_RELEASE = /\b(launch(?:es|ed)?|releas(?:e|ed)|introduc(?:es|ed)|unveil(?:s|ed)|announc(?:es|ed)|ship(?:s|ped)|general availability)\b/i;
 const TECHNOLOGY = /\b(claude|gemini|gpt|chatgpt|llm|model|agent|inference|open.weight|AI)\b/i;
 const IMPACT = /\b(independent study|benchmark|safety|security|law|regulat|research|scientist|energy|healthcare|education|jobs|copyright|court|cost|pricing|privacy|accessibility)\b/i;
@@ -33,6 +37,7 @@ export function scoreNewsletterStory(item, { now = new Date() } = {}) {
   if (body.length > 120) score += 3;
   const domain = sourceDomain(item);
   if (TRUSTED_EDITORIAL.test(domain)) score += 15;
+  if (ANNOTATION_VENDOR.test(domain) && VENDOR_EXPLAINER.test(title)) score -= 45;
   if (PRIMARY_RESEARCH.test(domain)) score += 17;
   if (SIGNIFICANT_RELEASE.test(title) && TECHNOLOGY.test(title)) score += 42;
   if (IMPACT.test(title)) score += 18;
