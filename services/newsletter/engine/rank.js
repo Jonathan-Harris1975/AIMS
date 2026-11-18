@@ -13,8 +13,8 @@ const PRIMARY_RESEARCH = /(^|\.)(openai\.com|anthropic\.com|deepmind\.google|hug
 const COMMERCIAL_COPY = /\b(complete guide|ultimate guide|top \d+|best practices|our solution|our platform|services? provider|why you should buy|book a demo|contact sales|buy now)\b/i;
 // A vendor's own explainer is useful background, but should rarely displace
 // independently reported developments as the lead story.
-const ANNOTATION_VENDOR = /(^|\\.)(shaip\\.com|cogitotech\\.com)$/i;
-const VENDOR_EXPLAINER = /\\b(annotation|labelling|labeling|ground truth|training data|guide|services)\\b/i;
+const ANNOTATION_VENDOR = /(^|\.)(shaip\.com|cogitotech\.com)$/i;
+const VENDOR_EXPLAINER = /\b(annotation|labelling|labeling|ground truth|training data|guide|services)\b/i;
 const SIGNIFICANT_RELEASE = /\b(launch(?:es|ed)?|releas(?:e|ed)|introduc(?:es|ed)|unveil(?:s|ed)|announc(?:es|ed)|ship(?:s|ped)|general availability)\b/i;
 const TECHNOLOGY = /\b(claude|gemini|gpt|chatgpt|llm|model|agent|inference|open.weight|AI)\b/i;
 const IMPACT = /\b(independent study|benchmark|safety|security|law|regulat|research|scientist|energy|healthcare|education|jobs|copyright|court|cost|pricing|privacy|accessibility)\b/i;
