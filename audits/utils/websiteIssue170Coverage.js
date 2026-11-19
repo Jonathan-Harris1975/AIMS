@@ -28,10 +28,10 @@ async function fetchIssue170(fetchImpl, token) {
 }
 
 function sitemapEntries(xml) {
-  if (!/<urlset\\b/.test(xml) || !/<\\/urlset>/.test(xml)) return null;
-  const rows = [...xml.matchAll(/<url\\b[^>]*>([\\s\\S]*?)<\\/url>/gi)].map((match) => {
-    const loc = /<loc>\\s*([^<]+?)\\s*<\\/loc>/i.exec(match[1]);
-    const lastmod = /<lastmod>\\s*([^<]+?)\\s*<\\/lastmod>/i.exec(match[1]);
+  if (!/<urlset\b/.test(xml) || !/<\/urlset>/.test(xml)) return null;
+  const rows = [...xml.matchAll(/<url\b[^>]*>([\s\S]*?)<\/url>/gi)].map((match) => {
+    const loc = /<loc>\s*([^<]+?)\s*<\/loc>/i.exec(match[1]);
+    const lastmod = /<lastmod>\s*([^<]+?)\s*<\/lastmod>/i.exec(match[1]);
     return { loc: loc?.[1]?.trim() || "", lastmod: lastmod?.[1]?.trim() || "" };
   });
   if (!rows.length || rows.some((row) => !row.loc)
