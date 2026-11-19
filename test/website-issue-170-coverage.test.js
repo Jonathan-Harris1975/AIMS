@@ -122,7 +122,8 @@ test("an attestation requires completed source evidence, exact revision and priv
     sourceRevisionSha: "a".repeat(40), artifactUrl: "r2://audits/website/2026-11/accessibility.json",
     summary: "All WCAG 2.2 AA acceptance checks completed with evidence",
   };
-  const stage = { status: "completed", requiredArtifactSetReady: true, reportJsonLoaded: true, acceptanceEvidence: [valid] };
+  const stage = { status: "completed", requiredArtifactSetReady: true, reportJsonLoaded: true,
+    sourceRevisionSha: "a".repeat(40), liveSourceParity: "matched", acceptanceEvidence: [valid] };
   const coverage = await buildWebsiteIssue170Coverage({
     fetchImpl: mockFetch(), stageReports: { mobileUx: stage },
   });
@@ -131,5 +132,9 @@ test("an attestation requires completed source evidence, exact revision and priv
     fetchImpl: mockFetch(), stageReports: { mobileUx: { ...stage, acceptanceEvidence: [{ ...valid, sourceRevisionSha: "guess", artifactUrl: "https://example.com/unverified" }] } },
   });
   assert.equal(unsafe.rows.find((row) => row.id === "W170-05").status, "not_verified");
+  const mismatched = await buildWebsiteIssue170Coverage({
+    fetchImpl: mockFetch(), stageReports: { mobileUx: { ...stage, liveSourceParity: "mismatched" } },
+  });
+  assert.equal(mismatched.rows.find((row) => row.id === "W170-05").status, "not_verified");
   assert.equal(unsafe.acceptanceComplete, false);
 });

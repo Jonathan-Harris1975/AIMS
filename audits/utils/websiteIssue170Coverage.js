@@ -89,6 +89,8 @@ function explicitAttestation(row, stageReports = {}) {
     // A stage score or model-written summary is not acceptance proof. Require an exact
     // revision, contemporaneous verification time, and a retained audit artefact.
     if (!/^[a-f0-9]{40}$/.test(evidence.sourceRevisionSha || "")
+        || evidence.sourceRevisionSha !== stage.sourceRevisionSha
+        || stage.liveSourceParity !== "matched"
         || !Number.isFinite(Date.parse(evidence.verifiedAt || ""))
         || typeof evidence.artifactUrl !== "string" || !evidence.artifactUrl.startsWith("r2://audits/")) continue;
     return { status: evidence.status, reason: evidence.summary || "Explicit deterministic source attestation", evidence: [evidence.artifactUrl] };
