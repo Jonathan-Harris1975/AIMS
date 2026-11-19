@@ -193,7 +193,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:722 |
 | `CF_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CHROME_BIN` | No | audits/utils/socialThumbnailAudit.js:133 |
-| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:320<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1095<br>services/artwork/utils/quizCardRenderer.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:130 |
+| `CHROMIUM_PATH` | No | audits/utils/contentMasterCouncil.js:320<br>audits/utils/socialThumbnailAudit.js:132<br>audits/utils/websiteAuditCouncil.js:1112<br>services/artwork/utils/quizCardRenderer.js:20<br>services/blotato/utils/localCreditFallbackVideo.js:130 |
 | `CLOUDFLARE_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
 | `CLOUDFLARE_API_BASE_URL` | No | services/kdp/catalogue.js:19 |
 | `CLOUDFLARE_PURGE_ALLOW_PUBLIC` | Yes | services/shared/middleware/suiteAuth.js:81 |
@@ -343,7 +343,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PHASE3_SOURCE_COVERAGE_MIN` | No | services/content-quality/phase3Gates.js:372 |
 | `PHASE3_SOURCE_MIN_CHARS` | Yes | services/content-quality/phase3Gates.js:341 |
 | `PHASE3_SOURCE_OVERLAP_MIN` | No | services/content-quality/phase3Gates.js:369 |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:320<br>audits/utils/websiteAuditCouncil.js:1096<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:320<br>audits/utils/websiteAuditCouncil.js:1113<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
 | `PODCASTINDEX_USER_AGENT` | Yes | services/shared/utils/podcastIndexClient.js:34 |
 | `PODCAST_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createPodcastArtwork.js:12 |
 | `PODCAST_DURATION_MINS` | No | services/script/utils/durationCalculator.js:79 |
