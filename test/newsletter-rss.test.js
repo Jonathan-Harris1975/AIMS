@@ -125,7 +125,7 @@ describe("newsletter engine/rss.js — network behaviour", () => {
   test("collectCandidateStories dedupes by canonical link and skips a broken feed without failing the run", async () => {
     requestLog = [];
     const profile = { id: "test-profile", feedUrls: [`${baseUrl}/good-feed.xml`, `${baseUrl}/malformed-feed.xml`] };
-    const { items, feedResults } = await collectCandidateStories(profile, { now: new Date() });
+    const { items, feedResults } = await collectCandidateStories(profile, { now: new Date(Date.now() + 2_000) });
 
     assert.equal(items.length, 2, "Story A duplicate (tracking param) should be deduped");
     const titles = items.map((i) => i.title).sort();
