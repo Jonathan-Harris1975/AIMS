@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getWebsiteAuditPolicy } from "../audits/utils/websiteAuditPolicy.js";
+import { buildWebsiteAuditHtml } from "../audits/utils/websiteAuditCouncil.js";
 import {
   extractIssue170Checklist,
   buildWebsiteIssue170Coverage,
@@ -137,4 +138,26 @@ test("an attestation requires completed source evidence, exact revision and priv
   });
   assert.equal(mismatched.rows.find((row) => row.id === "W170-05").status, "not_verified");
   assert.equal(unsafe.acceptanceComplete, false);
+});
+
+test("rendered website HTML and PDF report includes full issue 170 acceptance matrix", async () => {
+  const coverage = await buildWebsiteIssue170Coverage({ fetchImpl: mockFetch() });
+  const html = buildWebsiteAuditHtml({
+    websiteUrl: site,
+    sessionId: "monthly-website-audit",
+    generatedAt: "2026-11-19T01:00:00Z",
+    council: {
+      synthesisState: "Complete",
+      executiveSummary: "The audit ran, but full site acceptance is not verified.",
+      scorecard: {}, targetAssessment: { target: 8.5, belowTarget: [], unscored: [] },
+      councilVerdict: {}, councilRecord: {}, implementationProgramme: {},
+      issue170Coverage: coverage,
+    },
+    stageReports: { digitalGrowth: {}, seoAeoGeo: {}, mobileUx: {} },
+  });
+  assert.ok(html.includes("Issue #170: mandatory monthly website acceptance"));
+  assert.ok(html.includes("W170-01 Full live static and dynamic route inventory"));
+  assert.ok(html.includes("W170-08 R2 publishing"));
+  assert.ok(html.includes("W170-12 Weekly R2 blog sitemap publication parity"));
+  assert.ok(html.includes("Website accepted:</strong> No"));
 });
