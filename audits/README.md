@@ -208,3 +208,16 @@ This reduces concurrent audit reservations within one AIMS process. It cannot
 reserve account capacity against other repositories or replicas. Website reports
 still require all source-stage evidence before RAMS dispatch; temporary source
 evidence is retained when required evidence is incomplete or handoff fails.
+
+
+## Monthly website issue #170 acceptance register (November 2026)
+
+The first-Friday unified Website audit refreshes [GitHub issue #170](https://github.com/Jonathan-Harris1975/jonathan-harris-website/issues/170) at finalisation and compares its live Markdown checklist with the versioned 12-requirement `config/website-audit-policy.json` acceptance contract: the original ten requirements, seasonal/event visual coverage and automatically refreshed weekly R2 blog sitemap coverage.
+
+Every retained Website JSON, HTML and PDF report includes a deterministic acceptance matrix. Each requirement reports `passed`, `failed` or `not_verified`, its responsible audit, testable definition of done and evidence or limitation. The issue's checked boxes do **not** count as verification. A changed or newly added GitHub checklist entry becomes an unmapped requirement that must be reviewed, and GitHub API unavailability creates an explicit synchronisation blocker.
+
+The sitemap requirement is checked independently against the production R2 blog manifest and the production `/sitemap.xml` runtime on every monthly audit. A future weekly publication is caught without a Pages redeployment. For other requirements, only an explicit deterministic child-stage attestation containing the exact source revision, timestamp and retained private R2 artefact may produce `passed`. The separate blog/transcript pipelines remain responsible for their R2 content and must provide independent evidence; exclusion from the three static website stages cannot be mistaken for completed acceptance.
+
+Non-passing entries are added to `council.masterIssueLedger` as `manual_review` with no inferred source paths and forwarded to RAMS in the normal exact-key handoff. The monthly audit may be **complete as an audit execution** while `issue170Coverage.acceptanceComplete` is false. Site-wide 10/10 and target attainment are blocked until all requirements are evidenced, and the existing trusted admission, deployment, accessibility, manual review, and field performance protections still apply.
+
+The acceptance register and probes are implemented in `audits/utils/websiteIssue170Coverage.js`, tested in `test/website-issue-170-coverage.test.js` and included in the Website council report renderer.
