@@ -67,7 +67,7 @@ test("Blotato reuses rendered videos for provider handoff but blocks ambiguous r
         technical: { pass: true },
       },
       failedPublishes: [],
-    }), true);
+    }), false);
     assert.equal(isRetryableRenderedPublishFailure({
       ...failedPublish,
       phase: "rendered-quality-review",
@@ -135,7 +135,8 @@ test("Blotato permits one pre-publication quality replacement but never duplicat
       mediaUrl: "https://example.com/rejected.mp4",
     };
     assert.equal(isReplaceableRenderedQualityFailure(failedRender), true);
-    assert.equal(isReplaceableRenderedQualityFailure({ ...failedRender, attempt: 2 }), false);
+    assert.equal(isReplaceableRenderedQualityFailure({ ...failedRender, attempt: 4 }), true);
+    assert.equal(isReplaceableRenderedQualityFailure({ ...failedRender, failedRenderReplacement: { replacementCount: 1 } }), false);
     assert.equal(isReplaceableRenderedQualityFailure({
       ...failedRender,
       result: { posts: [{ postSubmissionId: "already-submitted" }] },
