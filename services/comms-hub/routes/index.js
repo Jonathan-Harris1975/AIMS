@@ -784,6 +784,8 @@ export function createCommsHubRouter({
   router.get("/providers/health", permit("read_queue"), async (_req, res, next) => {
     try {
       const health = await contextProvider().providerHealthService.status();
+      // This is a fresh, per-request assessment; intermediaries must not cache it.
+      res.set("Cache-Control", "no-store, max-age=0");
       return res.status(health.overall === "unavailable" ? 503 : 200).json({ ok: health.overall !== "unavailable", service: "comms-hub", health });
     } catch (error) { next(error); }
   });
