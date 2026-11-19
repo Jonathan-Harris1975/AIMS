@@ -1058,7 +1058,7 @@ coverage td,.coverage th{font-size:6.7pt;padding:1.3mm}.status{font-weight:700}.
       esc(row.owner),
       esc(row.acceptanceCriterion),
     ]))}
-  <p class="small">A completed audit is not the same as a verified 10/10 website. A GitHub checkbox or model score is not proof. Missing or failed evidence is retained and sent to RAMS as manual verification, without invented repository code ownership.</p></section>
+  <p class="small">A completed audit is not the same as a verified 10/10 website. A GitHub checkbox or model score is not proof.\n  Missing or failed evidence goes to RAMS for manual verification, without invented source-file ownership.</p></section>
   <section><h2>2. Council Verdict</h2><p><strong>Overall diagnosis:</strong> ${esc(verdict.overallDiagnosis || "")}</p><p><strong>Biggest structural weakness:</strong> ${esc(
     verdict.biggestStructuralWeakness || "")}</p><p><strong>Biggest commercial opportunity:</strong> ${esc(verdict.biggestCommercialOpportunity ||
        "")}</p><p><strong>Biggest search opportunity:</strong> ${esc(verdict.biggestSearchOpportunity || "")}</p><p><strong>Biggest mobile risk:</strong> ${esc(

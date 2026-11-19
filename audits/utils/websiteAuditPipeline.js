@@ -780,6 +780,11 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
     const council = await runWebsiteAuditCouncil(stageReports);
     const issue170Coverage = await buildWebsiteIssue170Coverage({ stageReports });
     council.issue170Coverage = issue170Coverage;
+    const issue170Summary = {
+      required: issue170Coverage.requiredCount, passed: issue170Coverage.passed,
+      failed: issue170Coverage.failed, notVerified: issue170Coverage.notVerified,
+      acceptanceComplete: issue170Coverage.acceptanceComplete,
+    };
     const knownFindingIds = new Set((council.masterIssueLedger || []).map((row) => row?.findingId));
     council.masterIssueLedger = [
       ...(council.masterIssueLedger || []),
@@ -884,7 +889,7 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
         ramsDispatch: { ok: false, skipped: true, reason: "RAMS dispatch is prohibited until all required source audit stages complete." },
         synthesisState: "Incomplete",
         targetAssessment: council.targetAssessment || null,
-        issue170Coverage: { required: issue170Coverage.requiredCount, passed: issue170Coverage.passed, failed: issue170Coverage.failed, notVerified: issue170Coverage.notVerified, acceptanceComplete: issue170Coverage.acceptanceComplete },
+        issue170Coverage: issue170Summary,
         sourceStageHealth,
         finalisationAttempt,
         stageStatuses: {
@@ -947,7 +952,7 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
       ramsDispatch,
       synthesisState: council.synthesisState,
       targetAssessment: council.targetAssessment || null,
-      issue170Coverage: { required: issue170Coverage.requiredCount, passed: issue170Coverage.passed, failed: issue170Coverage.failed, notVerified: issue170Coverage.notVerified, acceptanceComplete: issue170Coverage.acceptanceComplete },
+      issue170Coverage: issue170Summary,
       sourceStageHealth,
       finalisationAttempt,
       stageStatuses: {
