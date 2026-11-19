@@ -737,7 +737,6 @@ sound security-header posture.", status: "Not Scored - Security Evidence Not Sup
 function councilHasRequiredSubstance(councilValue) {
   const council = obj(councilValue);
   const verdict = obj(council.councilVerdict);
-  const issue170 = obj(council.issue170Coverage);
   const scoredRows = Object.values(obj(council.scorecard)).filter((row) => Number.isFinite(Number(row?.score))).length;
   const decisionRows = arr(council.topActions).length
     + arr(council.unifiedFindings).length
@@ -1003,6 +1002,7 @@ function seoCoverageRows(stageReports = {}) {
 
 export function buildWebsiteAuditHtml({ websiteUrl, sessionId, generatedAt = new Date().toISOString(), council, stageReports }) {
   const verdict = obj(council.councilVerdict);
+  const issue170 = obj(council.issue170Coverage);
   const programme = obj(council.implementationProgramme);
   const sourceEvidence = compactWebsiteAuditInputs(stageReports);
   const seoCoverage = seoCoverageRows(stageReports);
