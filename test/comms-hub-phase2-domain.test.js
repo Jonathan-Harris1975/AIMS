@@ -422,6 +422,26 @@ test("Social migration prevents cross-family poll job collisions", () => {
   assert.ok(rows.some((row) => row.credential_family === "video" && row.platform === "youtube" && row.resource === "comments"));
 });
 
+test("Missing social polling jobs are restored without resetting existing progress", async () => {
+  const d1 = new SqliteD1();
+  const repository = new CommsHubRepository(d1);
+  d1.db.exec("DELETE FROM comms_hub_social_poll_jobs WHERE platform = 'youtube'");
+  d1.db.exec("UPDATE comms_hub_social_poll_jobs SET cursor = 'saved', last_success_at = '2026-01-01T00:00:00.000Z' WHERE id = 'poll_meta_facebook_comments'");
+  const jobs = [
+    { family: "meta", platform: "facebook", resource: "comments" },
+    { family: "video", platform: "youtube", resource: "comments" },
+  ];
+  const now = "2026-11-19T06:00:00.000Z";
+  await repository.ensureSocialPollJobs(jobs, now);
+  await repository.ensureSocialPollJobs(jobs, now);
+  const all = d1.query("SELECT * FROM comms_hub_social_poll_jobs ORDER BY id").results;
+  assert.equal(all.length, 5);
+  assert.equal(all.find((row) => row.id === "poll_meta_facebook_comments").cursor, "saved");
+  const restored = all.find((row) => row.id === "poll_video_youtube_comments");
+  assert.equal(restored.next_attempt_at, now);
+  assert.equal(restored.last_success_at, null);
+});
+
 test("Uncertain outbound actions require reconciliation instead of blind retry", async () => {
   const repository = new CommsHubRepository(new SqliteD1());
   const now = "2026-07-31T00:20:00.000Z";
@@ -527,6 +547,7 @@ test("Social polling worker claims only enabled credential families", async () =
   const claims = [];
   let claimCount = 0;
   const repository = {
+    async ensureSocialPollJobs() {},
     async claimSocialPollJob(value) {
       claims.push(value);
       if (claimCount++ > 0) return null;
@@ -576,6 +597,7 @@ test("Video polling consumes Zernio data/comments response keys and persists an 
   const completions = [];
   const repository = {
     persistZernioEvent: (...args) => storedRepository.persistZernioEvent(...args),
+    async ensureSocialPollJobs() {},
     async claimSocialPollJob() {
       if (claims++ > 0) return null;
       return {

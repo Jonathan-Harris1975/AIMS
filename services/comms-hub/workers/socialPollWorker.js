@@ -335,6 +335,19 @@ export class CommsHubSocialPollWorker {
     let duplicates = 0;
     let noDueJobs = false;
     try {
+      // Restore missing jobs without changing existing cursors or leases. New
+      // rows take the normal forward-only baseline before any provider read.
+      const jobs = Object.entries(SOCIAL_CHANNEL_CAPABILITIES).flatMap(([platform, capability]) => {
+        const family = this.config.zernioFamilies?.[capability.family];
+        if (!families.includes(capability.family) || !family?.platforms?.includes(platform)) return [];
+        return capability.pollingResources.map((resource) => ({ family: capability.family, platform, resource }));
+      });
+      const restoredJobs = await this.repository.ensureSocialPollJobs(jobs, new Date().toISOString());
+      if (restoredJobs) {
+        await this.writeLog("warn", "commsHub.socialPoll.jobsRestored", {
+          workerId: this.workerId, restoredJobs, historyGapRequiresReview: true,
+        });
+      }
       for (let index = 0; index < maximum; index += 1) {
         const now = new Date().toISOString();
         const job = await this.repository.claimSocialPollJob({

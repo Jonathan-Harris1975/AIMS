@@ -89,6 +89,7 @@ test("poll worker can drain all five seeded monitoring resources across the thre
   const calls = [];
   const completed = [];
   const repository = {
+    async ensureSocialPollJobs() {},
     async claimSocialPollJob() { return jobs.shift() || null; },
     async completeSocialPollJob(value) { completed.push(value); },
     async failSocialPollJob() { assert.fail("all-channel empty monitoring poll should not fail"); },
@@ -201,4 +202,30 @@ test("full social monitoring deployment profile enables both families and leaves
   assert.match(source, /COMMS_HUB_SOCIAL_MONITOR_ONLY=true/);
   assert.match(source, /ZERNIO_META_API_KEY=\n/);
   assert.match(source, /ZERNIO_VIDEO_API_KEY=\n/);
+});
+
+test("poll worker restores only enabled resources and reports a possible history gap", async () => {
+  const logs = [];
+  let ensured;
+  const worker = new CommsHubSocialPollWorker({
+    repository: {
+      async ensureSocialPollJobs(jobs) { ensured = jobs; return 2; },
+      async claimSocialPollJob() { return null; },
+    },
+    zernio: { meta: {}, video: {} },
+    config: {
+      zernioFamilies: {
+        meta: { family: "meta", enabled: true, platforms: ["facebook"] },
+        video: { family: "video", enabled: false, platforms: ["youtube"] },
+      },
+      socialPollMs: 120_000,
+    },
+    writeLog: async (level, event, data) => { logs.push({ level, event, data }); },
+  });
+  await worker.runOnce();
+  assert.deepEqual(ensured, [
+    { family: "meta", platform: "facebook", resource: "conversations" },
+    { family: "meta", platform: "facebook", resource: "comments" },
+  ]);
+  assert.equal(logs.find((row) => row.event === "commsHub.socialPoll.jobsRestored").data.historyGapRequiresReview, true);
 });

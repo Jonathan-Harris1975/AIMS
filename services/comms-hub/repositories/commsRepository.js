@@ -653,6 +653,17 @@ export class CommsHubRepository {
     return rows(result)[0] || null;
   }
 
+  async ensureSocialPollJobs(jobs, now) {
+    if (!jobs.length) return 0;
+    const result = await this.d1.query(
+      `INSERT OR IGNORE INTO comms_hub_social_poll_jobs
+        (id, credential_family, platform, resource, next_attempt_at, attempts, created_at, updated_at)
+       VALUES ${jobs.map(() => "(?, ?, ?, ?, ?, 0, ?, ?)").join(", ")} RETURNING id`,
+      jobs.flatMap((job) => [`poll_${job.family}_${job.platform}_${job.resource}`, job.family, job.platform, job.resource, now, now, now])
+    );
+    return rows(result).length;
+  }
+
   async completeSocialPollJob({ id, workerId, cursor, cycleStartedAt, freshSinceAt = null, lastSuccessAt, nextAttemptAt, completedAt }) {
     const result = await this.d1.query(
       `UPDATE comms_hub_social_poll_jobs

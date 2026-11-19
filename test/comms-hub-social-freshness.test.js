@@ -38,6 +38,7 @@ test("first social poll establishes a freshness floor without requesting provide
   const completions = [];
   const logs = [];
   const repository = {
+    async ensureSocialPollJobs() {},
     async claimSocialPollJob() { return jobs.shift() || null; },
     async completeSocialPollJob(value) { completions.push(value); },
     async failSocialPollJob() { assert.fail("baseline must not fail"); },
