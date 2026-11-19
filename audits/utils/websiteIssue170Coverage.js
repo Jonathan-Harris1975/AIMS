@@ -2,6 +2,7 @@ import { getWebsiteAuditPolicy } from "./websiteAuditPolicy.js";
 
 const ISSUE_URL = "https://github.com/Jonathan-Harris1975/jonathan-harris-website/issues/170";
 const ISSUE_API = "https://api.github.com/repos/Jonathan-Harris1975/jonathan-harris-website/issues/170";
+const STATIC_SITEMAP = "https://raw.githubusercontent.com/Jonathan-Harris1975/jonathan-harris-website/main/sitemap.xml";
 const SITE = "https://jonathan-harris.online";
 const VALID_STATUSES = new Set(["passed", "failed", "not_verified"]);
 
@@ -26,35 +27,65 @@ async function fetchIssue170(fetchImpl, token) {
   return { checked: extractIssue170Checklist(payload.body), state: payload.state, updatedAt: payload.updated_at || null };
 }
 
+function sitemapEntries(xml) {
+  if (!/<urlset\\b/.test(xml) || !/<\\/urlset>/.test(xml)) return null;
+  const rows = [...xml.matchAll(/<url\\b[^>]*>([\\s\\S]*?)<\\/url>/gi)].map((match) => {
+    const loc = /<loc>\\s*([^<]+?)\\s*<\\/loc>/i.exec(match[1]);
+    const lastmod = /<lastmod>\\s*([^<]+?)\\s*<\\/lastmod>/i.exec(match[1]);
+    return { loc: loc?.[1]?.trim() || "", lastmod: lastmod?.[1]?.trim() || "" };
+  });
+  if (!rows.length || rows.some((row) => !row.loc)
+      || new Set(rows.map((row) => row.loc)).size !== rows.length) return null;
+  return new Map(rows.map((row) => [row.loc, row.lastmod]));
+}
+
 async function probeR2Sitemap(fetchImpl) {
-  const options = { headers: { Accept: "application/json, application/xml" }, signal: AbortSignal.timeout(12000) };
-  const [manifestResponse, sitemapResponse] = await Promise.all([
+  const options = { signal: AbortSignal.timeout(12000) };
+  const [manifestResponse, sitemapResponse, staticResponse] = await Promise.all([
     fetchImpl(SITE + "/blog/posts.json", options),
     fetchImpl(SITE + "/sitemap.xml", options),
+    fetchImpl(STATIC_SITEMAP, options),
   ]);
-  if (!manifestResponse.ok || !sitemapResponse.ok) return { status: "failed", reason: "Live R2 blog manifest or sitemap returned non-200", evidence: [] };
+  if (!manifestResponse.ok || !sitemapResponse.ok) {
+    return { status: "failed", reason: "Live R2 manifest or sitemap returned non-200", evidence: [] };
+  }
+  if (!staticResponse.ok) {
+    return { status: "not_verified", reason: "Governed static sitemap could not be retrieved", evidence: [] };
+  }
   if (manifestResponse.headers.get("x-blog-manifest-source") !== "r2") {
     return { status: "not_verified", reason: "Blog manifest R2 source was not verified", evidence: [] };
   }
   const manifest = await manifestResponse.json();
-  const xml = await sitemapResponse.text();
+  const [xml, staticXml] = await Promise.all([sitemapResponse.text(), staticResponse.text()]);
   const items = manifest?.items;
   if (!Array.isArray(items)) return { status: "failed", reason: "R2 manifest has no valid items array", evidence: [] };
-  if (items.length > 5000) return { status: "not_verified", reason: "Sitemap manifest exceeded safe audit item limit", evidence: [] };
-  const locs = [...xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)].map((match) => match[1].trim());
-  const seen = new Set(locs);
-  if (seen.size !== locs.length || !xml.includes("</urlset>")) {
-    return { status: "failed", reason: "Sitemap XML has duplicates or lacks closing urlset", evidence: [] };
+  if (items.length > 5000) return { status: "not_verified", reason: "Manifest exceeded safe audit item limit", evidence: [] };
+  const live = sitemapEntries(xml);
+  const governed = sitemapEntries(staticXml);
+  if (!live || !governed) return { status: "failed", reason: "Sitemap XML is malformed or contains duplicate URLs", evidence: [] };
+  const altered = [...governed].filter(([url, date]) => !live.has(url) || live.get(url) !== date);
+  if (altered.length) {
+    return { status: "failed", reason: altered.length + " governed static sitemap URLs or dates are missing or changed", evidence: [STATIC_SITEMAP] };
   }
   const slugs = items.map((row) => row?.slug);
   if (slugs.some((slug) => typeof slug !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))
       || new Set(slugs).size !== slugs.length) {
     return { status: "failed", reason: "R2 manifest contains missing, invalid or duplicate slugs", evidence: [] };
   }
-  const expected = slugs.map((slug) => SITE + "/blog/posts/" + slug + "/");
-  const missing = expected.filter((url) => !seen.has(url));
-  if (missing.length) {
-    return { status: "failed", reason: missing.length + " of " + items.length + " R2 blog articles absent from live sitemap", evidence: [SITE + "/sitemap.xml", SITE + "/blog/posts.json"] };
+  let missing = 0;
+  let invalidDates = 0;
+  for (const item of items) {
+    const expected = SITE + "/blog/posts/" + item.slug + "/";
+    const publishedAt = new Date(item.updated_at || item.published_at || "");
+    if (!Number.isFinite(publishedAt.getTime())) { invalidDates += 1; continue; }
+    if (live.get(expected) !== publishedAt.toISOString().slice(0, 10)) missing += 1;
+  }
+  if (invalidDates) {
+    return { status: "failed", reason: invalidDates + " R2 blog posts lack verifiable publication dates", evidence: [SITE + "/blog/posts.json"] };
+  }
+  if (missing) {
+    return { status: "failed", reason: missing + " R2 blog articles or publication dates absent from live sitemap",
+      evidence: [SITE + "/sitemap.xml", SITE + "/blog/posts.json"] };
   }
   if (sitemapResponse.headers.get("x-blog-sitemap-source") !== "r2"
       || Number(sitemapResponse.headers.get("x-blog-posts-in-sitemap")) !== items.length) {
@@ -62,8 +93,9 @@ async function probeR2Sitemap(fetchImpl) {
   }
   return {
     status: "passed",
-    reason: "Verified " + items.length + " R2 blog posts in live canonical sitemap (" + locs.length + " unique URLs)",
-    evidence: [SITE + "/sitemap.xml", SITE + "/blog/posts.json"],
+    reason: "Verified " + items.length + " R2 articles and " + governed.size
+      + " governed static URLs in canonical sitemap (" + live.size + " unique URLs)",
+    evidence: [SITE + "/sitemap.xml", SITE + "/blog/posts.json", STATIC_SITEMAP],
   };
 }
 
@@ -78,7 +110,7 @@ function stageEvidence(row, stageReports = {}) {
   return [...new Set(proof)];
 }
 
-function explicitAttestation(row, stageReports = {}) {
+function explicitAttestation(row, stageReports = {}, now = new Date()) {
   for (const source of row.evidenceSources || []) {
     const stage = stageReports[source];
     if (!stage || String(stage.status).toLowerCase() !== "completed"
@@ -92,6 +124,8 @@ function explicitAttestation(row, stageReports = {}) {
         || evidence.sourceRevisionSha !== stage.sourceRevisionSha
         || stage.liveSourceParity !== "matched"
         || !Number.isFinite(Date.parse(evidence.verifiedAt || ""))
+        || Date.parse(evidence.verifiedAt) < now.getTime() - 35 * 86400000
+        || Date.parse(evidence.verifiedAt) > now.getTime() + 300000
         || typeof evidence.artifactUrl !== "string" || !evidence.artifactUrl.startsWith("r2://audits/")) continue;
     return { status: evidence.status, reason: evidence.summary || "Explicit deterministic source attestation", evidence: [evidence.artifactUrl] };
   }
@@ -114,22 +148,22 @@ export async function buildWebsiteIssue170Coverage({
   const issueChecklist = issue?.checked || [];
   const mapped = new Set();
   const rows = definitions.map((definition) => {
-    const match = definition.issueAnchor
+    const match = definition.issueText
       ? issueChecklist.find((item, index) => {
-        if (clean(item.title).includes(clean(definition.issueAnchor))) { mapped.add(index); return true; }
+        if (clean(item.title) === clean(definition.issueText)) { mapped.add(index); return true; }
         return false;
       }) : null;
     let status = "not_verified";
     let reason = "Full acceptance evidence has not been supplied by the required audit sources.";
     let proof = stageEvidence(definition, stageReports);
-    const attestation = explicitAttestation(definition, stageReports);
+    const attestation = explicitAttestation(definition, stageReports, now);
     if (attestation) { status = attestation.status; reason = attestation.reason; proof = [...proof, ...attestation.evidence]; }
     if (definition.id === "W170-12") {
       status = sitemap?.status || "not_verified";
       reason = sitemap?.reason || "Live sitemap and R2 comparison unavailable in this run.";
       proof = [...proof, ...(sitemap?.evidence || [])];
     }
-    if (definition.issueAnchor && !match) {
+    if (definition.issueText && !match) {
       status = "not_verified";
       reason = "Issue #170 checklist item not confirmed in the live GitHub source; audit must resynchronise.";
     }
