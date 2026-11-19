@@ -114,8 +114,15 @@ export class CommsHubProviderHealthService {
     }
     // Recover actual provider events across runtime restarts and replicas.
     // Never promote a D1 polling snapshot into evidence of liveness.
+    let evidenceStoreAvailable = true;
     if (typeof this.context.aiRepository?.listLatestProviderHealth === "function") {
-      const persisted = await this.context.aiRepository.listLatestProviderHealth();
+      let persisted = [];
+      try {
+        persisted = await this.context.aiRepository.listLatestProviderHealth();
+      } catch {
+        // D1 failure must not suppress fresh process-local evidence.
+        evidenceStoreAvailable = false;
+      }
       for (const row of persisted) {
         const outcome = persistedOutcome(row);
         if (!outcome || !isCommsHubRoute(outcome, this.routeModels)) continue;
@@ -151,8 +158,8 @@ export class CommsHubProviderHealthService {
           ? 0
           : Number(entry.consecutiveFailures ?? entry.failures ?? 0),
         lastStatusCode: entry.lastStatus || null,
-        lastSuccessAt: entry.successes ? entry.lastAt : null,
-        lastFailureAt: entry.failures ? entry.lastAt : null,
+        lastSuccessAt: entry.lastAt && entry.lastStatus === "success" ? entry.lastAt : null,
+        lastFailureAt: entry.lastAt && entry.lastStatus !== "success" && !["configured", "disabled"].includes(entry.lastStatus) ? entry.lastAt : null,
         observedAt,
         // The assessment time is not evidence of a successful provider call.
         // A route is verified only by the timestamp of its actual runtime outcome.
@@ -170,7 +177,7 @@ export class CommsHubProviderHealthService {
       };
       captured.push(record);
     }
-    return { checkedAt: observedAt, providers: captured };
+    return { checkedAt: observedAt, providers: captured, evidenceStoreAvailable };
   }
 
   async capture() {
@@ -183,7 +190,7 @@ export class CommsHubProviderHealthService {
     // Never present a periodic D1 capture as a live health check. Evaluate the
     // current runtime's provider outcomes on every authenticated request.
     // No external test calls, paid model invocations or D1 writes happen here.
-    const { checkedAt, providers } = await this.currentHealth();
+    const { checkedAt, providers, evidenceStoreAvailable } = await this.currentHealth();
     const rank = { unavailable: 4, rate_limited: 3, degraded: 2, unknown: 1, healthy: 0 };
     const overall = providers.reduce((worst, item) => rank[item.status] > rank[worst] ? item.status : worst, "healthy");
     return {
@@ -192,6 +199,7 @@ export class CommsHubProviderHealthService {
       checkedAt,
       source: "current_runtime_outcomes",
       includesPersistedOutcomes: true,
+      evidenceStoreAvailable,
       evidenceStaleAfterMs: this.context.config.providerHealthStaleMs,
       passiveMonitoring: true,
     };
