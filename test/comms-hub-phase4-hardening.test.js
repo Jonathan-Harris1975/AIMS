@@ -610,10 +610,10 @@ test("Provider health status hides previously stored telemetry from other AIMS r
 });
 
 
-test("Provider health status expires old failures even before the next poll", async () => {
+test("Provider health reads fresh runtime evidence instead of historical D1 captures", async () => {
   const d1 = new SqliteD1();
   const staleAt = new Date(Date.now() - 3_600_000).toISOString();
-  const observedAt = new Date().toISOString();
+  const now = new Date().toISOString();
   const context = {
     config: {
       providerHealthStaleMs: 900_000,
@@ -623,27 +623,47 @@ test("Provider health status expires old failures even before the next poll", as
     },
     aiRepository: new CommsAiRepository(d1),
   };
+  // A recently captured D1 row must not override the actual runtime outcome.
   await context.aiRepository.recordProviderHealthBatch([{
-    id: "stale-zernio-failure",
+    id: "historical-zernio-failure",
     provider: "zernio-meta",
     adapter: "comms-hub:zernio-meta-intake",
-    status: "degraded",
-    successCount: 2,
-    failureCount: 1,
-    consecutiveFailures: 1,
-    lastStatusCode: "zernio_ack_deadline_exceeded",
-    lastSuccessAt: staleAt,
-    lastFailureAt: staleAt,
-    observedAt,
-    evidence: { calls: 3, failureRate: 1 / 3 },
+    status: "unavailable",
+    successCount: 0,
+    failureCount: 5,
+    consecutiveFailures: 5,
+    lastStatusCode: "500",
+    lastSuccessAt: null,
+    lastFailureAt: now,
+    observedAt: now,
+    evidence: { calls: 5, failureRate: 1 },
   }]);
+  let current = {
+    routeKey: "comms-hub:zernio-meta-intake", provider: "zernio-meta",
+    calls: 1, successes: 0, failures: 1, failureRate: 1,
+    lastStatus: "429", lastAt: staleAt,
+  };
   const service = new CommsHubProviderHealthService({
     context,
-    snapshotProvider: () => ({ providers: {} }),
+    snapshotProvider: () => ({ providers: { route: current } }),
   });
 
-  const status = await service.status();
-  const route = status.providers.find((item) => item.adapter === "comms-hub:zernio-meta-intake");
-  assert.equal(route.status, "unknown");
-  assert.equal(status.overall, "unknown");
+  const unverified = await service.status();
+  const old = unverified.providers.find((item) => item.adapter === current.routeKey);
+  assert.equal(old.status, "unknown");
+  assert.equal(old.lastObservedAt, staleAt);
+  assert.equal(unverified.source, "current_runtime_outcomes");
+  assert.equal(unverified.passiveMonitoring, true);
+  assert.ok(unverified.checkedAt);
+  assert.equal(unverified.overall, "unknown");
+
+  // A new real runtime event changes status immediately, without waiting
+  // for another periodic snapshot or writing anything to D1.
+  current = { ...current, calls: 2, successes: 1, failures: 1, failureRate: 0.5, lastStatus: "success", lastAt: new Date().toISOString() };
+  const updated = await service.status();
+  const fresh = updated.providers.find((item) => item.adapter === current.routeKey);
+  assert.equal(fresh.lastObservedAt, current.lastAt);
+  assert.notEqual(fresh.status, "unknown");
+  assert.equal(fresh.status, "degraded");
+  assert.equal(updated.checkedAt >= unverified.checkedAt, true);
 });
