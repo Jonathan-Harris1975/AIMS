@@ -1,11 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import request from "supertest";
 import { testCredential } from "./helpers/testCredentials.js";
 
 const ORIGINAL_ENV = { ...process.env };
 const originalFetch = globalThis.fetch;
+const videoFixtureDir = mkdtempSync(path.join(os.tmpdir(), "blotato-test-"));
+const videoFixturePath = path.join(videoFixtureDir, "video.mp4");
+execFileSync("ffmpeg", ["-loglevel", "error", "-f", "lavfi", "-i", "color=black:s=720x1280:r=24",
+  "-t", "35", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", videoFixturePath]);
+const videoFixture = readFileSync(videoFixturePath);
+
 
 function restoreEnv() {
   for (const key of Object.keys(process.env)) {
@@ -48,6 +58,12 @@ function countHashtags(value = "") {
 async function handleMockRequest(req, res) {
   const url = new URL(req.url, "http://127.0.0.1");
 
+  if (req.method === "GET" && url.pathname === "/video.mp4") {
+    res.writeHead(200, { "content-type": "video/mp4", "content-length": videoFixture.length });
+    res.end(videoFixture);
+    return;
+  }
+
   if (req.method === "GET" && ["/feed.xml", "/feed-scheduled.xml", "/feed-in-progress.xml"].includes(url.pathname)) {
     const scheduledFixture = url.pathname === "/feed-scheduled.xml";
     const inProgressFixture = url.pathname === "/feed-in-progress.xml";
@@ -73,6 +89,13 @@ async function handleMockRequest(req, res) {
 
   if (req.method === "POST" && url.pathname === "/chat/completions") {
     const payload = await readJsonBody(req);
+    if (Array.isArray(payload.messages?.[0]?.content)) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ score: 90, hookPerformance: 90,
+        sourceRelevance: 90, sceneAlignment: 90, continuity: 90, visualProgression: 90, visualQuality: 90,
+        captionLegibility: 90, defects: [], hardDefects: [], summary: "Passed", recommendation: "" }) } }] }));
+      return;
+    }
     capturedChatRequests.push(payload);
     const isRepair = payload.messages.some((message) => String(message.content || "").includes("Repair malformed JSON"));
     if (!isRepair) {
@@ -203,7 +226,7 @@ will be the ones who build better systems around the tools.",
 
   if (req.method === "GET" && url.pathname === "/v2/videos/creations/visual-1") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ item: { id: "visual-1", status: "done", mediaUrl: "https://example.com/video.mp4" } }));
+    res.end(JSON.stringify({ item: { id: "visual-1", status: "done", mediaUrl: `${mockBase}/video.mp4` } }));
     return;
   }
 
@@ -229,7 +252,7 @@ will be the ones who build better systems around the tools.",
     if (body.post.content.platform === "instagram") {
       assert.equal(body.post.accountId, process.env.BLOTATO_INSTAGRAM_ACCOUNT_ID || "acc-instagram");
       assert.equal(body.post.target.mediaType, "reel");
-      assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
+      assert.deepEqual(body.post.content.mediaUrls, [`${mockBase}/video.mp4`]);
       assert.ok(countHashtags(body.post.content.text) <= 5);
     }
 
@@ -237,7 +260,7 @@ will be the ones who build better systems around the tools.",
       assert.equal(body.post.accountId, process.env.BLOTATO_YOUTUBE_ACCOUNT_ID || "acc-youtube");
       assert.equal(body.post.target.privacyStatus, "public");
       assert.equal(body.post.target.containsSyntheticMedia, true);
-      assert.deepEqual(body.post.content.mediaUrls, ["https://example.com/video.mp4"]);
+      assert.deepEqual(body.post.content.mediaUrls, [`${mockBase}/video.mp4`]);
     }
 
     if (body.post.content.platform === "facebook") {
@@ -366,7 +389,7 @@ process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS = "true";
 process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS = "true";
 process.env.BLOTATO_FACEBOOK_MEDIA_TYPE = "reel";
 process.env.BLOTATO_KEEPALIVE_ENABLED = "false";
-process.env.BLOTATO_RENDERED_QA_ENABLED = "false";
+process.env.BLOTATO_RENDERED_QA_ENABLED = "true";
 process.env.BLOTATO_PUBLISH_SEQUENTIAL = "true";
 process.env.BLOTATO_PUBLISH_STAGGER_MS = "1";
 process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
@@ -384,6 +407,7 @@ const auth = { Authorization: "Bearer suite-key" };
 test.after(async () => {
   await new Promise((resolve, reject) => mockServer.close((err) => (err ? reject(err) : resolve())));
   globalThis.fetch = originalFetch;
+  rmSync(videoFixtureDir, { recursive: true, force: true });
   restoreEnv();
 });
 
@@ -425,7 +449,7 @@ test.afterEach(() => {
   process.env.BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS = "true";
   process.env.BLOTATO_FACEBOOK_MEDIA_TYPE = "reel";
   process.env.BLOTATO_KEEPALIVE_ENABLED = "false";
-  process.env.BLOTATO_RENDERED_QA_ENABLED = "false";
+  process.env.BLOTATO_RENDERED_QA_ENABLED = "true";
   process.env.BLOTATO_PUBLISH_SEQUENTIAL = "true";
   process.env.BLOTATO_PUBLISH_STAGGER_MS = "1";
   process.env.BLOTATO_API_RETRY_ATTEMPTS = "2";
