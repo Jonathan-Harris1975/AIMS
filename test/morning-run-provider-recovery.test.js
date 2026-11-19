@@ -5,6 +5,8 @@ import {
   isReplaceableRenderedQualityFailure,
   isRetryableRenderedPublishFailure,
   isRetryablePendingRenderFailure,
+  resumableReplacementHistory,
+  canReuseRenderedReview,
 } from "../services/blotato/utils/autoPublishService.js";
 
 async function source(path) {
@@ -223,3 +225,17 @@ test("content operation recovery revisions permit one bounded recovery of failed
   assert.match(text, /reusableOperationTaskResults/);
 });
 
+
+
+test("interrupted render and review recovery preserve replacement limits and re-review skipped QA", () => {
+  const replacement = { replacementCount: 1, repairContext: "Correct unrelated visual" };
+  for (const phase of ["video-rendering", "rendered-quality-review", "publish-failed"]) {
+    const resumed = resumableReplacementHistory({ phase, failedRenderReplacement: replacement });
+    assert.deepEqual(resumed, replacement);
+    assert.equal(isReplaceableRenderedQualityFailure({ status: "failed", phase: "rendered-quality-failed",
+      videoId: "paid-visual", failedRenderReplacement: resumed }), false);
+  }
+  assert.equal(canReuseRenderedReview({ pass: true, skipped: true }), false);
+  assert.equal(canReuseRenderedReview({ pass: true, skipped: false }), true);
+  assert.equal(canReuseRenderedReview(null), false);
+});
