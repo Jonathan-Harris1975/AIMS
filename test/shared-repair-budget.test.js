@@ -227,3 +227,31 @@ test("targeted repair supplies composer source IDs and validates citation select
     assert.equal(result.realityCheck.link, "https://example.test/context");
   } finally { globalThis.fetch = oldFetch; }
 });
+
+test("chair retries malformed structured output with a larger completion allowance", async () => {
+  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.AI_MODEL_FAST = "test/luna";
+  process.env.AI_MODEL_HIGH_QUALITY = "test/sonnet";
+  process.env.AI_MODEL_AUDIT = "test/sol";
+  const oldFetch = globalThis.fetch;
+  const chairTokens = [];
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const chair = body.messages[0].content.includes("Review every specialist report before deciding");
+    if (chair) chairTokens.push(body.max_completion_tokens);
+    const content = chair && body.max_completion_tokens < 3200
+      ? JSON.stringify({ score: 90, verdict: "pass", blocking: false, issues: [] })
+      : JSON.stringify({ score: 95, verdict: "pass", blocking: false, issues: [], strengths: [], priorityFixes: [] });
+    return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+  };
+  try {
+    const { runNewsletterEditorialCouncil } = await import("../services/newsletter/engine/editorialCouncil.js");
+    const result = await runNewsletterEditorialCouncil({ profile: { displayName: "Chair recovery test", brandVoice: "Clear" },
+      newsletter: { subject: "Chair structured output recovery", bigThree: [], onRadar: [] },
+      lead: { title: "Evidence", link: "https://example.test/chair-retry", summary: "Source evidence" }, stories: [], sessionId: "chair-retry" });
+    assert.equal(result.ok, true);
+    assert.equal(result.attendance.complete, true);
+    assert.ok(chairTokens.some((tokens) => tokens < 3200));
+    assert.ok(chairTokens.some((tokens) => tokens >= 3200));
+  } finally { globalThis.fetch = oldFetch; }
+});
