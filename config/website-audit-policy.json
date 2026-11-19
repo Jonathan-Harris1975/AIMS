@@ -61,8 +61,8 @@
   "accessibility": {
     "standard": "WCAG 2.2 AA",
     "normalTextContrast": 4.5,
-    "largeTextContrast": 3.0,
-    "uiComponentContrast": 3.0,
+    "largeTextContrast": 3,
+    "uiComponentContrast": 3,
     "targetSizeAaCssPx": 24,
     "preferredPrimaryControlCssPx": 44,
     "requireKeyboardNavigation": true,
@@ -144,5 +144,142 @@
     "coreWebVitalsPerformance": "performanceEvidence",
     "securityPlatformHygiene": "securityEvidence",
     "deploymentLiveParity": "liveSourceParity"
+  },
+  "issue170Acceptance": {
+    "source": "https://github.com/Jonathan-Harris1975/jonathan-harris-website/issues/170",
+    "issueNumber": 170,
+    "requiredStatus": "passed-only-with-verifiable-evidence",
+    "rules": [
+      {
+        "id": "W170-01",
+        "title": "Full live static and dynamic route inventory",
+        "issueAnchor": "Audit every live static and dynamic public-facing route",
+        "owner": "Website SEO/AEO/GEO and Mobile UX",
+        "evidenceSources": [
+          "seoAeoGeo",
+          "mobileUx"
+        ],
+        "acceptance": "Every governed public route is tested for headings, landmarks, keyboard access, form behaviour and content flow; per-route results and exceptions are retained."
+      },
+      {
+        "id": "W170-02",
+        "title": "Before/after screenshot and viewport inventory",
+        "issueAnchor": "Save reproducible before/after screenshots",
+        "owner": "Rendered Mobile UX",
+        "evidenceSources": [
+          "mobileUx"
+        ],
+        "acceptance": "Before/after images cover all representative templates, errors, consent states and 320/390/768/1440px; visual differences are compared and stored privately."
+      },
+      {
+        "id": "W170-03",
+        "title": "Premium editorial UX and shared component review",
+        "issueAnchor": "Complete UX review of homepage content hierarchy",
+        "owner": "Digital Growth and Visual Design",
+        "evidenceSources": [
+          "digitalGrowth",
+          "mobileUx"
+        ],
+        "acceptance": "Homepage, navigation, editorial views, podcast and books have documented evaluated improvements, baseline and verified final result."
+      },
+      {
+        "id": "W170-04",
+        "title": "Consent flows and mobile viewport obstruction",
+        "issueAnchor": "Audit cookie-consent viewport obstruction",
+        "owner": "Rendered Mobile UX",
+        "evidenceSources": [
+          "mobileUx"
+        ],
+        "acceptance": "New-visitor, reject and customise flows pass at mobile viewports without obstructing content or breaking analytics/consent."
+      },
+      {
+        "id": "W170-05",
+        "title": "WCAG 2.2 AA automated plus manual acceptance",
+        "issueAnchor": "Run WCAG 2.2 AA axe automation",
+        "owner": "Accessibility",
+        "evidenceSources": [
+          "mobileUx"
+        ],
+        "acceptance": "Axe, keyboard, screen-reader, 200% zoom, contrast, focus and every seasonal/event palette are checked, with evidence and exceptions."
+      },
+      {
+        "id": "W170-06",
+        "title": "Field and lab Core Web Vitals",
+        "issueAnchor": "Capture field and lab Core Web Vitals",
+        "owner": "Performance",
+        "evidenceSources": [
+          "mobileUx",
+          "digitalGrowth"
+        ],
+        "acceptance": "Field 75th-percentile LCP, INP, CLS and laboratory measurements are recorded and compared with baseline, plus font/CSS findings."
+      },
+      {
+        "id": "W170-07",
+        "title": "KDP format availability and purchase destinations",
+        "issueAnchor": "Verify actual API-validated Kindle/paperback/hardback availability",
+        "owner": "KDP catalogue and website",
+        "evidenceSources": [
+          "digitalGrowth"
+        ],
+        "acceptance": "API-verified Kindle, paperback and hardback availability and working purchase URLs for all 40 governed titles are checked."
+      },
+      {
+        "id": "W170-08",
+        "title": "R2 publishing, metadata and dynamic editorial templates",
+        "issueAnchor": "Verify automated R2 publications",
+        "owner": "Dedicated blog/transcript publishing audits",
+        "evidenceSources": [
+          "delegatedBlog",
+          "delegatedTranscripts",
+          "seoAeoGeo"
+        ],
+        "acceptance": "Dedicated R2 content audits attest published blog/transcript counts, metadata/schema, brand identity, image CLS and rendering on actual pages."
+      },
+      {
+        "id": "W170-09",
+        "title": "Evidence-based scoring and remediation",
+        "issueAnchor": "Document benchmark evidence for each scored category",
+        "owner": "Unified expert council and RAMS",
+        "evidenceSources": [
+          "digitalGrowth",
+          "seoAeoGeo",
+          "mobileUx"
+        ],
+        "acceptance": "Each scored category has a benchmark, genuine evidence, severity, actionable remediation and verified reassessment; no unsupported 10/10 claims."
+      },
+      {
+        "id": "W170-10",
+        "title": "Exact-head PR governance and post-deploy parity",
+        "issueAnchor": "Verify exact-head PR governance",
+        "owner": "Release/CI/Cloudflare",
+        "evidenceSources": [
+          "digitalGrowth",
+          "seoAeoGeo",
+          "mobileUx"
+        ],
+        "acceptance": "Exact head SHA, required CI/trusted admission, Cloudflare production deployment and post-deploy live source parity are verified."
+      },
+      {
+        "id": "W170-11",
+        "title": "All season and special-event visual regression",
+        "issueAnchor": null,
+        "owner": "Visual Design and Accessibility",
+        "evidenceSources": [
+          "mobileUx"
+        ],
+        "acceptance": "Every programmed date boundary, seasonal and special-event colour contrast, responsive layout and visual screenshot parity is covered."
+      },
+      {
+        "id": "W170-12",
+        "title": "Weekly R2 blog sitemap publication parity",
+        "issueAnchor": null,
+        "owner": "Technical SEO and R2 publishing",
+        "evidenceSources": [
+          "seoAeoGeo",
+          "delegatedBlog"
+        ],
+        "acceptance": "Live sitemap retains governed URLs and includes every published R2 blog article with valid canonical URL and publication date, refreshing after new weekly publications."
+      }
+    ]
   }
 }
