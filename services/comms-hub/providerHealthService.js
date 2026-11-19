@@ -73,7 +73,7 @@ export class CommsHubProviderHealthService {
     return getOperationalExcellenceSnapshot();
   }
 
-  async capture() {
+  async currentHealth() {
     const observedAt = new Date().toISOString();
     const nowMs = Date.parse(observedAt);
     const snapshot = await this.getSnapshot();
@@ -107,6 +107,10 @@ export class CommsHubProviderHealthService {
         lastSuccessAt: entry.successes ? entry.lastAt : null,
         lastFailureAt: entry.failures ? entry.lastAt : null,
         observedAt,
+        // The assessment time is not evidence of a successful provider call.
+        // A route is verified only by the timestamp of its actual runtime outcome.
+        lastObservedAt: entry.lastAt && Number.isFinite(Date.parse(entry.lastAt))
+          ? new Date(entry.lastAt).toISOString() : null,
         evidence: {
           calls: Number(entry.calls || 0),
           failureRate: Number(entry.failureRate || 0),
@@ -117,36 +121,30 @@ export class CommsHubProviderHealthService {
       };
       captured.push(record);
     }
-    if (captured.length) await this.context.aiRepository.recordProviderHealthBatch(captured);
-    return captured;
+    return { checkedAt: observedAt, providers: captured };
+  }
+
+  async capture() {
+    const { providers } = await this.currentHealth();
+    if (providers.length) await this.context.aiRepository.recordProviderHealthBatch(providers);
+    return providers;
   }
 
   async status() {
-    const storedProviders = await this.context.aiRepository.listLatestProviderHealth();
-    // Ignore legacy rows captured before snapshots were scoped to Comms Hub.
-    const nowMs = Date.now();
-    const providers = storedProviders
-      .filter((item) => isCommsHubRoute({ routeKey: item.adapter, provider: item.provider }, this.routeModels))
-      .map((item) => {
-        let evidence = {};
-        try {
-          evidence = typeof item.evidence_json === "string" ? JSON.parse(item.evidence_json) : (item.evidence || {});
-        } catch {
-          evidence = {};
-        }
-        return {
-          ...item,
-          status: classify({
-            lastAt: item.last_failure_at || item.last_success_at || item.lastFailureAt || item.lastSuccessAt,
-            lastStatus: item.last_status_code ?? item.lastStatusCode,
-            failures: item.failure_count ?? item.failureCount,
-            failureRate: Number(evidence.failureRate || 0),
-          }, this.context.config, nowMs),
-        };
-      });
+    // Never present a periodic D1 capture as a live health check. Evaluate the
+    // current runtime's provider outcomes on every authenticated request.
+    // No external test calls, paid model invocations or D1 writes happen here.
+    const { checkedAt, providers } = await this.currentHealth();
     const rank = { unavailable: 4, rate_limited: 3, degraded: 2, unknown: 1, healthy: 0 };
     const overall = providers.reduce((worst, item) => rank[item.status] > rank[worst] ? item.status : worst, "healthy");
-    return { overall: providers.length ? overall : "unknown", providers };
+    return {
+      overall: providers.length ? overall : "unknown",
+      providers,
+      checkedAt,
+      source: "current_runtime_outcomes",
+      evidenceStaleAfterMs: this.context.config.providerHealthStaleMs,
+      passiveMonitoring: true,
+    };
   }
 }
 
