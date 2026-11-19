@@ -27,6 +27,36 @@ function isCommsHubRoute(entry, routeModels = CURRENT_AI_ROUTE_MODELS) {
     && configuredProviders.includes(String(entry?.provider || ""));
 }
 
+function configuredState(entry) {
+  const value = String(entry.lastStatus || "").toLowerCase();
+  if (value === "disabled") return "disabled";
+  if (value === "unconfigured") return "unconfigured";
+  return "configured";
+}
+
+function persistedOutcome(row) {
+  const at = [row.last_success_at, row.last_failure_at]
+    .filter((value) => value && Number.isFinite(Date.parse(value)))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  if (!at) return null;
+  const evidence = (() => {
+    try { return JSON.parse(row.evidence_json || "{}"); } catch { return {}; }
+  })();
+  // Snapshot assessment timestamps are not provider observations.
+  // Only the actual success/failure time may refresh liveness.
+  return {
+    routeKey: row.adapter,
+    provider: row.provider,
+    calls: Number(evidence.calls || 0),
+    successes: Number(row.success_count || 0),
+    failures: Number(row.failure_count || 0),
+    failureRate: Number(evidence.failureRate || 0),
+    lastStatus: row.last_status_code,
+    lastAt: at,
+    source: "persisted_outcome",
+  };
+}
+
 function readinessEntries(context) {
   const emailConfigured = Boolean(
     context.config.oneComEmailAddress
@@ -82,10 +112,32 @@ export class CommsHubProviderHealthService {
       const key = `${String(entry.provider || "unknown")}::${String(entry.routeKey || "unknown")}`;
       entriesByProviderRoute.set(key, entry);
     }
+    // Recover actual provider events across runtime restarts and replicas.
+    // Never promote a D1 polling snapshot into evidence of liveness.
+    let evidenceStoreAvailable = true;
+    if (typeof this.context.aiRepository?.listLatestProviderHealth === "function") {
+      let persisted = [];
+      try {
+        persisted = await this.context.aiRepository.listLatestProviderHealth();
+      } catch {
+        // D1 failure must not suppress fresh process-local evidence.
+        evidenceStoreAvailable = false;
+      }
+      for (const row of persisted) {
+        const outcome = persistedOutcome(row);
+        if (!outcome || !isCommsHubRoute(outcome, this.routeModels)) continue;
+        const key = `${outcome.provider}::${outcome.routeKey}`;
+        entriesByProviderRoute.set(key, outcome);
+      }
+    }
     for (const entry of Object.values(snapshot.providers || {})) {
       if (!isCommsHubRoute(entry, this.routeModels)) continue;
       const key = `${String(entry.provider || "unknown")}::${String(entry.routeKey || "unknown")}`;
-      entriesByProviderRoute.set(key, entry);
+      const previous = entriesByProviderRoute.get(key);
+      // Newer real observations take precedence, irrespective of process.
+      if (!previous?.lastAt || (entry.lastAt && Date.parse(entry.lastAt) >= Date.parse(previous.lastAt))) {
+        entriesByProviderRoute.set(key, entry);
+      }
     }
     const providerEntries = [...entriesByProviderRoute.values()];
     const captured = [];
@@ -98,14 +150,16 @@ export class CommsHubProviderHealthService {
         provider,
         adapter,
         status,
+        readiness: configuredState(entry),
+        evidenceSource: entry.source || (entry.lastAt ? "runtime_outcome" : "configuration"),
         successCount: Number(entry.successes || 0),
         failureCount: Number(entry.failures || 0),
         consecutiveFailures: entry.lastStatus === "success" || entry.lastStatus === "configured"
           ? 0
           : Number(entry.consecutiveFailures ?? entry.failures ?? 0),
         lastStatusCode: entry.lastStatus || null,
-        lastSuccessAt: entry.successes ? entry.lastAt : null,
-        lastFailureAt: entry.failures ? entry.lastAt : null,
+        lastSuccessAt: entry.lastAt && entry.lastStatus === "success" ? entry.lastAt : null,
+        lastFailureAt: entry.lastAt && entry.lastStatus !== "success" && !["configured", "disabled"].includes(entry.lastStatus) ? entry.lastAt : null,
         observedAt,
         // The assessment time is not evidence of a successful provider call.
         // A route is verified only by the timestamp of its actual runtime outcome.
@@ -117,11 +171,13 @@ export class CommsHubProviderHealthService {
           averageLatencyMs: Number(entry.averageLatencyMs || 0),
           maxLatencyMs: Number(entry.maxLatencyMs || 0),
           releaseId: snapshot.releaseId || null,
+          lastObservedAt: entry.lastAt || null,
+          evidenceSource: entry.source || (entry.lastAt ? "runtime_outcome" : "configuration"),
         },
       };
       captured.push(record);
     }
-    return { checkedAt: observedAt, providers: captured };
+    return { checkedAt: observedAt, providers: captured, evidenceStoreAvailable };
   }
 
   async capture() {
@@ -134,7 +190,7 @@ export class CommsHubProviderHealthService {
     // Never present a periodic D1 capture as a live health check. Evaluate the
     // current runtime's provider outcomes on every authenticated request.
     // No external test calls, paid model invocations or D1 writes happen here.
-    const { checkedAt, providers } = await this.currentHealth();
+    const { checkedAt, providers, evidenceStoreAvailable } = await this.currentHealth();
     const rank = { unavailable: 4, rate_limited: 3, degraded: 2, unknown: 1, healthy: 0 };
     const overall = providers.reduce((worst, item) => rank[item.status] > rank[worst] ? item.status : worst, "healthy");
     return {
@@ -142,6 +198,8 @@ export class CommsHubProviderHealthService {
       providers,
       checkedAt,
       source: "current_runtime_outcomes",
+      includesPersistedOutcomes: true,
+      evidenceStoreAvailable,
       evidenceStaleAfterMs: this.context.config.providerHealthStaleMs,
       passiveMonitoring: true,
     };
