@@ -47,6 +47,11 @@ Assess observed journey defects separately.
 - Free-review fragments collectively cover the supplied bounded bundle. A fragment boundary is not proof that the original website or its data is missing. Check the \
 authoritative scope and coverage supplied alongside the reviews; genuine sampling/compaction limits remain limitations. Do not infer site-wide defects from aggregate \
 keyword counts, case-insensitive charset spelling, or repeated desktop/mobile navigation without checking the actual context.
+- The authoritative observedPageFacts are original crawl observations, not model summaries. Check schemaTypes and journeyLinks before claiming markup or CTAs are missing.
+- Omitted nested fields, previews, and depth limits are evidence limitations, never proof of a missing feature. A newsletter CTA can use a glossary/download label.
+- A skip link, brand/home links and separate desktop/mobile navigation are legitimate patterns; do not remove them just because destinations or labels repeat.
+- An absent analytics export does not prove tracking is unconfigured. A link to Amazon is an external purchase journey; absent on-site pricing does not prove checkout is broken.
+- Any narrower suspected defect must name the specific observed page, evidence and verification needed before claiming it is Confirmed.
 - Return JSON only. Do not return markdown fences, the prompt, private reasoning or chain-of-thought.
 
 Required JSON shape:
@@ -315,6 +320,23 @@ function compactPage(page) {
   }, { maxArray: 15, maxKeys: 35, maxString: 800 });
 }
 
+export function digitalGrowthObservedFacts(pages) {
+  // Keep original crawl facts separate from nested prompt compaction and model summaries.
+  return arr(pages).slice(0, 25).map(value => {
+    const page = obj(value);
+    const links = arr(page.ctas).map(obj);
+    return {
+      route: trim(page.route || page.path).slice(0, 300),
+      status: page.status || page.statusCode,
+      schemaTypes: arr(page.schemaTypes).slice(0, 12).map(type => trim(type).slice(0, 80)),
+      ctaCount: links.length,
+      journeyLinks: links.filter(link => /newsletter|subscribe|glossary|podcast|buy|purchase|amazon/i.test(`${link.label || ""} ${link.href || ""}`))
+        .filter((link, index, selected) => selected.findIndex(other => other.href === link.href) === index)
+        .slice(0, 6).map(link => ({label: trim(link.label).slice(0, 100), href: trim(link.href).slice(0, 240)})),
+    };
+  });
+}
+
 function compactPayload(payload) {
   const input = obj(payload);
   return {
@@ -333,6 +355,7 @@ function compactPayload(payload) {
     navigationEvidence: compactValue(input.navigationEvidence || {}, { maxArray: 25, maxKeys: 60, maxString: 900 }),
     measurementAvailability: compactValue(input.measurementAvailability || {}, { maxArray: 15, maxKeys: 40, maxString: 600 }),
     websiteAuditPolicy: compactWebsiteAuditPolicy(),
+    observedPageFacts: digitalGrowthObservedFacts(input.priorityPages),
   };
 }
 
@@ -439,6 +462,7 @@ function assessmentContext(evidence) {
     inventory: evidence.inventory,
     coverage: evidence.coverage,
     reviewedPriorityRoutes: arr(evidence.priorityPages).map(page => page.route),
+    observedPageFacts: evidence.observedPageFacts,
     evidenceFragments: "All supplied fragments belong to one bounded evidence bundle; fragment boundaries are not missing source data.",
   };
 }

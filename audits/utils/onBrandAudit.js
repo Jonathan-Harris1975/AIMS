@@ -576,33 +576,50 @@ async function runModelAudit({ sessionId, evidence, dryRun, monthlyReview = fals
 }
 
 export async function runMonthlyBrandSections({messages, evidence, sessionId}, request = resilientRequest) {
+  const defectSources = {rssDefects:'rss_feed',socialDefects:'zernio_blog_social',podcastDefects:'podcast_transcript',pipelineDefects:'pipeline'};
+  const assemble = value => normaliseOnBrandReport({...value, confirmedDefectsLedger:
+    Object.keys(defectSources).flatMap(key => arr(value[key]))}, evidence);
   const configuration = {
     sections: [
       ["verdict", ["auditCompletionState", "sessionId", "generatedAt", "window", "executiveVerdict", "sourceCoverage", "scorecard", "confirmedStrengths", "limitations"]],
-      ["defects", ["confirmedDefectsLedger"]],
+      ...Object.entries(defectSources).map(([key, source]) => [`${source}-defects`, [key],
+        `Return ${key} as an array using the confirmedDefectsLedger row schema, only for sourceType ${source}. ` +
+        "Do not repeat deterministicPreflight defects: the report builder retains every original deterministic row. " +
+        "Group repeated observations by root cause. Keep each string under 120 characters except exactEvidence, which may use 240 characters. " +
+        "Return an empty array only when no additional confirmed defect exists for this source."]),
       ["channels", ["rssFindings", "zernioBlogSocialFindings", "podcastTranscriptFindings", "patternLevelDiagnosis"]],
       ["guardrails", ["promptLevelDiagnosis", "pipelineLevelDiagnosis", "rankedRemediationPlan", "doNotChange"]],
     ],
     system: messages[0].content,
     user: messages[1].content,
     parse: parseJsonObject,
+    validateSection: (_name, value) => {
+      for (const [key, source] of Object.entries(defectSources)) {
+        if (!(key in value)) continue;
+        if (!Array.isArray(value[key]) || value[key].some(row => !row || row.sourceType !== source)) {
+          throw new Error(`Monthly brand ${key} must be an array of ${source} defect records`);
+        }
+      }
+    },
     options: {sessionId, section:"monthly-on-brand", max_tokens:REPORT_MAX_TOKENS, temperature:REPORT_TEMPERATURE,
       timeoutMs:Number(process.env.ON_BRAND_AUDIT_TIMEOUT_MS || 90000)},
   };
-  try { return normaliseOnBrandReport(await synthesiseAuditSections(request, configuration), evidence); }
+  try { return assemble(await synthesiseAuditSections(request, configuration)); }
   catch (firstError) {
     // Repair only malformed unfinished sections. Provider failures retain a
     // partial report and never trigger a duplicate complete paid audit.
     let finalError = firstError;
     if (!firstError.code && firstError instanceof SyntaxError) {
       try {
-        return normaliseOnBrandReport(await synthesiseAuditSections(request, {
+        return assemble(await synthesiseAuditSections(request, {
           ...configuration, previous:firstError.auditPartial || {},
           user:configuration.user + "\nThe unfinished section contained invalid JSON. Return valid compact JSON without repeating accepted sections.",
-        }), evidence);
+        }));
       } catch (repairError) { finalError = repairError; }
     }
-    return normaliseOnBrandReport({...finalError.auditPartial, auditCompletionState:"Partial"}, evidence,
+    const partial = finalError.auditPartial || {};
+    const confirmedDefectsLedger = Object.keys(defectSources).flatMap(key => arr(partial[key]));
+    return normaliseOnBrandReport({...partial, confirmedDefectsLedger, auditCompletionState:"Partial"}, evidence,
       {rawModelError:`Monthly ${finalError.auditSection || "unknown"} section failed: ${finalError.message}`});
   }
 }

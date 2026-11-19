@@ -27,6 +27,27 @@ test('credit shortage and unrelated failures are not retried', async () => {
   assert.equal(isAuditInFlightRefusal(Object.assign(busy(),{status:400})),false);
 });
 
+test('only an explicit upstream shared-pool 429 receives one bounded same-route retry', async () => {
+  let calls = 0;
+  const refusal = Object.assign(new Error('gemini model is temporarily rate-limited upstream'), {status:429,retryAfterMs:30000});
+  const result = await createAuditCapacityQueue()(async () => {
+    if (++calls === 1) throw refusal;
+    return 'same economy route';
+  }, {wait:async delay => assert.equal(delay,30000)});
+  assert.equal(result,'same economy route');
+  assert.equal(calls,2);
+  for (const message of ['daily request quota exceeded','Insufficient credits','unrelated 429']) {
+    let attempts = 0;
+    await assert.rejects(createAuditCapacityQueue()(async () => {
+      attempts++;throw Object.assign(new Error(message),{status:429});
+    }, {wait:async () => assert.fail('must not retry account or unknown limits')}));
+    assert.equal(attempts,1);
+  }
+  let attempts = 0;
+  await assert.rejects(createAuditCapacityQueue()(async () => {attempts++;throw refusal;},{wait:async()=>{}}));
+  assert.equal(attempts,2);
+});
+
 test('a persistent refusal stops after two attempts and releases the queue', async () => {
   const queue=createAuditCapacityQueue();let calls=0;
   await assert.rejects(queue(async()=>{calls++;throw busy();},{wait:async()=>{}}));

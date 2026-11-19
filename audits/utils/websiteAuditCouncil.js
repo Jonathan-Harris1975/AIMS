@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { chromium } from "playwright-core";
 import { compactWebsiteAuditPolicy } from "./websiteAuditPolicy.js";
+import { digitalGrowthObservedFacts } from "./digitalGrowthAnalysis.js";
 
 export const WEBSITE_AUDIT_COUNCIL_MEMBERS = Object.freeze([
   { seat: 1, role: "Council Chair / Systems Integrator", remit: "Reconcile all three audits, resolve dependencies and produce one implementation order." },
@@ -40,6 +41,9 @@ Council seats are supplied in the input and must all be represented. The source 
 
 Non-negotiable rules:
 - Treat supplied evidence as the only source of truth. Never invent analytics, traffic, sales, search volume, browser runs, screenshots, files or test results.
+- Original observedPageFacts override conflicting model summaries. Inspect schemaTypes and journeyLinks before claiming missing structured data or CTAs.
+- A newsletter link may be labelled as a glossary download. Skip links, brand/home links and separate desktop/mobile menus are valid navigation patterns.
+- Missing exports or compacted fields are measurement/evidence limitations, not proof of absent tracking, broken checkout or missing site features.
 - Preserve explicit uncertainty and audit-stage limitations.
 - A blocked or incomplete stage remains a finding, not a reason to fabricate completion.
 - Do not score Mobile UX unless the rendered hard gate completed with the required evidence. Use null and "Not Scored - Evidence Gate Not Met" when it did not.
@@ -270,6 +274,7 @@ function compactDigital(report = {}) {
     visualDesignEvidence: source.visualDesignEvidence || evidence.visualDesignEvidence || null,
     performanceEvidence: source.performanceEvidence || evidence.performanceEvidence || null,
     securityEvidence: source.securityEvidence || evidence.securityEvidence || null,
+    observedPageFacts: digitalGrowthObservedFacts(evidence.priorityPages || source.priorityPages),
     evidenceSummary: {
       inventory: evidence.inventory || source.inventory || {},
       priorityPages: arr(evidence.priorityPages || source.priorityPages).slice(0, 25).map((page) => ({
@@ -914,7 +919,9 @@ export async function runWebsiteAuditCouncil(stageReports) {
       maxRetries: Number(process.env.WEBSITE_AUDIT_COUNCIL_MAX_RETRIES || 0),
       },
       system: SYSTEM_PROMPT + "\nDo not duplicate unifiedFindings: they are assembled locally from masterIssueLedger with the same finding IDs.",
-      user: `Consolidate this verified audit evidence bundle into the required council JSON.\n${JSON.stringify(reviews)}`,
+      user: "Original crawl observations take precedence over model summaries. Do not infer absent markup/CTAs from omissions or depth limits.\n" +
+        `${JSON.stringify(payload.digitalGrowth.observedPageFacts)}\n` +
+        `Consolidate this verified audit evidence bundle into the required council JSON.\n${JSON.stringify(reviews)}`,
     });
     combined.unifiedFindings = arr(combined.masterIssueLedger).map(row => ({...row}));
     const normalised = normaliseCouncil(combined, stageReports);
