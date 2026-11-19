@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import request from "supertest";
@@ -11,10 +10,16 @@ import { testCredential } from "./helpers/testCredentials.js";
 const ORIGINAL_ENV = { ...process.env };
 const originalFetch = globalThis.fetch;
 const videoFixtureDir = mkdtempSync(path.join(os.tmpdir(), "blotato-test-"));
-const videoFixturePath = path.join(videoFixtureDir, "video.mp4");
-execFileSync("ffmpeg", ["-loglevel", "error", "-f", "lavfi", "-i", "color=black:s=720x1280:r=24",
-  "-t", "35", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", videoFixturePath]);
-const videoFixture = readFileSync(videoFixturePath);
+// CI runners do not provide FFmpeg. Stub only the local probe/frame commands;
+// the integration still exercises download, QA response and provider handoff.
+writeFileSync(path.join(videoFixtureDir, "ffprobe"), `#!${process.execPath}
+process.stdout.write(JSON.stringify({streams:[{codec_type:"video",duration:"40",width:1080,height:1920,r_frame_rate:"30/1"}]}));
+`, { mode: 0o755 });
+writeFileSync(path.join(videoFixtureDir, "ffmpeg"), `#!${process.execPath}
+require("node:fs").writeFileSync(process.argv.at(-1), Buffer.from("fixture-image"));
+`, { mode: 0o755 });
+process.env.PATH = `${videoFixtureDir}${path.delimiter}${process.env.PATH || ""}`;
+const videoFixture = Buffer.from("fixture-video");
 
 
 function restoreEnv() {
@@ -50,6 +55,7 @@ const capturedVisualRequests = [];
 const capturedPostRequests = [];
 const scheduledPostTimes = new Map();
 let scheduledPostStatusMode = "scheduled";
+let renderedReviewHardFailure = false;
 
 function countHashtags(value = "") {
   return (String(value || "").match(/(^|\s)#[\p{L}\p{N}_]+/gu) || []).length;
@@ -64,12 +70,13 @@ async function handleMockRequest(req, res) {
     return;
   }
 
-  if (req.method === "GET" && ["/feed.xml", "/feed-scheduled.xml", "/feed-in-progress.xml"].includes(url.pathname)) {
+  if (req.method === "GET" && ["/feed.xml", "/feed-scheduled.xml", "/feed-in-progress.xml", "/feed-hard-qa.xml"].includes(url.pathname)) {
+    const hardQaFixture = url.pathname === "/feed-hard-qa.xml";
     const scheduledFixture = url.pathname === "/feed-scheduled.xml";
     const inProgressFixture = url.pathname === "/feed-in-progress.xml";
-    const fixtureTitle = inProgressFixture ? "AI agents move into pending office workflows"
+    const fixtureTitle = hardQaFixture ? "AI quality controls at the production handover" : inProgressFixture ? "AI agents move into pending office workflows"
       : scheduledFixture ? "AI agents move into scheduled office workflows" : "AI agents move from chat to office tasks";
-    const fixtureSlug = inProgressFixture ? "agents-pending-office-workflows"
+    const fixtureSlug = hardQaFixture ? "ai-quality-controls-handover" : inProgressFixture ? "agents-pending-office-workflows"
       : scheduledFixture ? "agents-scheduled-office-workflows" : "agents-office-tasks";
     res.writeHead(200, { "content-type": "application/rss+xml" });
     res.end(`<?xml version="1.0" encoding="UTF-8"?>
@@ -93,7 +100,8 @@ async function handleMockRequest(req, res) {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ score: 90, hookPerformance: 90,
         sourceRelevance: 90, sceneAlignment: 90, continuity: 90, visualProgression: 90, visualQuality: 90,
-        captionLegibility: 90, defects: [], hardDefects: [], summary: "Passed", recommendation: "" }) } }] }));
+        captionLegibility: 90, defects: [], hardDefects: renderedReviewHardFailure ? ["The video depicts an unrelated subject"] : [],
+        summary: "Review", recommendation: "Show the source story" }) } }] }));
       return;
     }
     capturedChatRequests.push(payload);
@@ -105,7 +113,9 @@ async function handleMockRequest(req, res) {
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Target duration: about 45 seconds. Allowed finished range: 35-55 seconds")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("HUMAN-CENTRED SOCIAL VISUALS")));
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("First frame rule")));
-      assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
+      if (!renderedReviewHardFailure) {
+        assert.ok(payload.messages.some((message) => String(message.content || "").includes("CTA: For straight-talking artificial intelligence analysis, keep Jonathan Harris on your radar.")));
+      }
       assert.ok(!payload.messages.some((message) => String(message.content || "").includes("CTA: Follow Jonathan Harris for more")));
       assert.equal(payload.response_format, undefined);
       assert.ok(payload.messages.some((message) => String(message.content || "").includes("Provide exactly 5 scenes")));
@@ -420,6 +430,7 @@ test.afterEach(() => {
   process.env.BLOTATO_API_BASE = `${mockBase}/v2`;
   process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed.xml`;
   scheduledPostStatusMode = "scheduled";
+  renderedReviewHardFailure = false;
   process.env.BLOTATO_RSS_PREFER_R2 = "false";
   process.env.BLOTATO_INLINE_PUBLISH_JOBS = "true";
   process.env.BLOTATO_VIDEO_POLL_ATTEMPTS = "2";
@@ -730,4 +741,20 @@ test("Blotato accepts a provider-acknowledged in-progress scheduled submission",
   } finally {
     scheduledPostStatusMode = "scheduled";
   }
+});
+
+
+test("scheduled video with a material visual defect never reaches provider publication", async () => {
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(new Date()).toUpperCase();
+  process.env[`BLOTATO_SCHEDULE_${weekday}_PM`] = "00:00";
+  process.env.BLOTATO_SCHEDULE_RECOVERY_ENABLED = "true";
+  process.env.BLOTATO_SCHEDULE_MIN_LEAD_MS = "60000";
+  process.env.BLOTATO_DAILY_PAID_RENDER_CAP = "5";
+  process.env.BLOTATO_NEWS_RSS_URL = `${mockBase}/feed-hard-qa.xml`;
+  renderedReviewHardFailure = true;
+  const response = await request(app).post("/blotato/shorts/reality-check/schedule").set(auth).send({});
+  assert.equal(response.status, 422, JSON.stringify(response.body));
+  assert.match(JSON.stringify(response.body), /finished-video QA failed/i);
+  assert.ok(capturedVisualRequests.length > 0);
+  assert.equal(capturedPostRequests.length, 0);
 });
