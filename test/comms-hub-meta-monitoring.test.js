@@ -59,6 +59,7 @@ test("Meta polling emits monitoring telemetry for Facebook and Instagram without
   const logs = [];
   const providerCalls = [];
   const repository = {
+    async ensureSocialPollJobs() {},
     async claimSocialPollJob() { return jobs.shift() || null; },
     async completeSocialPollJob(value) { completed.push(value); },
     async failSocialPollJob() { assert.fail("Meta monitoring poll should not fail"); },

@@ -295,7 +295,7 @@ export class CommsHubSocialPollWorker {
     const client = this.zernio?.[job.credential_family];
     if (!client) throw new Error(`Zernio ${job.credential_family} client is unavailable.`);
     const cycleStartedAt = job.cycle_started_at || new Date().toISOString();
-    if (!job.last_success_at) {
+    if (!job.last_success_at && !job.fresh_since_at) {
       await this.writeLog("info", "commsHub.socialPoll.baselined", {
         workerId: this.workerId,
         jobId: job.id,
@@ -335,6 +335,19 @@ export class CommsHubSocialPollWorker {
     let duplicates = 0;
     let noDueJobs = false;
     try {
+      // Restore missing jobs without changing existing cursors or leases. New
+      // rows take the normal forward-only baseline before any provider read.
+      const jobs = Object.entries(SOCIAL_CHANNEL_CAPABILITIES).flatMap(([platform, capability]) => {
+        const family = this.config.zernioFamilies?.[capability.family];
+        if (!families.includes(capability.family) || !family?.platforms?.includes(platform)) return [];
+        return capability.pollingResources.map((resource) => ({ family: capability.family, platform, resource }));
+      });
+      const restoredJobs = await this.repository.ensureSocialPollJobs(jobs, new Date().toISOString());
+      if (restoredJobs) {
+        await this.writeLog("warn", "commsHub.socialPoll.jobsRestored", {
+          workerId: this.workerId, restoredJobs, historyGapRequiresReview: true,
+        });
+      }
       for (let index = 0; index < maximum; index += 1) {
         const now = new Date().toISOString();
         const job = await this.repository.claimSocialPollJob({
@@ -374,9 +387,9 @@ export class CommsHubSocialPollWorker {
             workerId: this.workerId,
             cursor: cycleComplete ? null : result.nextCursor,
             cycleStartedAt: cycleComplete ? null : result.cycleStartedAt,
-            lastSuccessAt: cycleComplete ? completedAt : null,
+            lastSuccessAt: cycleComplete && !result.baseline ? completedAt : null,
             freshSinceAt: result.baseline ? result.cycleStartedAt : null,
-            nextAttemptAt: cycleComplete ? isoAfter(this.config.socialPollMs) : isoAfter(1_000),
+            nextAttemptAt: cycleComplete && !result.baseline ? isoAfter(this.config.socialPollMs) : isoAfter(1_000),
             completedAt,
           });
           processedJobs += 1;
