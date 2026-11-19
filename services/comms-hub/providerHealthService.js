@@ -52,6 +52,9 @@ function persistedOutcome(row) {
     failures: Number(row.failure_count || 0),
     failureRate: Number(evidence.failureRate || 0),
     lastStatus: row.last_status_code,
+    lastOk: typeof evidence.lastOk === "boolean" ? evidence.lastOk
+      : row.last_status_code === "success" ? true
+        : Number(row.success_count) === 0 && Number(row.failure_count) > 0 ? false : null,
     lastAt: at,
     source: "persisted_outcome",
   };
@@ -145,6 +148,11 @@ export class CommsHubProviderHealthService {
       const provider = String(entry.provider || "unknown");
       const adapter = String(entry.routeKey || "unknown");
       const status = classify(entry, this.context.config, nowMs);
+      // The status is provider-specific (for example, "accepted" or
+      // "success-relaxed"); only the recorded outcome establishes success.
+      const lastOk = typeof entry.lastOk === "boolean" ? entry.lastOk
+        : entry.lastStatus === "success" ? true
+          : Number(entry.successes) === 0 && Number(entry.failures) > 0 ? false : null;
       const record = {
         id: stableId("phl", provider, adapter, observedAt),
         provider,
@@ -154,12 +162,12 @@ export class CommsHubProviderHealthService {
         evidenceSource: entry.source || (entry.lastAt ? "runtime_outcome" : "configuration"),
         successCount: Number(entry.successes || 0),
         failureCount: Number(entry.failures || 0),
-        consecutiveFailures: entry.lastStatus === "success" || entry.lastStatus === "configured"
+        consecutiveFailures: lastOk === true || entry.lastStatus === "configured"
           ? 0
           : Number(entry.consecutiveFailures ?? entry.failures ?? 0),
         lastStatusCode: entry.lastStatus || null,
-        lastSuccessAt: entry.lastAt && entry.lastStatus === "success" ? entry.lastAt : null,
-        lastFailureAt: entry.lastAt && entry.lastStatus !== "success" && !["configured", "disabled"].includes(entry.lastStatus) ? entry.lastAt : null,
+        lastSuccessAt: entry.lastAt && lastOk === true ? entry.lastAt : null,
+        lastFailureAt: entry.lastAt && lastOk === false ? entry.lastAt : null,
         observedAt,
         // The assessment time is not evidence of a successful provider call.
         // A route is verified only by the timestamp of its actual runtime outcome.
@@ -173,6 +181,7 @@ export class CommsHubProviderHealthService {
           releaseId: snapshot.releaseId || null,
           lastObservedAt: entry.lastAt || null,
           evidenceSource: entry.source || (entry.lastAt ? "runtime_outcome" : "configuration"),
+          lastOk,
         },
       };
       captured.push(record);

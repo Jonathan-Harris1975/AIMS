@@ -177,6 +177,7 @@ export function recordProviderOutcome({ routeKey, provider, ok, durationMs, stat
   current.totalLatencyMs += latency;
   current.maxLatencyMs = Math.max(current.maxLatencyMs, latency);
   current.lastStatus = status || (ok ? "success" : "failed");
+  current.lastOk = Boolean(ok);
   current.lastAt = new Date().toISOString();
   current.averageLatencyMs = current.calls ? Math.round(current.totalLatencyMs / current.calls) : 0;
   current.failureRate = current.calls ? Number((current.failures / current.calls).toFixed(4)) : 0;
