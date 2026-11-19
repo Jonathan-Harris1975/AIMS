@@ -81,3 +81,14 @@ test("long scene prompts retain the visible-face opening and text-free constrain
   assert.match(inputs.scenes[0].mediaSource, /blank unmarked screens/i);
   assert.ok(inputs.scenes[0].mediaSource.length <= 720);
 });
+
+
+test("long source prompts do not truncate an out-of-frame hand instruction into a false defect", async () => {
+  process.env.BLOTATO_IMAGE_PROMPT_PROFILE = "flux-schnell";
+  const { buildBlotatoVideoInputs } = await import(`../services/blotato/utils/newsShortsService.js?crop=${Date.now()}`);
+  const inputs = buildBlotatoVideoInputs({ lane: "reality-check", hook: "A safety check matters.",
+    script: "A safety check matters when a system spreads information.",
+    scenes: [{ mediaSource: `${"An analyst checks a network in a real control room. ".repeat(8)} hands and fingers outside frame; clear action.`,
+      script: "A safety check matters when a system spreads information." }] });
+  assert.doesNotMatch(inputs.scenes[0].mediaSource, /\bhands?\b/i);
+});
