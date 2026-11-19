@@ -35,13 +35,14 @@ test("newsletter art direction uses only the selected lead and receives bounded 
     assert.equal(context.supportingHeadlines, undefined);
     assert.deepEqual(context.recovery.reasonCodes, ["text_or_pseudotext"]);
     assert.match(context.recovery.direction, /different source-supported physical scene/);
+    assert.equal(context.recovery.previousVisualDirection, "A generic desk and monitor");
     inspected = true;
     return { ok: true, json: async () => ({ choices: [{ message: { content: "An engineer disconnects an unmarked access key from a workstation, seen from behind." } }] }) };
   };
   try {
     const prompt = await buildHeroImagePrompt({ profile: { id: "ai-edge" }, heroHeadline: "AI access controls",
       leadStory: { title: "AI access controls", summary: "Limiting AI tool permissions." }, bigThree: [{ title: "Unrelated electricity story" }],
-      repairDiagnostics: { reasonCodes: ["text_or_pseudotext"] }, sessionId: "prompt-recovery" });
+      repairDiagnostics: { reasonCodes: ["text_or_pseudotext"] }, previousVisualDirection: "A generic desk and monitor", sessionId: "prompt-recovery" });
     assert.ok(inspected);
     assert.match(prompt, /disconnects an unmarked access key/);
   } finally {
@@ -50,4 +51,25 @@ test("newsletter art direction uses only the selected lead and receives bounded 
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
+});
+
+
+test("newsletter repair keeps the source context and avoids repeating the failed direction", async () => {
+  const { generateHeroImage } = await import("../services/newsletter/engine/heroImage.js");
+  const seen = [], prompts = [];
+  const result = await generateHeroImage({ profile: { id: "test", storage: { keyPrefix: "test" } },
+    heroHeadline: "AI quality checking", leadStory: { title: "AI quality checking", summary: "Human checks of tool output" },
+    sessionId: "hero-fix" }, {
+    buildPrompt: async (args) => { seen.push(args); return seen.length === 1 ? "Generic desk" : "An analyst checks a physical output"; },
+    createArtwork: async (args) => {
+      prompts.push(args.prompt);
+      return prompts.length === 1 ? { ok: false, artworkDiagnostics: { stage: "visual_qa", reasonCodes: ["generic_scene"] } }
+        : { ok: true, publicUrl: "https://example.test/new.png", key: "new.png", imageStatus: "generated" };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(seen[1].previousVisualDirection, "Generic desk");
+  assert.equal(seen[1].leadStory.title, "AI quality checking");
+  assert.match(prompts[1], /distinct, believable source-specific setting and action/);
+  assert.doesNotMatch(prompts[1], /close-up of a single plausible physical object/);
 });
