@@ -1574,6 +1574,14 @@ function jobHasPublicationEvidence(job = {}) {
  * had occurred. Bound the replacement count so a persistent provider-quality
  * problem cannot create an unlimited credit loop.
  */
+export function resumableReplacementHistory(job = {}) {
+  return job.failedRenderReplacement || null;
+}
+
+export function canReuseRenderedReview(qa) {
+  return Boolean(qa && qa.skipped !== true);
+}
+
 export function isReplaceableRenderedQualityFailure(job = {}) {
   if (job.status !== "failed" || job.phase !== "rendered-quality-failed") return false;
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
@@ -2158,7 +2166,7 @@ async function runPublishJobImpl({
     }
 
     let renderedVideoQa;
-    if (recoveredPublishVideo && failedPublishRecovery?.renderedVideoQa) {
+    if (recoveredPublishVideo && canReuseRenderedReview(failedPublishRecovery?.renderedVideoQa)) {
       renderedVideoQa = { ...failedPublishRecovery.renderedVideoQa, reusedForScheduleRetry: true };
     } else {
       try {
@@ -2567,6 +2575,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   let failedRenderReplacement = null;
   let failedPublishRecovery = null;
   let pendingRenderRecovery = null;
+  let startingReplacementRender = false;
   if (scheduleSlot) {
     const existing = await findExistingScheduledSlotJob(lane.jobType, scheduleSlot, scheduleDate);
     if (existing) {
@@ -2596,6 +2605,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     }
     const pending = await findRetryableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
     if (pending) {
+      failedRenderReplacement = resumableReplacementHistory(pending);
       pendingRenderRecovery = {
         sessionId: pending.sessionId,
         visualId: pending.videoId,
@@ -2617,6 +2627,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     }
     const retryablePublish = await findRetryableScheduledPublish(lane.jobType, scheduleSlot, scheduleDate);
     if (retryablePublish) {
+      failedRenderReplacement = resumableReplacementHistory(retryablePublish);
       failedPublishRecovery = {
         sessionId: retryablePublish.sessionId,
         visualId: trim(retryablePublish.videoId || retryablePublish.result?.visualId) || null,
@@ -2648,6 +2659,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
       ? null
       : await findReplaceableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
     if (replaceable) {
+      startingReplacementRender = true;
       failedRenderReplacement = {
         sessionId: replaceable.sessionId,
         visualId: trim(replaceable.videoId || replaceable.result?.visualId) || null,
@@ -2735,7 +2747,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
       failedPublishes: [],
       // Remove the rejected render from the active job before the daily cap is
       // evaluated. Its identity remains in failedRenderReplacement for audit.
-      ...(failedRenderReplacement ? {
+      ...(startingReplacementRender ? {
         videoId: undefined,
         videoDashboardUrl: undefined,
         mediaUrl: undefined,
