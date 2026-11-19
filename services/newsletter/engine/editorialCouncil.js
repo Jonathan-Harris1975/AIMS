@@ -100,24 +100,24 @@ async function requestCouncilJsonImpl(route, { sessionId, messages, maxTokens = 
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (attempt > 1) claimRepairAction("recoveries");
-    const raw = await resilientRequest(route, {
-      sessionId,
-      validateContent: (raw) => {
-        try { parseNewsletterReview(raw, schema, "newsletter council response"); }
-        catch (error) {
-          error.code = "AI_INVALID_STRUCTURED_OUTPUT";
-          error.status = "invalid_completion";
-          throw error;
-        }
-      },
-      max_tokens: attempt === 1 ? maxTokens : maxTokens * 2,
-      reasoning: { effort: "none", exclude: true },
-      temperature: attempt === 1 ? 0.15 : 0,
-      messages: attempt === 1
-        ? messages
-        : [messages[0], { role: "user", content: `${messages[1]?.content || ""}\n\nReturn one valid JSON object only.` }],
-    });
     try {
+      const raw = await resilientRequest(route, {
+        sessionId,
+        validateContent: (raw) => {
+          try { parseNewsletterReview(raw, schema, "newsletter council response"); }
+          catch (error) {
+            error.code = "AI_INVALID_STRUCTURED_OUTPUT";
+            error.status = "invalid_completion";
+            throw error;
+          }
+        },
+        max_tokens: attempt === 1 ? maxTokens : maxTokens * 2,
+        reasoning: { effort: "none", exclude: true },
+        temperature: attempt === 1 ? 0.15 : 0,
+        messages: attempt === 1
+          ? messages
+          : [messages[0], { role: "user", content: `${messages[1]?.content || ""}\n\nReturn one valid JSON object only.` }],
+      });
       const data = parseNewsletterReview(raw, schema, "newsletter council response");
       if (Number.isFinite(data.score) && data.score >= THRESHOLDS.newsletter.qaPassThreshold &&
           data.blocking === false && data.verdict === "pass" && Array.isArray(data.issues)) {
@@ -125,7 +125,10 @@ async function requestCouncilJsonImpl(route, { sessionId, messages, maxTokens = 
       }
       return data;
     }
-    catch (error) { lastError = error; }
+    catch (error) {
+      if (error?.code !== "AI_INVALID_STRUCTURED_OUTPUT" && error?.status !== "invalid_completion") throw error;
+      lastError = error;
+    }
   }
   throw lastError || new Error("Council response was not valid JSON.");
 }
