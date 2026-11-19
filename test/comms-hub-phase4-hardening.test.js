@@ -613,7 +613,6 @@ test("Provider health status hides previously stored telemetry from other AIMS r
 test("Provider health reads fresh runtime evidence instead of historical D1 captures", async () => {
   const d1 = new SqliteD1();
   const staleAt = new Date(Date.now() - 3_600_000).toISOString();
-  const now = new Date().toISOString();
   const context = {
     config: {
       providerHealthStaleMs: 900_000,
@@ -623,7 +622,7 @@ test("Provider health reads fresh runtime evidence instead of historical D1 capt
     },
     aiRepository: new CommsAiRepository(d1),
   };
-  // A recently captured D1 row must not override the actual runtime outcome.
+  // A recent D1 capture must not make an old provider failure fresh.
   await context.aiRepository.recordProviderHealthBatch([{
     id: "historical-zernio-failure",
     provider: "zernio-meta",
@@ -634,8 +633,8 @@ test("Provider health reads fresh runtime evidence instead of historical D1 capt
     consecutiveFailures: 5,
     lastStatusCode: "500",
     lastSuccessAt: null,
-    lastFailureAt: now,
-    observedAt: now,
+    lastFailureAt: staleAt,
+    observedAt: new Date().toISOString(),
     evidence: { calls: 5, failureRate: 1 },
   }]);
   let current = {
@@ -666,4 +665,70 @@ test("Provider health reads fresh runtime evidence instead of historical D1 capt
   assert.notEqual(fresh.status, "unknown");
   assert.equal(fresh.status, "degraded");
   assert.equal(updated.checkedAt >= unverified.checkedAt, true);
+
+test("Provider health restores real, recent provider outcomes across process restarts", async () => {
+  const d1 = new SqliteD1();
+  const at = new Date().toISOString();
+  const repository = new CommsAiRepository(d1);
+  await repository.recordProviderHealthBatch([{
+    id: "persisted-success",
+    provider: "one.com-imap",
+    adapter: "comms-hub:email-imap",
+    status: "healthy",
+    successCount: 1,
+    failureCount: 0,
+    consecutiveFailures: 0,
+    lastStatusCode: "success",
+    lastSuccessAt: at,
+    lastFailureAt: null,
+    observedAt: at,
+    evidence: { calls: 1, failureRate: 0, lastObservedAt: at },
+  }]);
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      emailEnabled: true,
+      oneComEmailAddress: "info@example.org",
+      oneComEmailUsername: "user",
+      oneComEmailPassword: "secret",
+      oneComImapHost: "imap.example.org",
+      oneComSmtpHost: "smtp.example.org",
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+    aiRepository: repository,
+  };
+  const service = new CommsHubProviderHealthService({
+    context,
+    snapshotProvider: () => ({ providers: {} }),
+  });
+  const result = await service.status();
+  const imap = result.providers.find((item) => item.adapter === "comms-hub:email-imap");
+  assert.equal(imap.status, "healthy");
+  assert.equal(imap.evidenceSource, "persisted_outcome");
+  assert.equal(imap.lastObservedAt, at);
+  assert.equal(result.evidenceStoreAvailable, true);
+  const smtp = result.providers.find((item) => item.adapter === "comms-hub:email-smtp");
+  assert.equal(smtp.readiness, "configured");
+  assert.equal(smtp.status, "unknown");
+});
+
+test("Provider health falls back to current runtime events if evidence storage fails", async () => {
+  const at = new Date().toISOString();
+  const service = new CommsHubProviderHealthService({
+    context: {
+      config: { providerHealthStaleMs: 900_000, providerHealthFailureThreshold: 3, zernioFamilies: {}, aiEnabled: false },
+      aiRepository: { async listLatestProviderHealth() { throw new Error("D1 unavailable"); } },
+    },
+    snapshotProvider: () => ({
+      providers: {
+        live: { routeKey: "comms-hub:intake", provider: "jotform", calls: 1,
+          successes: 1, failures: 0, failureRate: 0, lastStatus: "success", lastAt: at },
+      },
+    }),
+  });
+  const result = await service.status();
+  assert.equal(result.evidenceStoreAvailable, false);
+  assert.equal(result.providers.find((p) => p.adapter === "comms-hub:intake").status, "healthy");
 });
