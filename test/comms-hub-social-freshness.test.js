@@ -58,8 +58,22 @@ test("first social poll establishes a freshness floor without requesting provide
   assert.equal(result.ingested, 0);
   assert.equal(completions.length, 1);
   assert.ok(completions[0].freshSinceAt);
-  assert.ok(completions[0].lastSuccessAt);
+  assert.equal(completions[0].lastSuccessAt, null);
   assert.equal(logs.some((entry) => entry.event === "commsHub.socialPoll.baselined"), true);
+});
+
+test("a baselined social job performs a provider read before recording success", async () => {
+  let calls = 0;
+  const worker = new CommsHubSocialPollWorker({
+    repository: {},
+    zernio: { video: { async listCommentedPosts() { calls += 1; return { data: [], pagination: { hasMore: false } }; } } },
+    config: workerConfig(),
+    writeLog: async () => {},
+  });
+  const result = await worker.processJob({ credential_family: "video", platform: "youtube", resource: "comments",
+    fresh_since_at: "2026-11-19T06:00:00.000Z", last_success_at: null });
+  assert.equal(calls, 1);
+  assert.notEqual(result.baseline, true);
 });
 
 test("Facebook and Instagram DM polling discards messages older than the freshness floor", async () => {

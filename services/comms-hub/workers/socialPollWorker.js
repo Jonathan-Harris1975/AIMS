@@ -295,7 +295,7 @@ export class CommsHubSocialPollWorker {
     const client = this.zernio?.[job.credential_family];
     if (!client) throw new Error(`Zernio ${job.credential_family} client is unavailable.`);
     const cycleStartedAt = job.cycle_started_at || new Date().toISOString();
-    if (!job.last_success_at) {
+    if (!job.last_success_at && !job.fresh_since_at) {
       await this.writeLog("info", "commsHub.socialPoll.baselined", {
         workerId: this.workerId,
         jobId: job.id,
@@ -387,9 +387,9 @@ export class CommsHubSocialPollWorker {
             workerId: this.workerId,
             cursor: cycleComplete ? null : result.nextCursor,
             cycleStartedAt: cycleComplete ? null : result.cycleStartedAt,
-            lastSuccessAt: cycleComplete ? completedAt : null,
+            lastSuccessAt: cycleComplete && !result.baseline ? completedAt : null,
             freshSinceAt: result.baseline ? result.cycleStartedAt : null,
-            nextAttemptAt: cycleComplete ? isoAfter(this.config.socialPollMs) : isoAfter(1_000),
+            nextAttemptAt: cycleComplete && !result.baseline ? isoAfter(this.config.socialPollMs) : isoAfter(1_000),
             completedAt,
           });
           processedJobs += 1;
