@@ -132,7 +132,8 @@ function fluxSceneShotDirection(index = 0) {
 }
 
 function buildFluxSchnellScenePrompt(value = "", index = 0, maxLength = 700) {
-  const base = stripPromptBans(removeHandVisualRequests(value));
+  const base = stripPromptBans(removeHandVisualRequests(value))
+    .replace(/\bhands? fully outside frame\b/gi, "arms outside frame");
   const humanCue = humanVisualPromptSuffix(index)
     .replace(/hands? and fingers? completely outside frame/gi, "arms outside frame")
     .replace(/hands? and fingers? are not visible/gi, "arms outside frame")
