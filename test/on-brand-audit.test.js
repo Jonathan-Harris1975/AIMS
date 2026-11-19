@@ -472,8 +472,33 @@ test('monthly on-brand schema repair repeats only the unfinished section', async
     assert.equal(options.maxRetries,0);
     if(options.section.endsWith('defects')&&!broken){broken=true;return '{broken';}
     const keys=options.messages[0].content.match(/Produce ONLY these keys for this call: (.*?)\./)[1].split(', ');
-    return JSON.stringify(Object.fromEntries(keys.map(key=>[key,key==='confirmedDefectsLedger'?[]:key==='auditCompletionState'?'Complete':{}])));
+    return JSON.stringify(Object.fromEntries(keys.map(key=>[key,key.endsWith('Defects')?[]:key==='auditCompletionState'?'Complete':{}])));
   });
-  assert.deepEqual(calls,['monthly-on-brand-verdict','monthly-on-brand-defects','monthly-on-brand-defects','monthly-on-brand-channels','monthly-on-brand-guardrails']);
+  assert.deepEqual(calls,['monthly-on-brand-verdict','monthly-on-brand-rss_feed-defects','monthly-on-brand-rss_feed-defects',
+    'monthly-on-brand-zernio_blog_social-defects','monthly-on-brand-podcast_transcript-defects','monthly-on-brand-pipeline-defects',
+    'monthly-on-brand-channels','monthly-on-brand-guardrails']);
   assert.equal(result.auditCompletionState,'Partial');
+});
+
+test('source-split monthly defects retain model findings and every deterministic finding', async () => {
+  const {runMonthlyBrandSections}=await import('../audits/utils/onBrandAudit.js');
+  const evidence={metadata:{},zernioBlogSocial:{status:'complete',items:[]},podcastTranscripts:{status:'complete',items:[]},rss:{status:'complete',items:[]},
+    deterministicPreflight:[{sourceType:'rss_feed',itemTitleOrId:'RSS-1',issueType:'observed prefix',exactEvidence:'Title: Bad'}]};
+  const scores=Object.fromEntries(['overallBrandFit','rssBrandFit','zernioBlogSocialBrandFit','podcastTranscriptBrandFit','titleQuality',
+    'spokenNaturalness','editorialAuthority','antiHypeControl','implementationReadiness'].map(key=>[key,8]));
+  const run=async badShape=>runMonthlyBrandSections({sessionId:'split',messages:[{content:'system'},{content:'evidence'}],evidence},async(_route,options)=>{
+    const keys=options.messages[0].content.match(/Produce ONLY these keys for this call: (.*?)\./)[1].split(', ');
+    return JSON.stringify(Object.fromEntries(keys.map(key=>[key,
+      key==='auditCompletionState'?'Complete':key==='scorecard'?scores:key==='executiveVerdict'?{summary:'Reviewed original observations'}:
+      key==='socialDefects'?(badShape?{}:[{sourceType:'zernio_blog_social',itemTitleOrId:'POST-1',issueType:'observed label',exactEvidence:'Unpublished label'}]):
+      key.endsWith('Defects')?[]:{}])));
+  });
+  const complete=await run(false);
+  assert.equal(complete.auditCompletionState,'Complete');
+  assert.ok(complete.confirmedDefectsLedger.some(row=>row.exactEvidence==='Title: Bad'));
+  assert.ok(complete.confirmedDefectsLedger.some(row=>row.exactEvidence==='Unpublished label'));
+  const partial=await run(true);
+  assert.equal(partial.auditCompletionState,'Partial');
+  assert.ok(partial.limitations.some(row=>row.includes('must be an array')));
+  assert.ok(partial.confirmedDefectsLedger.some(row=>row.exactEvidence==='Title: Bad'));
 });
