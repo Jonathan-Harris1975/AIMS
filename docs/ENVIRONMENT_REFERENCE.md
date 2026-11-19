@@ -46,7 +46,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `APP_TITLE` | Yes | ai-config.js:362<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:373 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:308<br>services/shared/utils/stateFile.js:11<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
 | `APP_URL` | Yes | ai-config.js:361<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:372<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
-| `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:192 |
+| `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:193 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
 | `ARTWORK_CAPABILITY_TIMEOUT_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:67 |

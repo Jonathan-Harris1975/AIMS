@@ -733,3 +733,23 @@ test("Provider health falls back to current runtime events if evidence storage f
   assert.equal(result.evidenceStoreAvailable, false);
   assert.equal(result.providers.find((p) => p.adapter === "comms-hub:intake").status, "healthy");
 });
+
+test("Provider health persists the actual outcome for nonstandard status labels", async () => {
+  const d1 = new SqliteD1();
+  const repository = new CommsAiRepository(d1);
+  const at = new Date().toISOString();
+  const context = { config: { providerHealthStaleMs: 900_000, providerHealthFailureThreshold: 3, aiEnabled: false, zernioFamilies: {} }, aiRepository: repository };
+  const live = new CommsHubProviderHealthService({ context, snapshotProvider: () => ({ providers: {
+    accepted: { routeKey: "comms-hub:jotform-intake", provider: "jotform", calls: 1, successes: 1, failures: 0, failureRate: 0, lastStatus: "accepted", lastOk: true, lastAt: at },
+    failed: { routeKey: "comms-hub:email-smtp", provider: "one.com-smtp", calls: 1, successes: 0, failures: 1, failureRate: 1, lastStatus: "DATA", lastOk: false, lastAt: at },
+  } }) });
+  await live.capture();
+  const restarted = new CommsHubProviderHealthService({ context, snapshotProvider: () => ({ providers: {} }) });
+  const result = await restarted.status();
+  const accepted = result.providers.find((item) => item.adapter === "comms-hub:jotform-intake");
+  const failed = result.providers.find((item) => item.adapter === "comms-hub:email-smtp");
+  assert.equal(accepted.lastSuccessAt, at);
+  assert.equal(accepted.lastFailureAt, null);
+  assert.equal(failed.lastFailureAt, at);
+  assert.equal(failed.lastSuccessAt, null);
+});
