@@ -47,7 +47,8 @@ function safeAttemptDiagnostic(result, attempt) {
  * hero image, grounded in the lead story's headline (not the individual
  * top-10 stories — those never get their own artwork).
  */
-export async function buildHeroImagePrompt({ profile, heroHeadline, leadStory = null, bigThree = [], sessionId, repairDiagnostics = null }) {
+export async function buildHeroImagePrompt({ profile, heroHeadline, leadStory = null, bigThree = [], sessionId,
+  repairDiagnostics = null, previousVisualDirection = "" }) {
   const messages = [
     {
       role: "system",
@@ -79,7 +80,8 @@ itself is explicitly about that subject. " +
         // The lead alone grounds the image; secondary headlines invite collages.
         recovery: repairDiagnostics ? {
           reasonCodes: repairDiagnostics.reasonCodes,
-          direction: "Choose a different source-supported physical scene. Use plain unmarked equipment, a quiet background and one visible action. " +
+          previousVisualDirection: String(previousVisualDirection || "").replace(/\s+/g, " ").trim().slice(0, 600),
+          direction: "Choose a different source-supported physical scene from the failed direction above. Use plain unmarked equipment, a quiet background and one visible action. " +
             "Keep screens, documents, labels, diagrams and decorative geometry out of frame. Describe what should be visible, not a list of forbidden objects.",
         } : null,
       }),
@@ -135,13 +137,13 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
         artworkDiagnostics: attempts[0],
       });
       const replacement = await buildPrompt({ profile, heroHeadline, leadStory, bigThree: [],
-        sessionId: `${sessionId}-art-direction-repair`, repairDiagnostics: attempts[0] });
+        sessionId: `${sessionId}-art-direction-repair`, repairDiagnostics: attempts[0], previousVisualDirection: originalPrompt });
       prompt = [
         String(replacement || "").trim().slice(0, 1000) || `Source-specific editorial photograph about ${leadStory?.title || heroHeadline}.`,
         "CORRECTIVE RENDER: simplify the scene to one clear physical subject and one source-supported action. Preserve the news topic and editorial photographic style.",
         "Replace busy monitor or control-cabinet compositions. Do not show screens, control panels, documents, printed surfaces, " +
         "labels, logos, readable text or pseudo-text. Keep hands out of frame and avoid complex reflections.",
-        "Use a close-up of a single plausible physical object, with no robotic manipulators, molecular diagrams, glassware labels, interfaces or written markings.",
+        "Choose a distinct, believable source-specific setting and action; include only objects needed to explain this story without written markings.",
       ].join(" ");
     }
   }
