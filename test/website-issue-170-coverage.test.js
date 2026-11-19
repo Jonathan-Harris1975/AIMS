@@ -13,19 +13,31 @@ const issueApi = "https://api.github.com/repos/Jonathan-Harris1975/jonathan-harr
 const acceptance = getWebsiteAuditPolicy().issue170Acceptance;
 
 function mockFetch({
-  issueAvailable = true, extraIssueLine = "",
-  sitemapMissing = false, headersValid = true,
+  issueAvailable = true, extraIssueLine = "", amendedIssue = false,
+  sitemapMissing = false, staticMissing = false, dateMissing = false, headersValid = true,
   manifest = [{ slug: "2026-w46-weekly-publish", published_at: "2026-11-16T09:00:00Z" }],
 } = {}) {
-  const checklist = acceptance.rules.filter((r) => r.issueAnchor)
-    .map((r) => "- [ ] " + r.issueAnchor + " and supporting requirements.");
+  const checklist = acceptance.rules.filter((r) => r.issueText)
+    .map((r) => "- [ ] " + r.issueText);
+  if (amendedIssue) checklist[4] += " A second independent accessibility certification is now required.";
   if (extraIssueLine) checklist.push("- [ ] " + extraIssueLine);
-  const xmlUrls = [
-    site + "/",
-    ...manifest.filter((_, index) => !sitemapMissing || index > 0)
-      .map((row) => site + "/blog/posts/" + row.slug + "/"),
-  ];
-  const xml = '<?xml version="1.0"?><urlset>' + xmlUrls.map((url) => "<url><loc>" + url + "</loc></url>").join("") + "</urlset>";
+
+  const staticRows = [site + "/", site + "/blog/", site + "/ebooks/"];
+  const postRows = manifest.filter((_, index) => !sitemapMissing || index > 0)
+    .map((row) => ({
+      loc: site + "/blog/posts/" + row.slug + "/",
+      date: dateMissing ? "" : String(row.published_at).slice(0, 10),
+    }));
+  const xml = (rows) => '<?xml version="1.0"?><urlset>'
+    + rows.map((row) => "<url><loc>" + row.loc + "</loc>"
+      + (row.date ? "<lastmod>" + row.date + "</lastmod>" : "") + "</url>").join("")
+    + "</urlset>";
+  const staticXml = xml(staticRows.map((loc) => ({ loc })));
+  const liveXml = xml([
+    ...staticRows.filter((row) => !staticMissing || !row.endsWith("/ebooks/")).map((loc) => ({ loc })),
+    ...postRows,
+  ]);
+
   return async (url) => {
     if (url === issueApi) {
       if (!issueAvailable) return new Response("not found", { status: 503 });
@@ -40,13 +52,16 @@ function mockFetch({
       });
     }
     if (url === site + "/sitemap.xml") {
-      return new Response(xml, {
+      return new Response(liveXml, {
         status: 200,
         headers: {
           "x-blog-sitemap-source": headersValid ? "r2" : "static",
           "x-blog-posts-in-sitemap": String(manifest.length),
         },
       });
+    }
+    if (url === "https://raw.githubusercontent.com/Jonathan-Harris1975/jonathan-harris-website/main/sitemap.xml") {
+      return new Response(staticXml, { status: 200 });
     }
     throw Error("Unexpected fetch: " + url);
   };
@@ -88,6 +103,11 @@ test("live issue additions and changed requirements are not silently lost", asyn
   assert.equal(added.requiredCount, 13);
   assert.equal(added.rows.filter((row) => row.id.startsWith("W170-UNMAPPED-")).length, 1);
   assert.equal(added.acceptanceComplete, false);
+
+  const amended = await buildWebsiteIssue170Coverage({ fetchImpl: mockFetch({ amendedIssue: true }) });
+  assert.ok(amended.rows.some((row) => row.id.startsWith("W170-UNMAPPED-")));
+  assert.equal(amended.rows.find((row) => row.id === "W170-05").status, "not_verified");
+  assert.equal(amended.acceptanceComplete, false);
 });
 
 test("a GitHub API failure adds a synchronisation blocker, not an empty successful checklist", async () => {
@@ -110,6 +130,14 @@ test("the sitemap probe records missing weekly R2 pages as a confirmed failure",
   assert.equal(ledger.find((row) => row.findingId === "W170-12").severity, "High");
 });
 
+test("sitemap requires every governed URL and the actual publication dates", async () => {
+  for (const input of [{ staticMissing: true }, { dateMissing: true }]) {
+    const coverage = await buildWebsiteIssue170Coverage({ fetchImpl: mockFetch(input) });
+    const sitemap = coverage.rows.find((row) => row.id === "W170-12");
+    assert.equal(sitemap.status, "failed");
+  }
+});
+
 test("static or unverified blog origins cannot be presented as verified R2 sitemap coverage", async () => {
   const coverage = await buildWebsiteIssue170Coverage({
     fetchImpl: mockFetch({ headersValid: false }),
@@ -127,6 +155,7 @@ test("an attestation requires completed source evidence, exact revision and priv
     sourceRevisionSha: "a".repeat(40), liveSourceParity: "matched", acceptanceEvidence: [valid] };
   const coverage = await buildWebsiteIssue170Coverage({
     fetchImpl: mockFetch(), stageReports: { mobileUx: stage },
+    now: new Date("2026-11-19T01:05:00Z"),
   });
   assert.equal(coverage.rows.find((row) => row.id === "W170-05").status, "passed");
   const unsafe = await buildWebsiteIssue170Coverage({
@@ -137,6 +166,10 @@ test("an attestation requires completed source evidence, exact revision and priv
     fetchImpl: mockFetch(), stageReports: { mobileUx: { ...stage, liveSourceParity: "mismatched" } },
   });
   assert.equal(mismatched.rows.find((row) => row.id === "W170-05").status, "not_verified");
+  const old = await buildWebsiteIssue170Coverage({
+    fetchImpl: mockFetch(), stageReports: { mobileUx: stage }, now: new Date("2027-01-01T01:05:00Z"),
+  });
+  assert.equal(old.rows.find((row) => row.id === "W170-05").status, "not_verified");
   assert.equal(unsafe.acceptanceComplete, false);
 });
 
