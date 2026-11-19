@@ -116,7 +116,7 @@ async function requestCouncilJsonImpl(route, { sessionId, messages, maxTokens = 
         temperature: attempt === 1 ? 0.15 : 0,
         messages: attempt === 1
           ? messages
-          : [messages[0], { role: "user", content: `${messages[1]?.content || ""}\n\nReturn one valid JSON object only.` }],
+          : [{ ...messages[0], content: `${messages[0]?.content || ""}\n\nReturn one valid JSON object only.` }, ...messages.slice(1)],
       });
       const data = parseNewsletterReview(raw, schema, "newsletter council response");
       if (Number.isFinite(data.score) && data.score >= THRESHOLDS.newsletter.qaPassThreshold &&
