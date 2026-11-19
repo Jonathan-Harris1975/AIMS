@@ -665,6 +665,7 @@ test("Provider health reads fresh runtime evidence instead of historical D1 capt
   assert.notEqual(fresh.status, "unknown");
   assert.equal(fresh.status, "degraded");
   assert.equal(updated.checkedAt >= unverified.checkedAt, true);
+});
 
 test("Provider health restores real, recent provider outcomes across process restarts", async () => {
   const d1 = new SqliteD1();
