@@ -159,7 +159,8 @@
           "seoAeoGeo",
           "mobileUx"
         ],
-        "acceptance": "Every governed public route is tested for headings, landmarks, keyboard access, form behaviour and content flow; per-route results and exceptions are retained."
+        "acceptance": "Every governed public route is tested for headings, landmarks, keyboard access, form behaviour and content flow; per-route results and exceptions are retained.",
+        "issueText": "Audit **every** live static and dynamic public-facing route via governed route inventory, record accessibility, heading/landmark, keyboard, form and content-flow issues with severity and route links."
       },
       {
         "id": "W170-02",
@@ -169,7 +170,8 @@
         "evidenceSources": [
           "mobileUx"
         ],
-        "acceptance": "Before/after images cover all representative templates, errors, consent states and 320/390/768/1440px; visual differences are compared and stored privately."
+        "acceptance": "Before/after images cover all representative templates, errors, consent states and 320/390/768/1440px; visual differences are compared and stored privately.",
+        "issueText": "Save reproducible before/after screenshots in the existing *private* governed audit artefact destination for homepage, blog/article, newsletter/archive, podcast/episode, catalogue/book detail, contact, error/empty states at **320, 390, 768 and 1440px**, including consent-rejected and consent-new visitor states. Compare pixel drift after each release."
       },
       {
         "id": "W170-03",
@@ -180,7 +182,8 @@
           "digitalGrowth",
           "mobileUx"
         ],
-        "acceptance": "Homepage, navigation, editorial views, podcast and books have documented evaluated improvements, baseline and verified final result."
+        "acceptance": "Homepage, navigation, editorial views, podcast and books have documented evaluated improvements, baseline and verified final result.",
+        "issueText": "Complete UX review of homepage content hierarchy, visual repetition, nav duplication, editorial reading views, podcast and eBook showcases; consolidate shared components without introducing generic template look."
       },
       {
         "id": "W170-04",
@@ -190,7 +193,8 @@
         "evidenceSources": [
           "mobileUx"
         ],
-        "acceptance": "New-visitor, reject and customise flows pass at mobile viewports without obstructing content or breaking analytics/consent."
+        "acceptance": "New-visitor, reject and customise flows pass at mobile viewports without obstructing content or breaking analytics/consent.",
+        "issueText": "Audit cookie-consent viewport obstruction on mobile and check reject/customise flows. Keep consent choices accessible and preserve regulatory and analytics behaviour."
       },
       {
         "id": "W170-05",
@@ -200,7 +204,8 @@
         "evidenceSources": [
           "mobileUx"
         ],
-        "acceptance": "Axe, keyboard, screen-reader, 200% zoom, contrast, focus and every seasonal/event palette are checked, with evidence and exceptions."
+        "acceptance": "Axe, keyboard, screen-reader, 200% zoom, contrast, focus and every seasonal/event palette are checked, with evidence and exceptions.",
+        "issueText": "Run WCAG 2.2 AA axe automation **plus** manual keyboard/screen-reader/zoom/contrast checks, covering every season and event accent. Recheck the home glossary `target-size` fix in #169."
       },
       {
         "id": "W170-06",
@@ -211,7 +216,8 @@
           "mobileUx",
           "digitalGrowth"
         ],
-        "acceptance": "Field 75th-percentile LCP, INP, CLS and laboratory measurements are recorded and compared with baseline, plus font/CSS findings."
+        "acceptance": "Field 75th-percentile LCP, INP, CLS and laboratory measurements are recorded and compared with baseline, plus font/CSS findings.",
+        "issueText": "Capture field and lab Core Web Vitals (LCP, INP, CLS) and font/CSS duplication findings; improve and compare against baseline without widening CSS budgets without justified evidence."
       },
       {
         "id": "W170-07",
@@ -221,7 +227,8 @@
         "evidenceSources": [
           "digitalGrowth"
         ],
-        "acceptance": "API-verified Kindle, paperback and hardback availability and working purchase URLs for all 40 governed titles are checked."
+        "acceptance": "API-verified Kindle, paperback and hardback availability and working purchase URLs for all 40 governed titles are checked.",
+        "issueText": "Verify actual API-validated Kindle/paperback/hardback availability and precise purchase destinations; as of 2026-11-18 the public API returned 40 titles and no verified paperback or hardback options."
       },
       {
         "id": "W170-08",
@@ -233,7 +240,8 @@
           "delegatedTranscripts",
           "seoAeoGeo"
         ],
-        "acceptance": "Dedicated R2 content audits attest published blog/transcript counts, metadata/schema, brand identity, image CLS and rendering on actual pages."
+        "acceptance": "Dedicated R2 content audits attest published blog/transcript counts, metadata/schema, brand identity, image CLS and rendering on actual pages.",
+        "issueText": "Verify automated R2 publications, metadata/schema, brand-identity preservation, CLS on dynamic images and performance of all major editorial templates."
       },
       {
         "id": "W170-09",
@@ -245,7 +253,8 @@
           "seoAeoGeo",
           "mobileUx"
         ],
-        "acceptance": "Each scored category has a benchmark, genuine evidence, severity, actionable remediation and verified reassessment; no unsupported 10/10 claims."
+        "acceptance": "Each scored category has a benchmark, genuine evidence, severity, actionable remediation and verified reassessment; no unsupported 10/10 claims.",
+        "issueText": "Document benchmark evidence for each scored category; implement justified critical/high/medium improvements and reassess sub-9 scores, never invent 10/10."
       },
       {
         "id": "W170-10",
@@ -257,7 +266,8 @@
           "seoAeoGeo",
           "mobileUx"
         ],
-        "acceptance": "Exact head SHA, required CI/trusted admission, Cloudflare production deployment and post-deploy live source parity are verified."
+        "acceptance": "Exact head SHA, required CI/trusted admission, Cloudflare production deployment and post-deploy live source parity are verified.",
+        "issueText": "Verify exact-head PR governance, CI, Cloudflare production deploy and post-deploy live parity before calling work complete."
       },
       {
         "id": "W170-11",
