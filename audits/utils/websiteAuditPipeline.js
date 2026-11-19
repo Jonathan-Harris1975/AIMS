@@ -33,6 +33,7 @@ import {
 } from "./websiteAuditCouncil.js";
 import { assertRamsWebsiteDispatchConfigured, dispatchWebsiteAuditToRams } from "./ramsWebsiteDispatch.js";
 import { compactWebsiteAuditPolicy, websiteAuditDefaultExclusions } from "./websiteAuditPolicy.js";
+import { buildWebsiteIssue170Coverage, issue170CoverageLedger } from "./websiteIssue170Coverage.js";
 
 export const WEBSITE_PIPELINE_AUDIT_TYPE = "website";
 export const WEBSITE_PIPELINE_JOB_TYPE = makeAuditJobType(WEBSITE_PIPELINE_AUDIT_TYPE);
@@ -777,6 +778,25 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
     const stageReports = { digitalGrowth, seoAeoGeo, mobileUx };
     sourceStageHealth = evaluateWebsiteAuditStageHealth(stageReports);
     const council = await runWebsiteAuditCouncil(stageReports);
+    const issue170Coverage = await buildWebsiteIssue170Coverage({ stageReports });
+    council.issue170Coverage = issue170Coverage;
+    const knownFindingIds = new Set((council.masterIssueLedger || []).map((row) => row?.findingId));
+    council.masterIssueLedger = [
+      ...(council.masterIssueLedger || []),
+      ...issue170CoverageLedger(issue170Coverage).filter((row) => !knownFindingIds.has(row.findingId)),
+    ];
+    council.definitionOfDone = [
+      ...(council.definitionOfDone || []),
+      "All issue #170 requirements have independent evidence, including delegated R2 content, and the production release is accepted.",
+    ];
+    council.targetAssessment = {
+      ...(council.targetAssessment || {}),
+      overallMeetsTarget: Boolean(council.targetAssessment?.overallMeetsTarget && issue170Coverage.acceptanceComplete),
+      issue170Acceptance: {
+        complete: issue170Coverage.acceptanceComplete, required: issue170Coverage.requiredCount,
+        passed: issue170Coverage.passed, failed: issue170Coverage.failed, notVerified: issue170Coverage.notVerified,
+      },
+    };
     const completeEvidenceContract = sourceStageHealth.ok && String(council.synthesisState || "").trim().toLowerCase() === "complete";
     const reportType = completeEvidenceContract ? "unified-website-audit" : "controlled-website-audit-failure";
     const retentionPolicy = completeEvidenceContract ? "final-pdf-html-json-only-after-rams-acceptance" : "final-report-set-plus-retained-source-evidence";
@@ -803,6 +823,7 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
       generatedAt,
       retentionPolicy,
       websiteAuditPolicy: compactWebsiteAuditPolicy(),
+      issue170Coverage,
       sourceStageHealth,
       sourceStages: compactWebsiteAuditInputs(stageReports),
       sourceArtifactDiagnostics: Object.fromEntries(
@@ -863,6 +884,7 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
         ramsDispatch: { ok: false, skipped: true, reason: "RAMS dispatch is prohibited until all required source audit stages complete." },
         synthesisState: "Incomplete",
         targetAssessment: council.targetAssessment || null,
+        issue170Coverage: { required: issue170Coverage.requiredCount, passed: issue170Coverage.passed, failed: issue170Coverage.failed, notVerified: issue170Coverage.notVerified, acceptanceComplete: issue170Coverage.acceptanceComplete },
         sourceStageHealth,
         finalisationAttempt,
         stageStatuses: {
@@ -925,6 +947,7 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
       ramsDispatch,
       synthesisState: council.synthesisState,
       targetAssessment: council.targetAssessment || null,
+      issue170Coverage: { required: issue170Coverage.requiredCount, passed: issue170Coverage.passed, failed: issue170Coverage.failed, notVerified: issue170Coverage.notVerified, acceptanceComplete: issue170Coverage.acceptanceComplete },
       sourceStageHealth,
       finalisationAttempt,
       stageStatuses: {

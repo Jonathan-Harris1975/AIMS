@@ -737,6 +737,7 @@ sound security-header posture.", status: "Not Scored - Security Evidence Not Sup
 function councilHasRequiredSubstance(councilValue) {
   const council = obj(councilValue);
   const verdict = obj(council.councilVerdict);
+  const issue170 = obj(council.issue170Coverage);
   const scoredRows = Object.values(obj(council.scorecard)).filter((row) => Number.isFinite(Number(row?.score))).length;
   const decisionRows = arr(council.topActions).length
     + arr(council.unifiedFindings).length
@@ -1043,6 +1044,21 @@ coverage td,.coverage th{font-size:6.7pt;padding:1.3mm}.status{font-weight:700}.
   <section><h2>1. Executive Scorecard</h2>${scorecardHtml(council.scorecard)}<div class="callout"><strong>Target:</strong> ${esc(council.targetAssessment?.target ??
      8.5)}/10 minimum. <strong>Below target:</strong> ${esc((council.targetAssessment?.belowTarget || []).join(", ") || "None")} &nbsp; <strong>Unscored:</strong> ${esc((
        council.targetAssessment?.unscored || []).join(", ") || "None")}.</div><div class="callout"><strong>Executive synthesis.</strong> ${esc(council.executiveSummary)}</div></section>
+  <section class="pagebreak"><h2>Issue #170: mandatory monthly website acceptance</h2>
+  <p><strong>GitHub issue sync:</strong> ${issue170.liveIssueSynced ? "Verified" : "Unavailable: acceptance blocked"}.
+  <strong>Verified:</strong> ${esc(issue170.passed ?? 0)} / ${esc(issue170.requiredCount ?? 0)}.
+  <strong>Failed:</strong> ${esc(issue170.failed ?? 0)}.
+  <strong>Not verified:</strong> ${esc(issue170.notVerified ?? 0)}.
+  <strong>Website accepted:</strong> ${issue170.acceptanceComplete ? "Yes" : "No"}.</p>
+  ${table(["Requirement","Evidence status","Evidence / limitation","Responsible audit","Acceptance criterion"],
+    arr(issue170.rows).map((row) => [
+      esc(row.id + " " + row.title),
+      esc(row.status),
+      esc(row.reason + (row.evidence?.length ? " | " + row.evidence.join(" ; ") : "")),
+      esc(row.owner),
+      esc(row.acceptanceCriterion),
+    ]))}
+  <p class="small">A completed audit is not the same as a verified 10/10 website. A GitHub checkbox or model score is not proof. Missing or failed evidence is retained and sent to RAMS as manual verification, without invented repository code ownership.</p></section>
   <section><h2>2. Council Verdict</h2><p><strong>Overall diagnosis:</strong> ${esc(verdict.overallDiagnosis || "")}</p><p><strong>Biggest structural weakness:</strong> ${esc(
     verdict.biggestStructuralWeakness || "")}</p><p><strong>Biggest commercial opportunity:</strong> ${esc(verdict.biggestCommercialOpportunity ||
        "")}</p><p><strong>Biggest search opportunity:</strong> ${esc(verdict.biggestSearchOpportunity || "")}</p><p><strong>Biggest mobile risk:</strong> ${esc(

@@ -57,6 +57,7 @@ export function compactWebsiteAuditPolicy() {
     evidenceGates: p.evidenceGates,
     deployment: p.deployment,
     scoring: p.scoring,
+    issue170Acceptance: p.issue170Acceptance,
   };
 }
 
