@@ -926,6 +926,8 @@ async function runWebsiteAuditFinalisation(parentSessionId) {
         finalReportKeys, finalReportUrl: pdf.url, finalReportPdfUrl: pdf.url,
         finalReportHtmlUrl: htmlReport.url, finalReportJsonUrl: jsonReport.url, retainedArtefacts,
         sourceStageHealth, synthesisState: council.synthesisState, ramsDispatch,
+        targetAssessment: council.targetAssessment || null,
+        issue170Coverage: issue170Summary,
         evidenceRetentionRequired: true, cleanupRequired: true,
       });
       await flushJobStoreWrites({ throwOnError: false });
