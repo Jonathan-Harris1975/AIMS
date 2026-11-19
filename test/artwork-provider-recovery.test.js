@@ -25,7 +25,8 @@ test("second image provider uses pixel feedback while review remains anchored to
     reviewBriefs.push(body.messages[0].content[0].text);
     reviewCount += 1;
     const qa = reviewCount === 1
-      ? { score: 40, relevance: 40, textSafety: 50, composition: 60, brandFit: 60, defects: ["Scanner scene misses the planning application"], hardDefects: ["Prominent invented text"], summary: "Rejected" }
+      ? { score: 40, relevance: 40, textSafety: 50, composition: 60, brandFit: 60,
+        defects: ["Scanner scene misses the planning application"], hardDefects: ["Prominent invented text"], summary: "Rejected" }
       : { score: 95, relevance: 95, textSafety: 95, composition: 90, brandFit: 90, defects: [], hardDefects: [], summary: "Pass" };
     return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(qa) } }] }) };
   };
