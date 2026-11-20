@@ -378,15 +378,12 @@ export async function fetchBookMetadata(
     pricing = parsedPricing
   }
 
-  // On a direct known-title refresh, the cached Bookshelf association is NOT
-  // independent identity proof. Require an ASIN actually observed on the
-  // authenticated pricing page before any automatic mutation may follow.
-  if (options.requireFreshPricingAsin) requireFreshPricingAsin(pricing.asin, ref.asin || '')
-
   // KDP's price form can select the royalty_rate radio after client-side
   // hydration. Server HTML alone omits it for some existing LIVE books.
   // Read the actual authenticated pricing form rather than assuming 70%.
-  if (ref.format === 'kindle' && !/^(?:35|70)(?:_PERCENT)?$/.test(pricing.royaltyPlan)) {
+  if (ref.format === 'kindle' &&
+      (!/^(?:35|70)(?:_PERCENT)?$/.test(pricing.royaltyPlan) ||
+        (options.requireFreshPricingAsin && !/^B0[A-Z0-9]{8}$/i.test(pricing.asin)))) {
     const response = await kdpGoto(requestPage, setupPageUrl(ref.format, ref.titleId, 'pricing'), {
       waitUntil: 'networkidle', timeout: 120_000,
     }).catch(() => null)
@@ -418,14 +415,20 @@ export async function fetchBookMetadata(
           document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() ||
           document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim() || ''
         const bytes = document.querySelector('input[name="data[digital][filesize_bytes]"]')?.value || ''
-        return { plan, bytes }
-      })()`) as { plan: string; bytes: string }
+        const asin = (document.body.innerText.match(/ASIN:\\s*(B0[A-Z0-9]{8})/i) || [])[1] || ''
+        return { plan, bytes, asin }
+      })()`) as { plan: string; bytes: string; asin: string }
       if (/^(?:35|70)(?:_PERCENT)?$/.test(rendered.plan)) pricing.royaltyPlan = rendered.plan
+      if (/^B0[A-Z0-9]{8}$/i.test(rendered.asin)) pricing.asin = rendered.asin.toUpperCase()
       if (/^\d+$/.test(rendered.bytes) && Number.isSafeInteger(Number(rendered.bytes))) {
         pricing.fileSizeKb = String(Math.ceil(Number(rendered.bytes) / 1024))
       }
     }
   }
+
+  // A direct known-title refresh must independently prove the ASIN on this
+  // freshly authenticated page. The old cached Bookshelf link is not enough.
+  if (options.requireFreshPricingAsin) requireFreshPricingAsin(pricing.asin, ref.asin || '')
 
   return {
     titleId: ref.titleId,
