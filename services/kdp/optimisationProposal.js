@@ -111,7 +111,7 @@ export async function draftOptimisation(book, research, metadata, { now = new Da
   ].join(' '), { ...evidence, proposal: { description: validDescription ? description : null, keywords, comparables: comparable, reason: candidate.reason } }, 'kdpResearchCritic');
   if (review.value.approved !== true || typeof review.value.reason !== 'string' || review.value.reason.length < 10) {
     return blocked('council_rejected', { review: {
-      reason: String(review.value.reason || 'invalid_verdict').replace(/[\\r\\n\\t]+/g, ' ').slice(0, 240),
+      reason: String(review.value.reason || 'invalid_verdict').replace(/[\r\n\t]+/g, ' ').slice(0, 240),
       model: review.model || 'unreported',
       paidFallbackUsed: Boolean(review.paidFallbackUsed),
     } });
