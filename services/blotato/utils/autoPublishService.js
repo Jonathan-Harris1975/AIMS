@@ -1608,7 +1608,7 @@ export function isRetryableRenderedPublishFailure(job = {}) {
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
   const qa = job.renderedVideoQa || job.result?.renderedVideoQa || {};
   if (!prePublicationQaPhase
-    && !(qa.pass === true || qa.skipped === true || qa.acceptedAfterSoftFailure === true || qa.acceptedForScheduling === true)) return false;
+    && !(qa.pass === true || qa.acceptedAfterSoftFailure === true || (qa.acceptedForScheduling === true && qa.skipped !== true))) return false;
   if (prePublicationQaPhase && jobHasPublicationEvidence(job)) return false;
 
   const references = Array.isArray(job.publicationReferences) ? job.publicationReferences : [];
