@@ -54,7 +54,7 @@ export async function processOptimisation(key, intent, {
   if (intent.status === 'prepared') {
     if (!inWeeklyWindow(now(), 'update')) return { status: 'outside_window' };
     if (+now() - Date.parse(intent.createdAt) > 48 * 3600000) { intent.status = 'expired'; await persist(); return { status: intent.status }; }
-    const current = await sync(intent.titleId, 'kindle');
+    const current = await sync(intent.titleId, 'kindle', intent.asin);
     if (current.asin !== intent.asin || current.titleId !== intent.titleId || current.format !== 'kindle') {
       intent.nextAttemptAt = new Date(+now() + 4 * 3600000).toISOString(); await persist(); return { status: 'identity_unverified' };
     }
@@ -110,7 +110,7 @@ export async function processOptimisation(key, intent, {
       intent.status = 'needs_attention'; await persist(); return { status: intent.status };
     }
     intent.nextVerificationAt = new Date(+now() + 4 * 3600000).toISOString(); await persist();
-    const current = await sync(intent.titleId, 'kindle');
+    const current = await sync(intent.titleId, 'kindle', intent.asin);
     if (current.asin !== intent.asin) return { status: 'identity_unverified' };
     if (!/^live$/i.test(current.publishingStatus || '')) {
       intent.seenNonLive = true; await persist(); return { status: 'awaiting_publication' };
