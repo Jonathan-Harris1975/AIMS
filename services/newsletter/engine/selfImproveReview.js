@@ -56,7 +56,6 @@ export async function runNewsletterSelfImproveReview({ profile, newsletter, sess
     ],
   };
   let data;
-  let lastError;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const raw = await resilientRequest("newsletterSelfImprove", {
@@ -68,11 +67,9 @@ export async function runNewsletterSelfImproveReview({ profile, newsletter, sess
       data = parseNewsletterReview(raw, REVIEW_SCHEMA, "newsletter self-improvement review");
       break;
     } catch (error) {
-      lastError = error;
       if (attempt || (error?.code !== "AI_INVALID_STRUCTURED_OUTPUT" && error?.status !== "invalid_completion")) throw error;
     }
   }
-  if (!data) throw lastError;
 
   const score = boundedScore(data.score);
   const blocking = data.blocking === true;
