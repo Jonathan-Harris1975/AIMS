@@ -166,9 +166,12 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
   const issueId = sessionId;
   let sent = 0;
   let failed = 0;
+  let deferred = 0;
   for (const recipient of recipients) {
     if (buildResult.metadata?.deliveryCutoffAt && Date.now() >= Date.parse(buildResult.metadata.deliveryCutoffAt)) {
-      failed += recipients.length - sent - failed;
+      // A cutoff is not an SMTP failure. Preserve unsent recipients for a
+      // subsequent authorised window instead of misreporting provider errors.
+      deferred = recipients.length - sent - failed;
       break;
     }
     const result = await sendIssueToRecipient({ profile, sessionId, recipient, buildResult, d1, mail });
@@ -184,13 +187,13 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
     sessionId,
     campaignId: deliveryId,
     listId: profile.id,
-    status: failed ? "partial" : "dispatched",
-    campaignStatus: failed ? "partial" : "sent",
+    status: failed || deferred ? "partial" : "dispatched",
+    campaignStatus: failed || deferred ? "partial" : "sent",
     createdAt: new Date().toISOString(),
     sentAt: new Date().toISOString(),
     date,
   });
-  return { ok: failed === 0, status: failed ? "partial_delivery" : "dispatched", provider: "aims-onecom", deliveryId, audience: recipients.length, sent, failed,
+  return { ok: failed === 0 && deferred === 0, status: deferred ? "delivery_cutoff_deferred" : failed ? "partial_delivery" : "dispatched", provider: "aims-onecom", deliveryId, audience: recipients.length, sent, failed, deferred,
     deliveryAssurance: "smtp_acceptance_only", inboxConfirmed: false };
 }
 
