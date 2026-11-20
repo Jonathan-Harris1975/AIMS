@@ -168,3 +168,19 @@ test("async blog acknowledgements cannot hide final successful skips without pub
     result: acknowledgement, asyncJob: { result: { ok: false, partialFailure: true } } };
   assert.deepEqual(reusableOperationTaskResults({ results: [podcast] }), [podcast]);
 });
+
+
+test("a new recovery revision cannot replay terminal non-retryable provider handoffs", () => {
+  const receipt = {
+    status: "completed-with-failures", attempt: 3,
+    recoveryRevision: "previous-release",
+    results: [{ name: "blotato-am", ok: false, retryable: false,
+      result: { status: "provider-unknown", providerVideoId: "already-submitted" } }],
+  };
+  const decision = evaluateOperationWindowClaim(receipt, {
+    allowRecovery: true, recoveryRevision: "new-release", maxAttempts: 3,
+    recoveryCooldownMs: 0, nowMs: Date.parse("2026-11-20T15:00:00Z"),
+  });
+  assert.equal(decision.claimable, false);
+  assert.equal(decision.reason, "same-day-window-non-retryable-failure");
+});
