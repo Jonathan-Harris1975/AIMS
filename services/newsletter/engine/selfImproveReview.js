@@ -35,9 +35,10 @@ function payload(newsletter) {
 }
 
 export async function runNewsletterSelfImproveReview({ profile, newsletter, sessionId }) {
-  const raw = await resilientRequest("newsletterSelfImprove", {
+  const options = {
     sessionId,
     max_tokens: 1200,
+    maxRetries: 0,
     reasoning: null,
     temperature: 0.1,
     messages: [
@@ -53,8 +54,23 @@ export async function runNewsletterSelfImproveReview({ profile, newsletter, sess
       },
       { role: "user", content: JSON.stringify({ ...publicationContext(profile), draft: payload(newsletter) }, null, 2) },
     ],
-  });
-  const data = parseNewsletterReview(raw, REVIEW_SCHEMA, "newsletter self-improvement review");
+  };
+  let data;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const raw = await resilientRequest("newsletterSelfImprove", {
+        ...options,
+        max_tokens: attempt ? 1800 : 1200,
+        temperature: attempt ? 0 : 0.1,
+        validateContent: (content) => parseNewsletterReview(content, REVIEW_SCHEMA, "newsletter self-improvement review"),
+      });
+      data = parseNewsletterReview(raw, REVIEW_SCHEMA, "newsletter self-improvement review");
+      break;
+    } catch (error) {
+      if (attempt || (error?.code !== "AI_INVALID_STRUCTURED_OUTPUT" && error?.status !== "invalid_completion")) throw error;
+    }
+  }
+
   const score = boundedScore(data.score);
   const blocking = data.blocking === true;
   return {

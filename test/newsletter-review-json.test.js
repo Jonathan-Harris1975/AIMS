@@ -20,3 +20,12 @@ test("malformed, incomplete or incorrectly typed reviews cannot authorise public
     assert.throws(() => parseNewsletterReview(raw, schema, "review"));
   }
 });
+
+
+test("invalid council chair priority fixes is classified as repairable structured output", () => {
+  const chairSchema = { required: ["score", "blocking", "issues", "verdict", "priorityFixes"], properties: {
+    ...schema.properties, priorityFixes: { type: "array" },
+  } };
+  assert.throws(() => parseNewsletterReview(JSON.stringify({ ...valid, priorityFixes: "retry" }), chairSchema, "chair"),
+    (error) => error.code === "AI_INVALID_STRUCTURED_OUTPUT" && error.status === "invalid_completion");
+});

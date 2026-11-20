@@ -167,8 +167,9 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
   let sent = 0;
   let failed = 0;
   let deferred = 0;
+  const clock = typeof deps.clock === "function" ? deps.clock : () => Date.now();
   for (const recipient of recipients) {
-    if (buildResult.metadata?.deliveryCutoffAt && Date.now() >= Date.parse(buildResult.metadata.deliveryCutoffAt)) {
+    if (buildResult.metadata?.deliveryCutoffAt && clock() >= Date.parse(buildResult.metadata.deliveryCutoffAt)) {
       // A cutoff is not an SMTP failure. Preserve unsent recipients for a
       // subsequent authorised window instead of misreporting provider errors.
       deferred = recipients.length - sent - failed;

@@ -154,7 +154,9 @@ describe("newsletter engine/qaLoop.js", () => {
     const draft = draftNewsletter();
     const result = await runQaLoop({ profile, newsletter: draft, lead, stories, sessionId: "broken-self-review" });
     assert.equal(result.ok, true);
-    assert.equal(selfCallCount, 1);
+    // Invalid structured output can trigger bounded provider failover and one
+    // explicit recovery attempt before the council takes over.
+    assert.equal(selfCallCount, 6);
     assert.equal(repairCallCount, 0);
     assert.deepEqual(result.newsletter, draft);
     assert.equal(result.council.attendance.present, 14);
