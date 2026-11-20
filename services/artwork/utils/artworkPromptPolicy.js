@@ -179,10 +179,10 @@ web or decorative geometry.",
         "NEWSLETTER EDITORIAL REQUIREMENT: create a specific visual response to the lead AI story, not a generic masthead, banner, scenic backdrop or lifestyle photograph.",
         "The subject must visibly belong to AI, software, robotics, security, governance, infrastructure or the lead story's real-world domain.",
         "Prefer a concrete technical object, consequential workplace moment or human-scale news scene with clear editorial tension.",
-        "Anchor the main subject to an explicitly supplied fact, named technology or physical consequence from the lead story. If the" +
+        "Anchor the main subject to an explicitly supplied fact, named technology or physical consequence from the lead story. If the " +
         "brief is abstract, show a plausible source-supported technical process instead of inventing an event.",
         "Compose one coherent focal scene with a specific foreground object and relevant supporting environment; avoid multiple unrelated subjects, collage panels and ornamental AI motifs.",
-        "For visual recovery after a rejected candidate, replace the failed composition with a materially different source-grounded" +
+        "For visual recovery after a rejected candidate, replace the failed composition with a materially different source-grounded " +
         "scene; never solve a hard visual-QA defect by adding title lettering, interface text or unrelated imagery.",
         "Decorative geometric shapes, floating polygons, glowing orbs, circuit mandalas and abstract networks must never be the focal subject. Seasonal styling is only a \
 subtle colour accent, subordinate to the actual story.",
