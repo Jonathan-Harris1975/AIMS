@@ -128,3 +128,39 @@ test('signed-in and public UK price verification completes a submitted correctio
   assert.equal(checked.completed, 1);
   assert.equal(h.events.filter((event) => event === 'publish').length, 1);
 });
+
+test('royalty preflight passes exact ASIN to signed-in refresh, not a full Bookshelf rescan', async () => {
+  const h = harness();
+  const calls = [];
+  h.deps.sync = async (id, format, expectedAsin) => {
+    calls.push([id, format, expectedAsin]);
+    return book();
+  };
+  await reconcileRoyaltyFloor({ ...h.deps, dryRun: false });
+  assert.deepEqual(calls, [[titleId, 'kindle', asin]]);
+  assert.ok(h.events.includes('publish'));
+});
+
+test('browser timeout during read-only royalty preflight is reported and retried without publishing', async () => {
+  const h = harness();
+  let calls = 0;
+  h.deps.sync = async () => {
+    calls++;
+    const error = new Error('private browser text must not be stored');
+    error.name = 'TimeoutError';
+    throw error;
+  };
+  const first = await reconcileRoyaltyFloor({ ...h.deps, dryRun: false });
+  assert.equal(first.ok, false);
+  assert.equal(first.blocked, 1);
+  assert.equal(first.kdpWritesPerformed, false);
+  assert.equal(first.results[0].reason, 'signed_in_refresh_failed');
+  assert.equal(first.results[0].errorCode, 'TimeoutError');
+  assert.equal(h.saved.get('pricing/royalty-floor/ledger.json').entries[titleId].status, 'blocked');
+  assert.equal(JSON.stringify(h.saved.get('pricing/royalty-floor/ledger.json')).includes('private browser text'), false);
+  const next = await reconcileRoyaltyFloor({ ...h.deps, dryRun: false });
+  assert.equal(next.ok, false);
+  assert.equal(next.blocked, 1);
+  assert.equal(calls, 1);
+  assert.ok(!h.events.includes('publish'));
+});
