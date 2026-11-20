@@ -187,7 +187,8 @@ test('read-only metadata refresh timeout is checkpointed before submission and s
     save: base.save,
     process: (key, intent, args) => processOptimisation(key, intent, { ...base, ...args }),
   });
-  assert.equal(skipped.ok, true);
+  assert.equal(skipped.ok, false);
+  assert.equal(skipped.results[0].status, 'preflight_retry_waiting');
   assert.equal(browserReads, 1);
   assert.equal(publications, 0);
 });
