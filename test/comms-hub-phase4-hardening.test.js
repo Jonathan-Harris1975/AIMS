@@ -194,6 +194,38 @@ test("Provider health records rate limiting, outages and unknown configuration w
   assert.equal(status.overall, "unavailable");
 });
 
+test("Future-dated provider observations cannot establish current health", async () => {
+  const context = {
+    config: {
+      providerHealthStaleMs: 900_000,
+      providerHealthFailureThreshold: 3,
+      aiEnabled: false,
+      zernioFamilies: {},
+    },
+  };
+  const service = new CommsHubProviderHealthService({
+    context,
+    snapshotProvider: () => ({
+      providers: {
+        future: {
+          routeKey: "comms-hub:future-probe",
+          provider: "test-provider",
+          calls: 1,
+          successes: 1,
+          failures: 0,
+          failureRate: 0,
+          lastStatus: "success",
+          lastOk: true,
+          lastAt: new Date(Date.now() + 3_600_000).toISOString(),
+        },
+      },
+    }),
+  });
+  const status = await service.status();
+  assert.equal(status.providers.find((entry) => entry.adapter === "comms-hub:future-probe")?.status, "unknown");
+  assert.equal(status.overall, "unknown");
+});
+
 test("Provider health prefers real observations over readiness placeholders for the same provider route", async () => {
   const d1 = new SqliteD1();
   const now = new Date().toISOString();
