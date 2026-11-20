@@ -87,3 +87,48 @@ test("free and economy failure both propagate a bounded diagnostic, never a fict
     error.freeFailure === 'OPENROUTER_TIMEOUT' && error.paidFailure === 'OPENROUTER_TIMEOUT');
   assert.deepEqual(calls, ['kdpResearchDraft', 'kdpResearchPaidFallback']);
 });
+
+test('review refusal retains bounded diagnostics without weakening evidence checks', async () => {
+  const calls = [];
+  const twoSources = { trendSources: { US: [research.trendSources.US[0],
+    { ...research.trendSources.US[0], url: 'https://another.org/research' }] } };
+  const request = async (route, options) => {
+    calls.push({ route, budget: options.max_tokens });
+    return { model: route === 'kdpResearchCritic' ? 'reviewer-free' : 'drafter-free',
+      content: JSON.stringify(route === 'kdpResearchCritic'
+        ? { approved: false, reason: 'The suggested keyword needs a more specific reading intent.' }
+        : { reason: 'The existing book offers evidence for a reader-facing keyword.',
+          description: '', descriptionClaims: [],
+          keywords: [{ phrase: 'machine learning', bookQuote: 'Machine learning supports grid operations.',
+            sourceUrl: 'https://example.org/story',
+            sourceQuote: 'Machine learning supports grid operations' }],
+          comparables: [] }) };
+  };
+  const result = await draftOptimisation(book, twoSources, metadata, { now, liveListing, request });
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.reason, 'council_rejected');
+  assert.match(result.review.reason, /specific reading intent/);
+  assert.equal(result.review.model, 'reviewer-free');
+  assert.deepEqual(calls, [
+    { route: 'kdpResearchDraft', budget: 5000 },
+    { route: 'kdpResearchCritic', budget: 1500 },
+  ]);
+});
+
+test('ungrounded drafts report dropped candidate counts and never submit changes', async () => {
+  const twoSources = { trendSources: { US: [research.trendSources.US[0],
+    { ...research.trendSources.US[0], url: 'https://another.org/research' }] } };
+  const result = await draftOptimisation(book, twoSources, metadata, { now, liveListing,
+    request: async () => ({ model: 'free', content: JSON.stringify({
+      reason: 'Drafts are not guaranteed to pass strict book-content evidence checks.',
+      description: '', descriptionClaims: [],
+      keywords: [{ phrase: 'unsupported topic', bookQuote: 'This is not in the book.',
+        sourceUrl: 'https://example.org/story', sourceQuote: 'A made-up source quote.' }],
+      comparables: [],
+    }) }),
+  });
+  assert.equal(result.reason, 'no_grounded_proposal');
+  assert.equal(result.grounding.draftKeywords, 1);
+  assert.equal(result.grounding.supportedKeywords, 0);
+  assert.equal(result.listingUpdated, false);
+});

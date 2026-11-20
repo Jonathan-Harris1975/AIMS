@@ -158,6 +158,15 @@ export function verifiedRefAsin(pricingAsin: string, reportAsin?: string): strin
   return valid(report) ? report : ''
 }
 
+export function requireFreshPricingAsin(pricingAsin: string, expectedAsin: string): string {
+  const observed = verifiedRefAsin(pricingAsin)
+  const expected = verifiedRefAsin(expectedAsin)
+  if (!observed || !expected || observed !== expected) {
+    throw new KdpClientError('The authenticated KDP pricing page did not independently confirm the expected ASIN.')
+  }
+  return observed
+}
+
 async function collectBookshelfRefsFromHtml(
   actionPage: Page,
   parsePage: Page,
@@ -242,19 +251,50 @@ export async function collectBookshelfRefsViaBrowser(page: Page, {
     }
     if (pagesScanned === 200) throw new KdpClientError('KDP Bookshelf exceeded the pagination limit.')
     await throttle()
-    await next.click({ timeout: 15_000 })
+    // Prefer a verified same-origin Bookshelf page URL when KDP exposes one:
+    // clicking its JS paginator can leave the rendered rows unchanged and hang.
+    // Never follow an unrelated action, domain, or javascript: URL.
+    const currentUrl = page.url()
+    const href = typeof next.getAttribute === 'function'
+      ? await next.getAttribute('href') : null
+    let nextUrl: URL | null = null
+    if (href) {
+      try {
+        const candidate = new URL(href, currentUrl)
+        const previous = new URL(currentUrl)
+        if (candidate.protocol === 'https:' && candidate.origin === previous.origin &&
+            candidate.pathname === previous.pathname && candidate.href !== previous.href) {
+          nextUrl = candidate
+        }
+      } catch { /* Malformed pagination links are handled by a normal click. */ }
+    }
+    if (nextUrl) {
+      await navigate(page, nextUrl.href, { waitUntil: 'domcontentloaded', timeout: 45_000 })
+    } else {
+      await next.click({ timeout: 15_000 })
+    }
     try {
       await page.waitForFunction(`(() => {
         const scan = (${SCAN_BOOKSHELF_FN})()
         return scan.refs.length > 0 && scan.refs.map((r) => r.titleId + ':' + r.format).sort().join(',') !== ${JSON.stringify(signature)}
-      })()`, undefined, { timeout: 30_000 })
-      await page.waitForLoadState('networkidle', { timeout: 60_000 })
+      })()`, undefined, { timeout: 18_000 })
+      // The verified page signature is stronger than networkidle: KDP often
+      // keeps background requests open indefinitely after rows have loaded.
     } catch (error) {
-      // An expired authenticated session can redirect at pagination time.
-      // Raise an auth error so the existing browser wrapper refreshes login
-      // once, instead of stranding pricing and print jobs on a generic timeout.
       if (page.url().toLowerCase().includes('signin')) throw new KdpAuthError()
-      throw error
+      const observed = await scanPage(page)
+      const observedSignature = observed.refs.map(r => r.titleId + ':' + r.format).sort().join(',')
+      if (observedSignature !== signature && observed.refs.length > 0) continue
+      // One read-only reload can recover a stalled navigation. No create or
+      // publish action has started; never accept an incomplete Bookshelf scan.
+      if (nextUrl && typeof page.reload === 'function') {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 })
+        if (page.url().toLowerCase().includes('signin')) throw new KdpAuthError()
+        const reloaded = await scanPage(page)
+        const afterReload = reloaded.refs.map(r => r.titleId + ':' + r.format).sort().join(',')
+        if (reloaded.refs.length > 0 && afterReload !== signature) continue
+      }
+      throw new KdpClientError(`KDP Bookshelf pagination stalled after page ${pagesScanned}; a complete signed-in inventory could not be verified. Cause: ${String((error as Error)?.name || 'timeout')}`)
     }
   }
   throw new KdpClientError('KDP Bookshelf scan did not complete.')
@@ -303,6 +343,7 @@ export async function fetchBookMetadata(
   requestPage: Page,
   parsePage: Page,
   ref: TitleFormatRef,
+  options: { requireFreshPricingAsin?: boolean } = {},
 ): Promise<KdpBookMetadata | null> {
   const details = await fetchAndParseKdpHtml<ParsedDetails>(
     requestPage,
@@ -371,7 +412,9 @@ export async function fetchBookMetadata(
   // KDP's price form can select the royalty_rate radio after client-side
   // hydration. Server HTML alone omits it for some existing LIVE books.
   // Read the actual authenticated pricing form rather than assuming 70%.
-  if (ref.format === 'kindle' && !/^(?:35|70)(?:_PERCENT)?$/.test(pricing.royaltyPlan)) {
+  if (ref.format === 'kindle' &&
+      (!/^(?:35|70)(?:_PERCENT)?$/.test(pricing.royaltyPlan) ||
+        (options.requireFreshPricingAsin && !/^B0[A-Z0-9]{8}$/i.test(pricing.asin)))) {
     const response = await kdpGoto(requestPage, setupPageUrl(ref.format, ref.titleId, 'pricing'), {
       waitUntil: 'networkidle', timeout: 120_000,
     }).catch(() => null)
@@ -403,14 +446,20 @@ export async function fetchBookMetadata(
           document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() ||
           document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim() || ''
         const bytes = document.querySelector('input[name="data[digital][filesize_bytes]"]')?.value || ''
-        return { plan, bytes }
-      })()`) as { plan: string; bytes: string }
+        const asin = (document.body.innerText.match(/ASIN:\\s*(B0[A-Z0-9]{8})/i) || [])[1] || ''
+        return { plan, bytes, asin }
+      })()`) as { plan: string; bytes: string; asin: string }
       if (/^(?:35|70)(?:_PERCENT)?$/.test(rendered.plan)) pricing.royaltyPlan = rendered.plan
+      if (/^B0[A-Z0-9]{8}$/i.test(rendered.asin)) pricing.asin = rendered.asin.toUpperCase()
       if (/^\d+$/.test(rendered.bytes) && Number.isSafeInteger(Number(rendered.bytes))) {
         pricing.fileSizeKb = String(Math.ceil(Number(rendered.bytes) / 1024))
       }
     }
   }
+
+  // A direct known-title refresh must independently prove the ASIN on this
+  // freshly authenticated page. The old cached Bookshelf link is not enough.
+  if (options.requireFreshPricingAsin) requireFreshPricingAsin(pricing.asin, ref.asin || '')
 
   return {
     titleId: ref.titleId,
@@ -507,11 +556,26 @@ export async function requireExactBookshelfRef(
 export async function syncBookMetadata(
   titleId: string,
   format: KdpBookFormat,
+  expectedAsin?: string,
 ): Promise<KdpBookMetadata> {
+  // A complete signed-in KDP snapshot and D1 already establish the title-ASIN
+  // association for royalty-floor remediation. Avoid a second full Bookshelf
+  // pagination pass, which timed out on each 19 November production price run.
+  // The direct path has a stricter gate: freshly observed pricing-page ASIN.
+  const knownTitle = expectedAsin !== undefined
+  const knownAsin = String(expectedAsin || '').trim().toUpperCase()
+  if (knownTitle && (format !== 'kindle' || !/^[A-Z0-9]{10,20}$/.test(titleId) ||
+      !/^B0[A-Z0-9]{8}$/.test(knownAsin))) {
+    throw new KdpClientError('Invalid exact-title Kindle ASIN for signed-in KDP refresh.')
+  }
   return withKdpPages(async ({ action, parse }) => {
-    const scan = await collectBookshelfRefs(action, parse)
-    const ref = await requireExactBookshelfRef(titleId, format, scan, () => collectBookshelfRefsViaBrowser(action))
-    const meta = await fetchBookMetadata(action, parse, ref)
+    const ref: TitleFormatRef = knownTitle
+      ? { titleId, format, asin: knownAsin }
+      : await (async () => {
+          const scan = await collectBookshelfRefs(action, parse)
+          return requireExactBookshelfRef(titleId, format, scan, () => collectBookshelfRefsViaBrowser(action))
+        })()
+    const meta = await fetchBookMetadata(action, parse, ref, { requireFreshPricingAsin: knownTitle })
     if (!meta) {
       throw new KdpClientError(
         `Could not read metadata for ${titleId} (${format}).`,
