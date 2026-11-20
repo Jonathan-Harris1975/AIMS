@@ -5,6 +5,8 @@ import {
   isReplaceableRenderedQualityFailure,
   isRetryableRenderedPublishFailure,
   isRetryablePendingRenderFailure,
+  resumableReplacementHistory,
+  canReuseRenderedReview,
 } from "../services/blotato/utils/autoPublishService.js";
 
 async function source(path) {
@@ -67,7 +69,7 @@ test("Blotato reuses rendered videos for provider handoff but blocks ambiguous r
         technical: { pass: true },
       },
       failedPublishes: [],
-    }), true);
+    }), false);
     assert.equal(isRetryableRenderedPublishFailure({
       ...failedPublish,
       phase: "rendered-quality-review",
@@ -135,7 +137,8 @@ test("Blotato permits one pre-publication quality replacement but never duplicat
       mediaUrl: "https://example.com/rejected.mp4",
     };
     assert.equal(isReplaceableRenderedQualityFailure(failedRender), true);
-    assert.equal(isReplaceableRenderedQualityFailure({ ...failedRender, attempt: 2 }), false);
+    assert.equal(isReplaceableRenderedQualityFailure({ ...failedRender, attempt: 4 }), true);
+    assert.equal(isReplaceableRenderedQualityFailure({ ...failedRender, failedRenderReplacement: { replacementCount: 1 } }), false);
     assert.equal(isReplaceableRenderedQualityFailure({
       ...failedRender,
       result: { posts: [{ postSubmissionId: "already-submitted" }] },
@@ -222,3 +225,17 @@ test("content operation recovery revisions permit one bounded recovery of failed
   assert.match(text, /reusableOperationTaskResults/);
 });
 
+
+
+test("interrupted render and review recovery preserve replacement limits and re-review skipped QA", () => {
+  const replacement = { replacementCount: 1, repairContext: "Correct unrelated visual" };
+  for (const phase of ["video-rendering", "rendered-quality-review", "publish-failed"]) {
+    const resumed = resumableReplacementHistory({ phase, failedRenderReplacement: replacement });
+    assert.deepEqual(resumed, replacement);
+    assert.equal(isReplaceableRenderedQualityFailure({ status: "failed", phase: "rendered-quality-failed",
+      videoId: "paid-visual", failedRenderReplacement: resumed }), false);
+  }
+  assert.equal(canReuseRenderedReview({ pass: true, skipped: true }), false);
+  assert.equal(canReuseRenderedReview({ pass: true, skipped: false }), true);
+  assert.equal(canReuseRenderedReview(null), false);
+});
