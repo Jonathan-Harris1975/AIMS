@@ -193,7 +193,11 @@ export async function runOptimisationUpdates({ now = () => new Date(), list = ()
       const intent = await load(object.key);
       if (!intent || ['complete', 'expired'].includes(intent.status)) continue;
       if (['conflict', 'needs_attention'].includes(intent.status)) { results.push({ key: object.key, status: intent.status }); continue; }
-      if (intent.nextAttemptAt && +now() < Date.parse(intent.nextAttemptAt)) continue;
+      if (intent.nextAttemptAt && +now() < Date.parse(intent.nextAttemptAt)) {
+        results.push({ key: object.key, status: 'preflight_retry_waiting',
+          nextAttemptAt: intent.nextAttemptAt });
+        continue;
+      }
       if (intent.status === 'prepared') {
         if (submittedThisTick || !inWeeklyWindow(now(), 'update') || +now() - Date.parse(control.lastSubmissionAt || '1970-01-01') < submissionDelayMs()) continue;
         // Reserve the global delay before a side effect, including failed attempts.
@@ -202,6 +206,6 @@ export async function runOptimisationUpdates({ now = () => new Date(), list = ()
       try { results.push({ key: object.key, ...await process(object.key, intent, { now }) }); }
       catch { results.push({ key: object.key, status: 'retry_pending' }); }
     }
-    return { ok: !results.some((r) => ['preflight_failed', 'retry_pending', 'needs_attention', 'conflict', 'submission_uncertain'].includes(r.status)), status: 'processed', results };
+    return { ok: !results.some((r) => ['preflight_failed', 'preflight_retry_waiting', 'retry_pending', 'needs_attention', 'conflict', 'submission_uncertain'].includes(r.status)), status: 'processed', results };
   } finally { await release(acquired.lease); }
 }
