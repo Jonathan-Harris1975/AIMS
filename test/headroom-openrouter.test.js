@@ -300,3 +300,30 @@ test("Headroom rejects malformed compressed text parts and sends the original ev
     __headroomTestHooks.resetCircuit();
   }
 });
+
+test("Headroom skips immutable-only and empty prompts without a proxy request", async () => {
+  const snapshot = snapshotEnv(HEADROOM_ENV);
+  const oldFetch = globalThis.fetch;
+  process.env.HEADROOM_ENABLED = "true";
+  process.env.HEADROOM_BASE_URL = "http://headroom.test:8787";
+  process.env.HEADROOM_MIN_INPUT_CHARS = "1";
+  process.env.HEADROOM_ROUTES = "main";
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error("unexpected proxy call"); };
+  try {
+    const { compressForOpenRouter } = await import("../services/shared/utils/headroom.js");
+    for (const messages of [
+      [{ role: "system", content: "Immutable instructions ".repeat(100) }],
+      [{ role: "developer", content: "Immutable instructions ".repeat(100) }],
+      [{ role: "system", content: "Keep unchanged" }, { role: "user", content: "  " }],
+    ]) {
+      const result = await compressForOpenRouter({ routeName: "main", model: "test/model", messages });
+      assert.equal(result.reason, "no-compressible-content");
+      assert.deepEqual(result.messages, messages);
+    }
+    assert.equal(calls, 0);
+  } finally {
+    restoreEnv(snapshot);
+    globalThis.fetch = oldFetch;
+  }
+});
