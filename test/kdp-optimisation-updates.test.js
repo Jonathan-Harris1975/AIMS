@@ -164,9 +164,18 @@ test('read-only metadata refresh timeout is checkpointed before submission and s
     sync: async () => { browserReads++; const error = new Error('sensitive KDP browser error'); error.name = 'TimeoutError'; throw error; },
     publish: async () => { publications++; },
   });
-  const first = await processOptimisation('research/updates/test.json', value, base);
-  assert.equal(first.status, 'preflight_failed');
-  assert.equal(first.errorCode, 'TimeoutError');
+  state.set('research/updates/test.json', value);
+  const first = await runOptimisationUpdates({
+    now: () => date,
+    claim: async () => ({ claimed: true, lease: { backend: 'r2' } }), release: async () => {},
+    list: async () => [{ key: 'research/updates/test.json' }],
+    load: async (key) => key.includes('control') ? {} : state.get(key),
+    save: base.save,
+    process: (key, value, args) => processOptimisation(key, value, { ...base, ...args }),
+  });
+  assert.equal(first.ok, false);
+  assert.equal(first.results[0].status, 'preflight_failed');
+  assert.equal(first.results[0].errorCode, 'TimeoutError');
   assert.equal(value.status, 'prepared');
   assert.equal(state.get('research/updates/test.json').preflight.status, 'signed_in_refresh_failed');
   assert.equal(JSON.stringify(state.get('research/updates/test.json')).includes('sensitive KDP browser error'), false);
