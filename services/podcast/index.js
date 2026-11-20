@@ -46,6 +46,21 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
     const eventId = req.idempotencyKey || null;
     const existingJob = await getPublicJobFresh("podcast", sessionId);
 
+    // A completed episode is immutable for its canonical session ID. A retry
+    // must not regenerate audio or publish a second RSS entry.
+    if (existingJob?.status === "completed" && podcastPipelineSucceeded(existingJob.result)) {
+      return res.status(200).json({
+        ok: true,
+        duplicateJob: true,
+        alreadyPublished: true,
+        sessionId,
+        status: "completed",
+        statusUrl: `/podcast/status/${encodeURIComponent(sessionId)}`,
+        message: "Podcast episode already completed; no new publication started.",
+        job: existingJob,
+      });
+    }
+
     if (existingJob && ["queued", "running"].includes(existingJob.status)) {
       return res.status(202).json({
         ok: true,
