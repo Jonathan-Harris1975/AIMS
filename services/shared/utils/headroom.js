@@ -261,6 +261,13 @@ export async function compressForOpenRouter({ routeName, routeKey, model, messag
     return skip("route-not-enabled", original);
   }
   if (!isTextOnly(original)) return skip("non-text-or-multimodal", original);
+  // System/developer instructions are immutable, so a prompt containing only
+  // those roles has no eligible text to compress. Avoid a needless proxy call.
+  if (!original.some((message) => !["system", "developer"].includes(message.role) &&
+    (typeof message.content === "string" ? message.content.trim().length > 0 :
+      message.content.some((part) => (typeof part === "string" ? part : part.text).trim().length > 0)))) {
+    return skip("no-compressible-content", original);
+  }
 
   const minChars = Math.floor(finiteNumber(process.env.HEADROOM_MIN_INPUT_CHARS, 1000, { min: 1 }));
   const inputChars = textCharacterCount(original);
