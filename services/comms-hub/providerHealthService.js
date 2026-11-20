@@ -5,7 +5,7 @@ const CURRENT_AI_ROUTE_MODELS = aiConfig.routeModels || {};
 
 function classify(entry, config, nowMs) {
   const lastAt = entry.lastAt ? Date.parse(entry.lastAt) : 0;
-  const stale = !lastAt || nowMs - lastAt > config.providerHealthStaleMs;
+  const stale = !lastAt || lastAt > nowMs + 60_000 || nowMs - lastAt > config.providerHealthStaleMs;
   const lastStatus = String(entry.lastStatus || "unknown").toLowerCase();
   if (lastStatus === "configured" || lastStatus === "disabled") return "unknown";
   if (lastStatus === "unconfigured") return "unavailable";
