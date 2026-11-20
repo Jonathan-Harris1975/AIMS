@@ -95,3 +95,51 @@ test('known-title fast path only accepts an independently observed signed-in pri
   assert.throws(() => requireFreshPricingAsin('B0DQHSD858', 'B0DMYF3YH3'), /independently confirm/);
   assert.throws(() => requireFreshPricingAsin('not-an-asin', 'B0DMYF3YH3'), /independently confirm/);
 });
+
+test('Bookshelf follows a verified same-origin next-page URL instead of a flaky click', async () => {
+  const page = {
+    index: 0,
+    url: () => 'https://kdp.amazon.com/en_US/bookshelf?page=' + (page.index + 1),
+    locator: () => ({ first: () => ({
+      count: async () => page.index === 0 ? 1 : 0,
+      getAttribute: async () => '/en_US/bookshelf?page=2',
+      click: async () => { throw new Error('same-origin href must be used instead of click'); },
+    }) }),
+    waitForFunction: async () => {},
+  };
+  const navigated = [];
+  const result = await collectBookshelfRefsViaBrowser(page, {
+    scanPage: async p => pageScan(p.index),
+    navigate: async (_, url) => {
+      navigated.push(url);
+      if (url.includes('page=2')) page.index = 1;
+    },
+    throttle: async () => {},
+  });
+  assert.equal(result.pagesScanned, 2);
+  assert.equal(result.refs.length, 2);
+  assert.deepEqual(navigated.filter(url => String(url).includes('page=2')),
+    ['https://kdp.amazon.com/en_US/bookshelf?page=2']);
+});
+
+test('Bookshelf timeout after a failed page transition reports a bounded identity error', async () => {
+  let reloads = 0;
+  const page = {
+    index: 0, url: () => 'https://kdp.amazon.com/en_US/bookshelf',
+    locator: () => ({ first: () => ({
+      count: async () => 1,
+      getAttribute: async () => 'javascript:void(0)',
+      click: async () => {},
+    }) }),
+    waitForFunction: async () => { const e = new Error('Timeout 18000ms'); e.name = 'TimeoutError'; throw e; },
+    reload: async () => { reloads++; },
+  };
+  await assert.rejects(
+    collectBookshelfRefsViaBrowser(page, {
+      scanPage: async p => pageScan(p.index),
+      navigate: async () => {}, throttle: async () => {},
+    }),
+    /Bookshelf pagination stalled after page 1/,
+  );
+  assert.equal(reloads, 0, 'click-only pagination must not reset to an unverified first page');
+});
