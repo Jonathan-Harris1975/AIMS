@@ -35,3 +35,14 @@ test("artwork policy layers base brand, season and optional calendar event", asy
   assert.match(direction, /Seasonal palette adjustment \(winter/);
   assert.match(direction, /Optional event accent \(christmas\)/);
 });
+
+
+test("newsletter hero prompt remains source-grounded and text-free after rejected-image recovery", async () => {
+  const { applyArtworkPromptPolicy } = await import("../services/artwork/utils/artworkPromptPolicy.js");
+  const prompt = applyArtworkPromptPolicy("Semiconductor export controls and AI accelerators", { date: "2026-11-20", mode: "newsletter" });
+  assert.match(prompt, /explicitly supplied fact, named technology or physical consequence/);
+  assert.match(prompt, /materially different source-grounded scene/);
+  assert.match(prompt, /one coherent focal scene/);
+  assert.match(prompt, /ABSOLUTE TEXT-FREE OUTPUT/);
+  assert.match(prompt, /Never use beaches, oceans, coastlines/);
+});

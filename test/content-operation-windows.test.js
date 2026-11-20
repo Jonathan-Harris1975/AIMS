@@ -93,3 +93,17 @@ test("social blog and newsletter remain weekday-only without Friday weekend batc
   assert.equal(builds.length, 2);
   assert.ok(builds.every((line) => !/publishDate|scheduledDateTime|scheduleDate|"date"/.test(line)));
 });
+
+
+test("Friday starts four independent weekend Blotato slots before editorial QA", () => {
+  const friday = opsSource.slice(opsSource.indexOf('"friday-am": ['), opsSource.indexOf('"friday-pm": ['));
+  const newsletter = friday.indexOf('"/newsletter/generate"');
+  assert.ok(newsletter > 0);
+  for (const day of ["saturday", "sunday"]) {
+    for (const slot of ["am", "pm"]) {
+      const path = `"/blotato/weekend/${day}/${slot}/schedule"`;
+      assert.equal(occurrences(friday, path), 1, `${day} ${slot} must be scheduled exactly once`);
+      assert.ok(friday.indexOf(path) < newsletter, `${day} ${slot} must start before newsletter editorial QA`);
+    }
+  }
+});

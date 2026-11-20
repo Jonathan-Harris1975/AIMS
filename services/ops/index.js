@@ -305,6 +305,12 @@ const OPERATION_WINDOWS = Object.freeze({
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
     ["blotato-am", "/blotato/autoshorts/schedule", {}],
     ["zernio-friday", "/zernio/daily/friday", {}],
+    // Start all four paid weekend video lanes before newsletter and artwork QA work;
+    // independent deferred tasks are reconciled at the end of the window.
+    ["blotato-saturday-am", "/blotato/weekend/saturday/am/schedule", {}],
+    ["blotato-saturday-pm", "/blotato/weekend/saturday/pm/schedule", {}],
+    ["blotato-sunday-am", "/blotato/weekend/sunday/am/schedule", {}],
+    ["blotato-sunday-pm", "/blotato/weekend/sunday/pm/schedule", {}],
     ["zernio-saturday", "/zernio/daily/saturday", {}],
     ["zernio-sunday", "/zernio/daily/sunday", {}],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
@@ -314,12 +320,7 @@ const OPERATION_WINDOWS = Object.freeze({
     ["newsletter-readiness", "/newsletter/readiness", { profileId: "ai-edge" }, "newsletter", false, "newsletter-generate"],
     ["newsletter-send", "/newsletter/send", { profileId: "ai-edge" }, "newsletter", false, "newsletter-readiness"],
     ["newsletter-weekend-prepare", "/newsletter/weekend/prepare", {}, "newsletter"],
-    // Create and schedule both videos for each weekend day on Friday. Each
-    // video has a target-day reservation, deterministic ID and independent QA.
-    ["blotato-saturday-am", "/blotato/weekend/saturday/am/schedule", {}],
-    ["blotato-saturday-pm", "/blotato/weekend/saturday/pm/schedule", {}],
-    ["blotato-sunday-am", "/blotato/weekend/sunday/am/schedule", {}],
-    ["blotato-sunday-pm", "/blotato/weekend/sunday/pm/schedule", {}],
+
   ],
   "friday-pm": [
     ["podcast-readiness", "/podcast/readiness", {}],
@@ -687,7 +688,12 @@ router.get("/windows", (_req, res) => {
 // work and must complete before the next social stage can advance. Running
 // them as detached background tasks made the operation window harder to reason
 // about and allowed stale/replayed executions to overlap provider work.
-const DEFERRED_OPERATION_TASKS = new Set();
+const DEFERRED_OPERATION_TASKS = new Set([
+  "blotato-saturday-am",
+  "blotato-saturday-pm",
+  "blotato-sunday-am",
+  "blotato-sunday-pm",
+]);
 
 async function executeOperationWindow(job, tasks, req) {
   job.status = "running";
