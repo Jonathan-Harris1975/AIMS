@@ -121,7 +121,7 @@ export async function reconcileRoyaltyFloor({
         results.push({ titleId: row.titleId, status: entry.status }); continue;
       }
       try {
-        const current = await sync(row.titleId, 'kindle');
+        const current = await sync(row.titleId, 'kindle', row.asin);
         const price = confirmedPrice(current, row.asin);
         if (!price || price.price < price.floor || price.price < entry.targetMinor) {
           results.push({ titleId: row.titleId, status: 'awaiting_signed_in_price' }); continue;
@@ -153,9 +153,23 @@ export async function reconcileRoyaltyFloor({
     let blocked = false;
     if (pending.length && +now() - Date.parse(ledger.lastSubmissionAt || '1970-01-01') >= SUBMISSION_GAP_MS) {
       const row = pending[0];
-      const current = await sync(row.titleId, 'kindle');
-      const price = confirmedPrice(current, row.asin);
-      if (!price || price.price === null || !Number.isSafeInteger(price.floor)) {
+      let current = null;
+      let refreshError = null;
+      try { current = await sync(row.titleId, 'kindle', row.asin); }
+      catch (error) { refreshError = error; }
+      const price = current ? confirmedPrice(current, row.asin) : null;
+      if (refreshError) {
+        // A read-only preflight failed before KDP side effects. Persist an
+        // explicit bounded retry instead of losing the entire scheduled run.
+        const errorCode = String(refreshError.code || refreshError.name || 'unknown')
+          .replace(/[^A-Za-z0-9_-]/g, '').slice(0, 60);
+        ledger.entries[row.titleId] = { status: 'blocked', reason: 'signed_in_refresh_failed',
+          errorCode, nextAttemptAt: new Date(+now() + BLOCK_RETRY_GAP_MS).toISOString() };
+        blocked = true;
+        await persist();
+        results.push({ titleId: row.titleId, status: 'blocked',
+          reason: 'signed_in_refresh_failed', errorCode });
+      } else if (!price || price.price === null || !Number.isSafeInteger(price.floor)) {
         ledger.entries[row.titleId] = { status: 'blocked', reason: 'current_identity_plan_or_price_unverifiable',
           nextAttemptAt: new Date(+now() + BLOCK_RETRY_GAP_MS).toISOString() };
         blocked = true; await persist();
