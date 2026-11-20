@@ -193,7 +193,10 @@ export async function deliverNewsletterIssue({ profile, sessionId, buildResult, 
     sentAt: new Date().toISOString(),
     date,
   });
-  return { ok: failed === 0 && deferred === 0, status: deferred ? "delivery_cutoff_deferred" : failed ? "partial_delivery" : "dispatched", provider: "aims-onecom", deliveryId, audience: recipients.length, sent, failed, deferred,
+  return {
+    ok: failed === 0 && deferred === 0,
+    status: deferred ? "delivery_cutoff_deferred" : failed ? "partial_delivery" : "dispatched",
+    provider: "aims-onecom", deliveryId, audience: recipients.length, sent, failed, deferred,
     deliveryAssurance: "smtp_acceptance_only", inboxConfirmed: false };
 }
 
