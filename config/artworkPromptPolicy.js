@@ -179,9 +179,11 @@ web or decorative geometry.",
         "NEWSLETTER EDITORIAL REQUIREMENT: create a specific visual response to the lead AI story, not a generic masthead, banner, scenic backdrop or lifestyle photograph.",
         "The subject must visibly belong to AI, software, robotics, security, governance, infrastructure or the lead story's real-world domain.",
         "Prefer a concrete technical object, consequential workplace moment or human-scale news scene with clear editorial tension.",
-        "Anchor the main subject to an explicitly supplied fact, named technology or physical consequence from the lead story. If the brief is abstract, show a plausible source-supported technical process instead of inventing an event.",
+        "Anchor the main subject to an explicitly supplied fact, named technology or physical consequence from the lead story. If the" +
+        "brief is abstract, show a plausible source-supported technical process instead of inventing an event."
         "Compose one coherent focal scene with a specific foreground object and relevant supporting environment; avoid multiple unrelated subjects, collage panels and ornamental AI motifs.",
-        "For visual recovery after a rejected candidate, replace the failed composition with a materially different source-grounded scene; never solve a hard visual-QA defect by adding title lettering, interface text or unrelated imagery.",
+        "For visual recovery after a rejected candidate, replace the failed composition with a materially different source-grounded" +
+        "scene; never solve a hard visual-QA defect by adding title lettering, interface text or unrelated imagery."
         "Never use beaches, oceans, coastlines, mountains, roads, paths, horizons, sunsets, tourism, resorts, anonymous lone travellers or inspirational journey imagery.",
         "Never imitate a magazine cover or website template. Do not create empty title panels, hero-copy space, buttons, interface chrome or decorative layout boxes.",
       ].join(" ")
