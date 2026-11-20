@@ -270,6 +270,20 @@ async function produceOne(book, format, shelf, options) {
   }
 }
 
+// A Bookshelf timeout is a read-only preflight failure. Retry one fresh
+// authenticated scan, but never accept an incomplete inventory or retry an
+// unsupported MFA/authentication error.
+export async function inspectPrintBookshelfWithRetry(inspect, {
+  pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
+  try { return await inspect(); }
+  catch (error) {
+    if (error?.name !== 'TimeoutError' && error?.code !== 'TimeoutError') throw error;
+    await pause(2_000);
+    return inspect();
+  }
+}
+
 export async function runPrintProduction({
   dryRun = false, ebookId = null, now = () => new Date(),
   listBooks = listKdpEbooks, inspectBookshelf = listBookshelf,
@@ -290,7 +304,20 @@ export async function runPrintProduction({
   try {
     if (lease.lease.backend !== "r2") throw new Error("Remote R2 lease is mandatory for live print publication.");
     await ensurePrintStateTables();
-    const shelf = await inspectBookshelf(); // Signed-in KDP gate and duplicate check.
+    let shelf;
+    try { shelf = await inspectPrintBookshelfWithRetry(inspectBookshelf); }
+    catch (error) {
+      // This is BEFORE any KDP create/save/publish operation. Record a durable
+      // terminal failure that MAST can diagnose, without consuming print quotas
+      // or considering an incomplete Bookshelf inventory safe for new titles.
+      const errorCode = String(error?.code || error?.name || 'unknown')
+        .replace(/[^A-Za-z0-9_-]/g, '').slice(0, 60);
+      report = { ok: false, schemaVersion: 1, status: 'signed_in_bookshelf_unavailable',
+        reason: 'print_preflight_browser_failed', errorCode, kdpWritesPerformed: false,
+        checkedAt: now().toISOString(), results: [], pending: null };
+      report.reportRef = await recordRun(report);
+      return report;
+    }
     const books = choosePrintCandidates(await listBooks());
     if (shelf.refs.length < books.length) {
       throw new Error("Signed-in KDP Bookshelf scan is smaller than the catalogue; completeness is not verified.");

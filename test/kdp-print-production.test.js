@@ -4,7 +4,7 @@ import { calculatePrintCover, parsePdfInfo, validatePrintSourceText } from "../s
 import { calculatePrintPrice, planPrintPrices } from "../services/kdp/printPricePolicy.js";
 import { utcPrintWeek, canAttemptPrintJob } from "../services/kdp/printState.js";
 import { categorySpecsFromKindle, existingPrintMatches, choosePrintCandidates, printWindowAllowsAction, isPlatformQuotaRejection,
-  runPrintProduction, successfulPrintRun } from "../services/kdp/printProduction.js";
+  runPrintProduction, successfulPrintRun, inspectPrintBookshelfWithRetry } from "../services/kdp/printProduction.js";
 import { normalizeAiDeclaration } from "../services/kdp/printAiDisclosure.js";
 import { publicPurchaseControls, verifyPrintIdentity } from "../services/kdp/printVerification.js";
 
@@ -136,4 +136,34 @@ test("print production cannot report empty success while 80 catalogue editions r
   assert.equal(successfulPrintRun([{status: "weekly_quota_exhausted"}], 0, 80), true);
   assert.equal(successfulPrintRun([{status: "blocked"}], 0, 80), false);
   assert.equal(successfulPrintRun([{status: "submission_unverified"}], 0, 80), false);
+});
+
+test('read-only KDP Bookshelf timeout gets one bounded fresh scan, never an incomplete catalogue', async () => {
+  const events = [];
+  let attempts = 0;
+  const complete = { refs: [{ titleId: 'A31ZRJGLFAETHB', format: 'kindle', asin: 'B0DMYF3YH3' }],
+    pagesScanned: 4 };
+  const actual = await inspectPrintBookshelfWithRetry(async () => {
+    attempts++;
+    events.push('scan');
+    if (attempts === 1) throw Object.assign(new Error('page.waitForFunction timeout'), { name: 'TimeoutError' });
+    return complete;
+  }, { pause: async (ms) => { assert.equal(ms, 2000); events.push('pause'); } });
+  assert.deepEqual(events, ['scan', 'pause', 'scan']);
+  assert.equal(actual, complete);
+});
+
+test('failed authenticated print scan never retries a non-timeout error or invents a catalogue', async () => {
+  let attempts = 0;
+  await assert.rejects(inspectPrintBookshelfWithRetry(async () => {
+    attempts++;
+    throw Object.assign(new Error('MFA required'), { name: 'KdpAuthError' });
+  }, { pause: async () => { throw new Error('must not retry'); } }), /MFA required/);
+  assert.equal(attempts, 1);
+  attempts = 0;
+  await assert.rejects(inspectPrintBookshelfWithRetry(async () => {
+    attempts++;
+    throw Object.assign(new Error('browser still timed out'), { name: 'TimeoutError' });
+  }, { pause: async () => {} }), /still timed out/);
+  assert.equal(attempts, 2);
 });

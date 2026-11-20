@@ -158,6 +158,15 @@ export function verifiedRefAsin(pricingAsin: string, reportAsin?: string): strin
   return valid(report) ? report : ''
 }
 
+export function requireFreshPricingAsin(pricingAsin: string, expectedAsin: string): string {
+  const observed = verifiedRefAsin(pricingAsin)
+  const expected = verifiedRefAsin(expectedAsin)
+  if (!observed || !expected || observed !== expected) {
+    throw new KdpClientError('The authenticated KDP pricing page did not independently confirm the expected ASIN.')
+  }
+  return observed
+}
+
 async function collectBookshelfRefsFromHtml(
   actionPage: Page,
   parsePage: Page,
@@ -303,6 +312,7 @@ export async function fetchBookMetadata(
   requestPage: Page,
   parsePage: Page,
   ref: TitleFormatRef,
+  options: { requireFreshPricingAsin?: boolean } = {},
 ): Promise<KdpBookMetadata | null> {
   const details = await fetchAndParseKdpHtml<ParsedDetails>(
     requestPage,
@@ -371,7 +381,9 @@ export async function fetchBookMetadata(
   // KDP's price form can select the royalty_rate radio after client-side
   // hydration. Server HTML alone omits it for some existing LIVE books.
   // Read the actual authenticated pricing form rather than assuming 70%.
-  if (ref.format === 'kindle' && !/^(?:35|70)(?:_PERCENT)?$/.test(pricing.royaltyPlan)) {
+  if (ref.format === 'kindle' &&
+      (!/^(?:35|70)(?:_PERCENT)?$/.test(pricing.royaltyPlan) ||
+        (options.requireFreshPricingAsin && !/^B0[A-Z0-9]{8}$/i.test(pricing.asin)))) {
     const response = await kdpGoto(requestPage, setupPageUrl(ref.format, ref.titleId, 'pricing'), {
       waitUntil: 'networkidle', timeout: 120_000,
     }).catch(() => null)
@@ -403,14 +415,20 @@ export async function fetchBookMetadata(
           document.querySelector('input[type="hidden"][name="data[digital][royalty_rate]"]')?.value?.trim() ||
           document.querySelector('input[type="hidden"][name="data[digital][royalty_plan]"]')?.value?.trim() || ''
         const bytes = document.querySelector('input[name="data[digital][filesize_bytes]"]')?.value || ''
-        return { plan, bytes }
-      })()`) as { plan: string; bytes: string }
+        const asin = (document.body.innerText.match(/ASIN:\\s*(B0[A-Z0-9]{8})/i) || [])[1] || ''
+        return { plan, bytes, asin }
+      })()`) as { plan: string; bytes: string; asin: string }
       if (/^(?:35|70)(?:_PERCENT)?$/.test(rendered.plan)) pricing.royaltyPlan = rendered.plan
+      if (/^B0[A-Z0-9]{8}$/i.test(rendered.asin)) pricing.asin = rendered.asin.toUpperCase()
       if (/^\d+$/.test(rendered.bytes) && Number.isSafeInteger(Number(rendered.bytes))) {
         pricing.fileSizeKb = String(Math.ceil(Number(rendered.bytes) / 1024))
       }
     }
   }
+
+  // A direct known-title refresh must independently prove the ASIN on this
+  // freshly authenticated page. The old cached Bookshelf link is not enough.
+  if (options.requireFreshPricingAsin) requireFreshPricingAsin(pricing.asin, ref.asin || '')
 
   return {
     titleId: ref.titleId,
@@ -507,11 +525,26 @@ export async function requireExactBookshelfRef(
 export async function syncBookMetadata(
   titleId: string,
   format: KdpBookFormat,
+  expectedAsin?: string,
 ): Promise<KdpBookMetadata> {
+  // A complete signed-in KDP snapshot and D1 already establish the title-ASIN
+  // association for royalty-floor remediation. Avoid a second full Bookshelf
+  // pagination pass, which timed out on each 19 November production price run.
+  // The direct path has a stricter gate: freshly observed pricing-page ASIN.
+  const knownTitle = expectedAsin !== undefined
+  const knownAsin = String(expectedAsin || '').trim().toUpperCase()
+  if (knownTitle && (format !== 'kindle' || !/^[A-Z0-9]{10,20}$/.test(titleId) ||
+      !/^B0[A-Z0-9]{8}$/.test(knownAsin))) {
+    throw new KdpClientError('Invalid exact-title Kindle ASIN for signed-in KDP refresh.')
+  }
   return withKdpPages(async ({ action, parse }) => {
-    const scan = await collectBookshelfRefs(action, parse)
-    const ref = await requireExactBookshelfRef(titleId, format, scan, () => collectBookshelfRefsViaBrowser(action))
-    const meta = await fetchBookMetadata(action, parse, ref)
+    const ref: TitleFormatRef = knownTitle
+      ? { titleId, format, asin: knownAsin }
+      : await (async () => {
+          const scan = await collectBookshelfRefs(action, parse)
+          return requireExactBookshelfRef(titleId, format, scan, () => collectBookshelfRefsViaBrowser(action))
+        })()
+    const meta = await fetchBookMetadata(action, parse, ref, { requireFreshPricingAsin: knownTitle })
     if (!meta) {
       throw new KdpClientError(
         `Could not read metadata for ${titleId} (${format}).`,

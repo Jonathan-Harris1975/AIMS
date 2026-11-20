@@ -54,7 +54,19 @@ export async function processOptimisation(key, intent, {
   if (intent.status === 'prepared') {
     if (!inWeeklyWindow(now(), 'update')) return { status: 'outside_window' };
     if (+now() - Date.parse(intent.createdAt) > 48 * 3600000) { intent.status = 'expired'; await persist(); return { status: intent.status }; }
-    const current = await sync(intent.titleId, 'kindle');
+    let current;
+    try { current = await sync(intent.titleId, 'kindle', intent.asin); }
+    catch (error) {
+      // A failure reading the signed-in page precedes all KDP side effects.
+      // Retain a bounded retry and expose the cause to MAST; never mark this
+      // as a successful no-op or silently consume an approved proposal.
+      const errorCode = String(error?.code || error?.name || 'unknown')
+        .replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+      intent.preflight = { status: 'signed_in_refresh_failed', errorCode, at: now().toISOString() };
+      intent.nextAttemptAt = new Date(+now() + 4 * 3600000).toISOString();
+      await persist();
+      return { status: 'preflight_failed', errorCode };
+    }
     if (current.asin !== intent.asin || current.titleId !== intent.titleId || current.format !== 'kindle') {
       intent.nextAttemptAt = new Date(+now() + 4 * 3600000).toISOString(); await persist(); return { status: 'identity_unverified' };
     }
@@ -110,7 +122,7 @@ export async function processOptimisation(key, intent, {
       intent.status = 'needs_attention'; await persist(); return { status: intent.status };
     }
     intent.nextVerificationAt = new Date(+now() + 4 * 3600000).toISOString(); await persist();
-    const current = await sync(intent.titleId, 'kindle');
+    const current = await sync(intent.titleId, 'kindle', intent.asin);
     if (current.asin !== intent.asin) return { status: 'identity_unverified' };
     if (!/^live$/i.test(current.publishingStatus || '')) {
       intent.seenNonLive = true; await persist(); return { status: 'awaiting_publication' };
@@ -181,7 +193,11 @@ export async function runOptimisationUpdates({ now = () => new Date(), list = ()
       const intent = await load(object.key);
       if (!intent || ['complete', 'expired'].includes(intent.status)) continue;
       if (['conflict', 'needs_attention'].includes(intent.status)) { results.push({ key: object.key, status: intent.status }); continue; }
-      if (intent.nextAttemptAt && +now() < Date.parse(intent.nextAttemptAt)) continue;
+      if (intent.nextAttemptAt && +now() < Date.parse(intent.nextAttemptAt)) {
+        results.push({ key: object.key, status: 'preflight_retry_waiting',
+          nextAttemptAt: intent.nextAttemptAt });
+        continue;
+      }
       if (intent.status === 'prepared') {
         if (submittedThisTick || !inWeeklyWindow(now(), 'update') || +now() - Date.parse(control.lastSubmissionAt || '1970-01-01') < submissionDelayMs()) continue;
         // Reserve the global delay before a side effect, including failed attempts.
@@ -190,6 +206,10 @@ export async function runOptimisationUpdates({ now = () => new Date(), list = ()
       try { results.push({ key: object.key, ...await process(object.key, intent, { now }) }); }
       catch { results.push({ key: object.key, status: 'retry_pending' }); }
     }
-    return { ok: !results.some((r) => ['retry_pending', 'needs_attention', 'conflict', 'submission_uncertain'].includes(r.status)), status: 'processed', results };
+    const failures = new Set([
+      'preflight_failed', 'preflight_retry_waiting', 'retry_pending',
+      'needs_attention', 'conflict', 'submission_uncertain',
+    ]);
+    return { ok: !results.some((r) => failures.has(r.status)), status: 'processed', results };
   } finally { await release(acquired.lease); }
 }
