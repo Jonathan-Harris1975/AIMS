@@ -688,7 +688,12 @@ router.get("/windows", (_req, res) => {
 // work and must complete before the next social stage can advance. Running
 // them as detached background tasks made the operation window harder to reason
 // about and allowed stale/replayed executions to overlap provider work.
-const DEFERRED_OPERATION_TASKS = new Set();
+const DEFERRED_OPERATION_TASKS = new Set([
+  "blotato-saturday-am",
+  "blotato-saturday-pm",
+  "blotato-sunday-am",
+  "blotato-sunday-pm",
+]);
 
 async function executeOperationWindow(job, tasks, req) {
   job.status = "running";
