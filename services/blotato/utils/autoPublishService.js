@@ -1574,26 +1574,36 @@ function jobHasPublicationEvidence(job = {}) {
  * had occurred. Bound the replacement count so a persistent provider-quality
  * problem cannot create an unlimited credit loop.
  */
+export function resumableReplacementHistory(job = {}) {
+  return job.failedRenderReplacement || null;
+}
+
+export function canReuseRenderedReview(qa) {
+  return Boolean(qa && qa.skipped !== true);
+}
+
 export function isReplaceableRenderedQualityFailure(job = {}) {
   if (job.status !== "failed" || job.phase !== "rendered-quality-failed") return false;
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
   if (jobHasPublicationEvidence(job)) return false;
   const allowedReplacements = nonNegativeIntEnv("BLOTATO_FAILED_RENDER_REPLACEMENTS", 1, 2);
-  const completedAttempts = Math.max(1, Number(job.attempt || 1));
-  return completedAttempts - 1 < allowedReplacements;
+  const replacementCount = job.failedRenderReplacement
+    ? Math.max(1, Number(job.failedRenderReplacement.replacementCount || 1)) : 0;
+  return replacementCount < allowedReplacements;
 }
 
 /**
  * Reuse a paid video when scheduling has not been confirmed. This includes
- * videos stopped by the former fail-closed rendered-QA behaviour: QA is now an
- * audit by default, so those existing renders must be handed to POST /v2/posts
- * rather than charging for a replacement. The retry rechecks /schedules before
- * each POST, so a response accepted but lost locally cannot create a duplicate.
+ * videos interrupted before review; retry their review without paying again.
+ * A render rejected by quality review goes through bounded replacement instead.
+ * Provider submissions are reconciled before retry to prevent duplicates.
  */
 export function isRetryableRenderedPublishFailure(job = {}) {
   if (job.status !== "failed") return false;
   const phase = trim(job.phase).toLowerCase();
   const prePublicationQaPhase = ["rendered-quality-review", "rendered-quality-failed"].includes(phase);
+  // Rejected renders require a new quality-reviewed replacement, not handoff.
+  if (phase === "rendered-quality-failed") return false;
   if (!["rendered-quality-review", "rendered-quality-failed", "pre-publish", "publishing", "publish-failed"].includes(phase)) return false;
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
   const qa = job.renderedVideoQa || job.result?.renderedVideoQa || {};
@@ -1806,7 +1816,7 @@ async function runPublishJobImpl({
       // CTA is resolved lane-by-lane inside newsShortsService (Thursday gets a soft podcast plug,
       // all other lanes use a non-bait evergreen CTA). BLOTATO_NEWS_CTA overrides all lanes if set.
       cta: trim(process.env.BLOTATO_NEWS_CTA, ""),
-      editorialContext,
+      editorialContext: [editorialContext, failedRenderReplacement?.repairContext].filter(Boolean).join("\n"),
       requiredTopic,
     };
     const maxQualityAttempts = positiveIntEnv("BLOTATO_QUALITY_RETRY_ATTEMPTS", 3, 5);
@@ -2156,7 +2166,7 @@ async function runPublishJobImpl({
     }
 
     let renderedVideoQa;
-    if (recoveredPublishVideo && failedPublishRecovery?.renderedVideoQa) {
+    if (recoveredPublishVideo && canReuseRenderedReview(failedPublishRecovery?.renderedVideoQa)) {
       renderedVideoQa = { ...failedPublishRecovery.renderedVideoQa, reusedForScheduleRetry: true };
     } else {
       try {
@@ -2167,37 +2177,23 @@ async function runPublishJobImpl({
           sessionId: `${sessionId}-rendered-qa`,
         });
       } catch (qaError) {
-        if (!scheduledTime) throw qaError;
-        // A scheduled paid render must always reach Blotato's provider hand-off.
-        // Rendered QA remains visible in the job, but an unavailable reviewer
-        // cannot strand the video before POST /v2/posts.
-        renderedVideoQa = {
-          pass: true,
-          skipped: true,
-          reason: "scheduled_qa_infrastructure_advisory",
-          error: trim(qaError?.message || qaError).slice(0, 500),
-          score: null,
-          threshold: null,
-          defects: [],
-          hardDefects: [],
-        };
-        warn("blotato.finished_video.qa_unavailable_scheduling_continues", {
-          sessionId,
-          lane: lane.slug,
-          visualId: video.visualId,
-          error: renderedVideoQa.error,
-        });
+        // Retain the paid visual and retry its review before any provider post.
+        throw qaError;
       }
     }
+    if (scheduledTime && renderedVideoQa.skipped) {
+      const error = new Error("Finished-video review unavailable; the existing render requires review before scheduling.");
+      error.code = "blotato-rendered-qa-unavailable";
+      throw error;
+    }
     if (!renderedVideoQa.pass) {
-      // Strict QA flags remain available for immediate/manual publishing. A
-      // scheduled operation is audit-only even when an old Koyeb environment
-      // still contains the former fail-closed values.
+      // Scheduled work may tolerate minor polish but material hard defects
+      // require bounded repair before a public provider handoff.
       const blockSoftQaFailures = scheduledTime
         ? false
         : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
       const blockHardQaFailures = scheduledTime
-        ? false
+        ? true
         : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES, false);
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
         blockSoftFailures: blockSoftQaFailures,
@@ -2579,6 +2575,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   let failedRenderReplacement = null;
   let failedPublishRecovery = null;
   let pendingRenderRecovery = null;
+  let startingReplacementRender = false;
   if (scheduleSlot) {
     const existing = await findExistingScheduledSlotJob(lane.jobType, scheduleSlot, scheduleDate);
     if (existing) {
@@ -2608,6 +2605,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     }
     const pending = await findRetryableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
     if (pending) {
+      failedRenderReplacement = resumableReplacementHistory(pending);
       pendingRenderRecovery = {
         sessionId: pending.sessionId,
         visualId: pending.videoId,
@@ -2629,6 +2627,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
     }
     const retryablePublish = await findRetryableScheduledPublish(lane.jobType, scheduleSlot, scheduleDate);
     if (retryablePublish) {
+      failedRenderReplacement = resumableReplacementHistory(retryablePublish);
       failedPublishRecovery = {
         sessionId: retryablePublish.sessionId,
         visualId: trim(retryablePublish.videoId || retryablePublish.result?.visualId) || null,
@@ -2660,11 +2659,17 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
       ? null
       : await findReplaceableScheduledRender(lane.jobType, scheduleSlot, scheduleDate);
     if (replaceable) {
+      startingReplacementRender = true;
       failedRenderReplacement = {
         sessionId: replaceable.sessionId,
         visualId: trim(replaceable.videoId || replaceable.result?.visualId) || null,
         mediaUrl: trim(replaceable.mediaUrl || replaceable.result?.mediaUrl) || null,
         attempt: Number(replaceable.attempt || 1),
+        replacementCount: Number(replaceable.failedRenderReplacement?.replacementCount || 0) + 1,
+        source: replaceable.source || null,
+        repairContext: ["Correct these finished-video defects in the replacement:",
+          ...(replaceable.renderedVideoQa?.hardDefects || []),
+          replaceable.renderedVideoQa?.recommendation || ""].filter(Boolean).join(" ").slice(0, 1200),
         reason: "rendered-quality-failed-before-publication",
       };
       warn("blotato.schedule.failed_render_replacement", {
@@ -2692,8 +2697,8 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
   let job;
 
   try {
-    if (failedPublishRecovery?.source?.article || pendingRenderRecovery?.source?.article) {
-      articleSource = failedPublishRecovery?.source || pendingRenderRecovery.source;
+    if (failedPublishRecovery?.source?.article || pendingRenderRecovery?.source?.article || failedRenderReplacement?.source?.article) {
+      articleSource = failedPublishRecovery?.source || pendingRenderRecovery?.source || failedRenderReplacement.source;
     } else {
       const configuredBriefLimit = Number(process.env.COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT || 1);
       editorialBriefEntries = await claimPendingEditorialBriefs("blotato_video", {
@@ -2742,7 +2747,7 @@ export async function triggerPublishNowJob(req = {}, laneSlug = DEFAULT_BLOTATO_
       failedPublishes: [],
       // Remove the rejected render from the active job before the daily cap is
       // evaluated. Its identity remains in failedRenderReplacement for audit.
-      ...(failedRenderReplacement ? {
+      ...(startingReplacementRender ? {
         videoId: undefined,
         videoDashboardUrl: undefined,
         mediaUrl: undefined,
