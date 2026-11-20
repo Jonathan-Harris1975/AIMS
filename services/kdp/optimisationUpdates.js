@@ -206,6 +206,10 @@ export async function runOptimisationUpdates({ now = () => new Date(), list = ()
       try { results.push({ key: object.key, ...await process(object.key, intent, { now }) }); }
       catch { results.push({ key: object.key, status: 'retry_pending' }); }
     }
-    return { ok: !results.some((r) => ['preflight_failed', 'preflight_retry_waiting', 'retry_pending', 'needs_attention', 'conflict', 'submission_uncertain'].includes(r.status)), status: 'processed', results };
+    const failures = new Set([
+      'preflight_failed', 'preflight_retry_waiting', 'retry_pending',
+      'needs_attention', 'conflict', 'submission_uncertain',
+    ]);
+    return { ok: !results.some((r) => failures.has(r.status)), status: 'processed', results };
   } finally { await release(acquired.lease); }
 }
