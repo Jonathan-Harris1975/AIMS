@@ -51,9 +51,13 @@ test("KDP print weekly accounting resets Sunday at 00:00 UTC, independently of L
     new Date("2026-11-18T19:00:00Z")),false);
   assert.equal(canAttemptPrintJob({state:"blocked",updatedAt:"2026-11-15T18:00:00Z"},
     new Date("2026-11-18T19:00:00Z")),true);
-  assert.equal(printWindowAllowsAction(new Date("2026-11-18T22:15:00Z"),{start:true}),true);
-  assert.equal(printWindowAllowsAction(new Date("2026-11-18T22:50:00Z"),{start:true}),false);
-  assert.equal(printWindowAllowsAction(new Date("2026-11-20T22:15:00Z")) ,false);
+  assert.equal(printWindowAllowsAction(new Date("2026-11-18T16:09:00Z"),{start:true}),false);
+  assert.equal(printWindowAllowsAction(new Date("2026-11-18T16:10:00Z"),{start:true}),true);
+  assert.equal(printWindowAllowsAction(new Date("2026-11-18T18:34:00Z"),{start:true}),true);
+  assert.equal(printWindowAllowsAction(new Date("2026-11-18T18:35:00Z"),{start:true}),false);
+  assert.equal(printWindowAllowsAction(new Date("2026-11-18T19:00:00Z")),false);
+  assert.equal(printWindowAllowsAction(new Date("2026-11-18T22:15:00Z")),false);
+  assert.equal(printWindowAllowsAction(new Date("2026-11-20T16:10:00Z")),false);
 });
 
 test("print worker sorts pilot title first and rejects uncertain duplicate KDP print identities", () => {
@@ -133,7 +137,51 @@ test("print production cannot report empty success while 80 catalogue editions r
   assert.equal(successfulPrintRun([], 2, 2), true);
   assert.equal(successfulPrintRun([], 3, 2), false);
   assert.equal(successfulPrintRun([{status: "submitted_to_kdp_review"}], 0, 80), true);
-  assert.equal(successfulPrintRun([{status: "weekly_quota_exhausted"}], 0, 80), true);
+  assert.equal(successfulPrintRun([{status: "weekly_quota_exhausted"}], 0, 80), false);
+  assert.equal(successfulPrintRun([{status: "assets_ready_window_closed"}], 0, 80), false);
+  assert.equal(successfulPrintRun([{status: "already_in_progress_or_submitted"}], 1, 80), false);
   assert.equal(successfulPrintRun([{status: "blocked"}], 0, 80), false);
   assert.equal(successfulPrintRun([{status: "submission_unverified"}], 0, 80), false);
+});
+
+
+test("Bookshelf preflight timeouts produce durable failure evidence without KDP writes", async () => {
+  const saved = [];
+  let released = 0;
+  const error = new Error("page.waitForFunction: Timeout 30000ms exceeded.");
+  error.name = "TimeoutError";
+  const result = await runPrintProduction({
+    now: () => new Date("2026-11-18T16:12:00Z"),
+    claimLease: async () => ({ claimed: true, lease: { backend: "r2" } }),
+    releaseLease: async () => { released++; },
+    ensureTables: async () => {},
+    inspectBookshelf: async () => { throw error; },
+    listBooks: async () => { throw new Error("must not load candidates after scan failure"); },
+    publish: async () => { throw new Error("KDP remote write must not be reached"); },
+    record: async report => {
+      saved.push(report);
+      return { bucket: "kdp", key: "print/production/reports/test-failure.json" };
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.schemaVersion, 1);
+  assert.equal(result.status, "preflight_failed");
+  assert.equal(result.failureStage, "signed_in_bookshelf_scan");
+  assert.equal(result.errorName, "TimeoutError");
+  assert.equal(result.kdpWritesPerformed, false);
+  assert.equal(result.safeToRetryWithoutKdpReconciliation, true);
+  assert.deepEqual(result.reportRef, { bucket:"kdp", key:"print/production/reports/test-failure.json" });
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].status, "preflight_failed");
+  assert.equal(released, 1);
+});
+
+test("Friday print submission stays closed even when a live run is requested", async () => {
+  const result = await runPrintProduction({
+    now: () => new Date("2026-11-20T16:10:00Z"),
+    claimLease: async () => { throw new Error("must not claim a live Friday print lease"); },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "outside_print_window");
+  assert.equal(result.kdpWritesPerformed, false);
 });
