@@ -87,6 +87,15 @@ test('single-title refresh searches later pages before rejecting an exact setup 
   await assert.rejects(requireExactBookshelfRef('GROUPROW123', 'kindle', partial, complete), /no exact kindle record/);
 });
 
+test('known-title fast path only accepts an independently observed signed-in pricing ASIN', async () => {
+  const { requireFreshPricingAsin } = await import('../services/kdp/engine/kdpMetadata.ts');
+  assert.equal(requireFreshPricingAsin('B0DMYF3YH3', 'B0DMYF3YH3'), 'B0DMYF3YH3');
+  assert.equal(requireFreshPricingAsin('b0dmyf3yh3', 'B0DMYF3YH3'), 'B0DMYF3YH3');
+  assert.throws(() => requireFreshPricingAsin('', 'B0DMYF3YH3'), /independently confirm/);
+  assert.throws(() => requireFreshPricingAsin('B0DQHSD858', 'B0DMYF3YH3'), /independently confirm/);
+  assert.throws(() => requireFreshPricingAsin('not-an-asin', 'B0DMYF3YH3'), /independently confirm/);
+});
+
 test('Bookshelf follows a verified same-origin next-page URL instead of a flaky click', async () => {
   const page = {
     index: 0,

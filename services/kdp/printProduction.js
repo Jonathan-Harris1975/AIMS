@@ -276,6 +276,17 @@ async function produceOne(book, format, shelf, options) {
   }
 }
 
+export async function inspectPrintBookshelfWithRetry(inspect, {
+  pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
+  try { return await inspect(); }
+  catch (error) {
+    if (error?.name !== 'TimeoutError' && error?.code !== 'TimeoutError') throw error;
+    await pause(2_000);
+    return inspect();
+  }
+}
+
 export async function runPrintProduction({
   dryRun = false, ebookId = null, now = () => new Date(),
   listBooks = listKdpEbooks, inspectBookshelf = listBookshelf,
@@ -300,7 +311,7 @@ export async function runPrintProduction({
     if (lease.lease.backend !== "r2") throw new Error("Remote R2 lease is mandatory for live print publication.");
     await ensureTables();
     failureStage = "signed_in_bookshelf_scan";
-    const shelf = await inspectBookshelf(); // Signed-in KDP gate and duplicate check.
+    const shelf = await inspectPrintBookshelfWithRetry(inspectBookshelf); // Verified read-only retry.
     failureStage = "catalogue_identity_and_reconciliation";
     const books = choosePrintCandidates(await listBooks());
     if (shelf.refs.length < books.length) {

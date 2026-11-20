@@ -216,7 +216,9 @@ router.post("/print/rollout/plan/run", requestDedupe("kdp:print-rollout-plan"), 
 
 // Live print edition creation and submission. Reuses the existing KDP login/browser
 // and durable D1/R2 state; never counts a planning report as a publication.
-router.post("/print/production/run", requestDedupe("kdp:print-production"), asyncRoute(async (req, res) =>
+// Print submissions are protected by their own R2 job/quota ledger and lease.
+// A generic duplicate HTTP 202 has no async sessionId and strands MAST retries.
+router.post("/print/production/run", asyncRoute(async (req, res) =>
   startJob(req, res, "print-production", () => runPrintProduction({
     dryRun: req.body?.dryRun === true,
     ebookId: req.body?.ebookId ?? null,
@@ -638,7 +640,9 @@ router.get("/audit/pricing/royalty-floor", asyncRoute(async (_req, res) => {
   res.json(await reconcileRoyaltyFloor({ dryRun: true }));
 }));
 
-router.post("/audit/pricing/royalty-floor/run", requestDedupe("kdp:royalty-floor-rollout"), asyncRoute(async (req, res) =>
+// The R2 royalty ledger and lease own mutation idempotency. Generic requestDedupe
+// returned HTTP 202 without sessionId on MAST retries, hiding actual failed jobs.
+router.post("/audit/pricing/royalty-floor/run", asyncRoute(async (req, res) =>
   startJob(req, res, "audit-royalty-floor", () =>
     reconcileRoyaltyFloor({ dryRun: req.body?.dryRun !== false })),
 ));
