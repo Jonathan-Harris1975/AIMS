@@ -317,7 +317,9 @@ test("social providers are production schedule-only and the weekday window owns 
     '["blotato-pm", "/blotato/shorts/news-insight/schedule"',
   ]) assert.ok(ops.includes(contract), `missing social operation task: ${contract}`);
   assert.equal(ops.includes('["zernio-blog-social", "/zernio/blog-rss/daily"'), true);
-  assert.ok(ops.includes('const DEFERRED_OPERATION_TASKS = new Set();'));
+  assert.match(ops, /const DEFERRED_OPERATION_TASKS = new Set\(\[/);
+  assert.ok(ops.includes('"blotato-saturday-am"'));
+  assert.ok(ops.includes('"blotato-sunday-pm"'));
 });
 
 test("mini-series creation retries weak plans and duplicate parts, then fails closed before partial scheduling", async () => {
