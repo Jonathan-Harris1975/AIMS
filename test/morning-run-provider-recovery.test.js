@@ -59,6 +59,14 @@ test("Blotato reuses rendered videos for provider handoff but blocks ambiguous r
       failedPublishes: [{ platform: "instagram", submissionOutcome: "rejected" }],
     };
     assert.equal(isRetryableRenderedPublishFailure(failedPublish), true);
+    // A review outage is not a quality pass. A failed handoff must not
+    // recycle an unreviewed render into another public submission.
+    assert.equal(isRetryableRenderedPublishFailure({
+      ...failedPublish, renderedVideoQa: { skipped: true },
+    }), false);
+    assert.equal(isRetryableRenderedPublishFailure({
+      ...failedPublish, renderedVideoQa: { skipped: true, acceptedForScheduling: true },
+    }), false);
     assert.equal(isRetryableRenderedPublishFailure({
       ...failedPublish,
       phase: "rendered-quality-failed",
