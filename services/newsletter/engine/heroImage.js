@@ -136,8 +136,15 @@ export async function generateHeroImage({ profile, heroHeadline, leadStory = nul
         sessionId, profileId: profile.id, error: feedback,
         artworkDiagnostics: attempts[0],
       });
-      const replacement = await buildPrompt({ profile, heroHeadline, leadStory, bigThree: [],
-        sessionId: `${sessionId}-art-direction-repair`, repairDiagnostics: attempts[0], previousVisualDirection: originalPrompt });
+      let replacement = "";
+      try {
+        replacement = await buildPrompt({ profile, heroHeadline, leadStory, bigThree: [],
+          sessionId: `${sessionId}-art-direction-repair`, repairDiagnostics: attempts[0], previousVisualDirection: originalPrompt });
+      } catch (error) {
+        // A failed art-direction model must not abort the one permitted corrective
+        // render. The source-grounded local direction below remains available.
+        warn("newsletter.hero.repair_direction_failed", { sessionId, error: String(error?.message || error).slice(0, 200) });
+      }
       prompt = [
         String(replacement || "").trim().slice(0, 1000) || `Source-specific editorial photograph about ${leadStory?.title || heroHeadline}.`,
         "CORRECTIVE RENDER: simplify the scene to one clear physical subject and one source-supported action. Preserve the news topic and editorial photographic style.",

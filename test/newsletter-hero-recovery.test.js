@@ -76,3 +76,23 @@ test("provider retry failure retains the last QA scores and provider identity", 
   assert.equal(failure.artworkVisualQa, qa);
   assert.equal(failure.artworkCandidate, candidate);
 });
+
+
+test("repair direction model outage still permits one bounded source-grounded render", async () => {
+  const calls = [];
+  const result = await generateHeroImage(input, {
+    buildPrompt: async ({ repairDiagnostics }) => {
+      if (repairDiagnostics) throw new Error("art direction provider unavailable");
+      return "Initial visual direction";
+    },
+    createArtwork: async (options) => {
+      calls.push(options);
+      return calls.length === 1 ? { ok: false, error: "visual QA rejected" } : generated;
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].prompt, /AI access controls/);
+  assert.match(calls[1].prompt, /CORRECTIVE RENDER/);
+  assert.equal(calls[1].sessionId, "NL-recovery-artwork-repair");
+});
