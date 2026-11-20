@@ -141,3 +141,44 @@ test('queued UK price fails closed when delivery size is not verified', async ()
   assert.equal(value.reason, 'royalty_floor_invalid');
   assert.equal(published, false);
 });
+
+test('prepared KDP metadata update refreshes exact ASIN without rescanning entire Bookshelf', async () => {
+  const calls = [];
+  const value = intent();
+  const result = await processOptimisation('key', value, deps({
+    sync: async (titleId, format, asin) => {
+      calls.push([titleId, format, asin]);
+      return meta;
+    },
+    publish: async () => ({ published: true, errors: [], steps: [] }),
+  }));
+  assert.equal(result.status, 'submitted');
+  assert.deepEqual(calls, [['A123', 'kindle', 'B012345678']]);
+});
+
+test('read-only metadata refresh timeout is checkpointed before submission and surfaces to MAST', async () => {
+  const value = intent();
+  const state = new Map(); let browserReads = 0; let publications = 0;
+  const base = deps({
+    save: async (key, value) => { state.set(key, structuredClone(value)); },
+    sync: async () => { browserReads++; const error = new Error('sensitive KDP browser error'); error.name = 'TimeoutError'; throw error; },
+    publish: async () => { publications++; },
+  });
+  const first = await processOptimisation('research/updates/test.json', value, base);
+  assert.equal(first.status, 'preflight_failed');
+  assert.equal(first.errorCode, 'TimeoutError');
+  assert.equal(value.status, 'prepared');
+  assert.equal(state.get('research/updates/test.json').preflight.status, 'signed_in_refresh_failed');
+  assert.equal(JSON.stringify(state.get('research/updates/test.json')).includes('sensitive KDP browser error'), false);
+  const skipped = await runOptimisationUpdates({
+    now: () => date,
+    claim: async () => ({ claimed: true, lease: { backend: 'r2' } }), release: async () => {},
+    list: async () => [{ key: 'research/updates/test.json' }],
+    load: async (key) => key.includes('control') ? {} : state.get(key),
+    save: base.save,
+    process: (key, intent, args) => processOptimisation(key, intent, { ...base, ...args }),
+  });
+  assert.equal(skipped.ok, true);
+  assert.equal(browserReads, 1);
+  assert.equal(publications, 0);
+});
