@@ -211,10 +211,13 @@ export async function reconcileRoyaltyFloor({
         }
       }
     }
-    const report = { ok: !blocked && !results.some((r) =>
+    const outstandingBlockers = Object.values(ledger.entries).filter((entry) =>
+      ['blocked', 'needs_attention'].includes(entry.status)).length;
+    const report = { ok: !blocked && outstandingBlockers === 0 && !results.some((r) =>
       ['needs_attention', 'submission_uncertain', 'verification_pending'].includes(r.status)),
       dryRun: false, kdpWritesPerformed: applied, total: plan.total,
       belowFloorAtSnapshot: plan.belowFloor, unverifiedPlanAtSnapshot: plan.unverifiedPlan,
+      blocked: outstandingBlockers,
       completed: Object.values(ledger.entries).filter((entry) => entry.status === 'verified').length,
       submitted: Object.values(ledger.entries).filter((entry) => ['submitted','submitting','submission_uncertain'].includes(entry.status)).length,
       results, checkedAt: now().toISOString() };
