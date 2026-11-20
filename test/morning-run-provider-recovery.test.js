@@ -190,7 +190,8 @@ test("AIMS newsletter delivery uses the D1 audience and persists an exactly-once
   assert.match(delivery, /readCampaignDelivery/);
   assert.match(delivery, /status:\s*"already_dispatched"/);
   assert.match(delivery, /newsletter_delivery_recipients/);
-  assert.match(delivery, /status:\s*failed \? "partial" : "dispatched"/);
+  assert.match(delivery, /status:\s*failed \|\| deferred \? "partial" : "dispatched"/);
+  assert.match(delivery, /status: deferred \? "delivery_cutoff_deferred"/);
   assert.match(delivery, /provider:\s*"aims-onecom"/);
   assert.match(ops, /newsletter-generate.*\/newsletter\/generate/);
   assert.match(ops, /newsletter-readiness.*newsletter-generate/);
