@@ -242,19 +242,50 @@ export async function collectBookshelfRefsViaBrowser(page: Page, {
     }
     if (pagesScanned === 200) throw new KdpClientError('KDP Bookshelf exceeded the pagination limit.')
     await throttle()
-    await next.click({ timeout: 15_000 })
+    // Prefer a verified same-origin Bookshelf page URL when KDP exposes one:
+    // clicking its JS paginator can leave the rendered rows unchanged and hang.
+    // Never follow an unrelated action, domain, or javascript: URL.
+    const currentUrl = page.url()
+    const href = typeof next.getAttribute === 'function'
+      ? await next.getAttribute('href') : null
+    let nextUrl: URL | null = null
+    if (href) {
+      try {
+        const candidate = new URL(href, currentUrl)
+        const previous = new URL(currentUrl)
+        if (candidate.protocol === 'https:' && candidate.origin === previous.origin &&
+            candidate.pathname === previous.pathname && candidate.href !== previous.href) {
+          nextUrl = candidate
+        }
+      } catch { /* Malformed pagination links are handled by a normal click. */ }
+    }
+    if (nextUrl) {
+      await navigate(page, nextUrl.href, { waitUntil: 'domcontentloaded', timeout: 45_000 })
+    } else {
+      await next.click({ timeout: 15_000 })
+    }
     try {
       await page.waitForFunction(`(() => {
         const scan = (${SCAN_BOOKSHELF_FN})()
         return scan.refs.length > 0 && scan.refs.map((r) => r.titleId + ':' + r.format).sort().join(',') !== ${JSON.stringify(signature)}
-      })()`, undefined, { timeout: 30_000 })
-      await page.waitForLoadState('networkidle', { timeout: 60_000 })
+      })()`, undefined, { timeout: 18_000 })
+      // The verified page signature is stronger than networkidle: KDP often
+      // keeps background requests open indefinitely after rows have loaded.
     } catch (error) {
-      // An expired authenticated session can redirect at pagination time.
-      // Raise an auth error so the existing browser wrapper refreshes login
-      // once, instead of stranding pricing and print jobs on a generic timeout.
       if (page.url().toLowerCase().includes('signin')) throw new KdpAuthError()
-      throw error
+      const observed = await scanPage(page)
+      const observedSignature = observed.refs.map(r => r.titleId + ':' + r.format).sort().join(',')
+      if (observedSignature !== signature && observed.refs.length > 0) continue
+      // One read-only reload can recover a stalled navigation. No create or
+      // publish action has started; never accept an incomplete Bookshelf scan.
+      if (nextUrl && typeof page.reload === 'function') {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 })
+        if (page.url().toLowerCase().includes('signin')) throw new KdpAuthError()
+        const reloaded = await scanPage(page)
+        const afterReload = reloaded.refs.map(r => r.titleId + ':' + r.format).sort().join(',')
+        if (reloaded.refs.length > 0 && afterReload !== signature) continue
+      }
+      throw new KdpClientError(`KDP Bookshelf pagination stalled after page ${pagesScanned}; a complete signed-in inventory could not be verified. Cause: ${String((error as Error)?.name || 'timeout')}`)
     }
   }
   throw new KdpClientError('KDP Bookshelf scan did not complete.')
