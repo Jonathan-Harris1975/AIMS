@@ -140,7 +140,7 @@ export function operationWindowPollStatus(receipt, {
     status: "failed",
     previousStatus: receipt.status,
     terminal: true,
-    retryable: Boolean(allowRecovery),
+    retryable: decision.claimable,
     recoveryAvailable: decision.claimable,
     availableRecoveryRevision: decision.claimable ? recoveryRevision || null : null,
     interrupted: true,
@@ -190,6 +190,12 @@ export function evaluateOperationWindowClaim(existing, {
   }
 
   const currentAttempt = Math.max(1, Number(existing.attempt || 1));
+  // A repaired deployment cannot override a permanent provider rejection or
+  // uncertain handoff: replaying those may duplicate a real publication.
+  const failedTasks = (existing.results || []).filter((result) => result?.ok === false);
+  if (!force && failedTasks.length && failedTasks.every((result) => result.retryable === false)) {
+    return { claimable: false, reason: "same-day-window-non-retryable-failure", attempt: currentAttempt };
+  }
   if (force) {
     return {
       claimable: true,
