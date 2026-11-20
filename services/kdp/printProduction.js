@@ -17,7 +17,9 @@ import { publishBook } from "./engine/kdpPublish.ts";
 import { listBookshelf, syncBookMetadata } from "./engine/kdpMetadata.ts";
 
 const MAX_BOOKS = 3;
-const MAX_FORMAT_START_MINUTE = 22 * 60 + 50;
+const PRINT_WINDOW_OPEN_MINUTE = 16 * 60 + 10;
+const MAX_FORMAT_START_MINUTE = 18 * 60 + 35;
+const PRINT_WINDOW_CLOSE_MINUTE = 19 * 60;
 const SPECIAL_FIRST_BOOK = 7;
 const STORAGE_ROOT = "print/production/reports/";
 
@@ -29,8 +31,11 @@ export function successfulPrintRun(outcomes, submittedBefore, expectedEditions) 
     "submitted_to_kdp_review", "already_in_progress_or_submitted",
     "weekly_quota_exhausted", "draft_saved_window_closed", "assets_ready_window_closed",
   ]);
+  // Quota exhaustion or time-window closure is not evidence that a book was
+  // published. Never report success for a zero-submission run with backlog.
+  const submittedNow = outcomes.filter(item => item.status === "submitted_to_kdp_review").length;
   return outcomes.every(item => accepted.has(item.status)) &&
-    (outcomes.length > 0 || submittedBefore === expectedEditions);
+    (submittedNow > 0 || submittedBefore === expectedEditions);
 }
 
 export function localPrintClock(at = new Date()) {
@@ -44,7 +49,8 @@ export function localPrintClock(at = new Date()) {
 export function printWindowAllowsAction(at = new Date(), { start = false } = {}) {
   const clock = localPrintClock(at);
   if (!["monday", "tuesday", "wednesday", "thursday"].includes(clock.weekday)) return false;
-  return clock.minute >= 22 * 60 + 15 && clock.minute < (start ? MAX_FORMAT_START_MINUTE : 23 * 60 + 45);
+  return clock.minute >= PRINT_WINDOW_OPEN_MINUTE &&
+    clock.minute < (start ? MAX_FORMAT_START_MINUTE : PRINT_WINDOW_CLOSE_MINUTE);
 }
 
 function cleanTitle(value) {
@@ -278,19 +284,24 @@ export async function runPrintProduction({
   reconcileListings = reconcileLivePrintListings,
   reconcileInterrupted = reconcileInterruptedPrintJobs,
   claimLease = claimDurableLease, releaseLease = releaseDurableLease,
+  ensureTables = ensurePrintStateTables, record = recordRun,
 } = {}) {
   if (dryRun) return { ok: true, dryRun: true, kdpWritesPerformed: false,
     message: "The production run is not a KDP write in dry-run mode." };
   if (!printWindowAllowsAction(now())) return { ok: false, status: "outside_print_window", kdpWritesPerformed: false };
   const lease = await claimLease({
-    namespace: "kdp-print", key: "live-production", pendingTtlMs: 100 * 60_000,
+    namespace: "kdp-print", key: "live-production", pendingTtlMs: 190 * 60_000,
   });
   if (!lease.claimed) return { ok: false, status: "already_running", kdpWritesPerformed: false };
   let report = null;
+  let failureStage = "durable_state_preflight";
+  let writeAttempted = false;
   try {
     if (lease.lease.backend !== "r2") throw new Error("Remote R2 lease is mandatory for live print publication.");
-    await ensurePrintStateTables();
+    await ensureTables();
+    failureStage = "signed_in_bookshelf_scan";
     const shelf = await inspectBookshelf(); // Signed-in KDP gate and duplicate check.
+    failureStage = "catalogue_identity_and_reconciliation";
     const books = choosePrintCandidates(await listBooks());
     if (shelf.refs.length < books.length) {
       throw new Error("Signed-in KDP Bookshelf scan is smaller than the catalogue; completeness is not verified.");
@@ -316,14 +327,15 @@ export async function runPrintProduction({
     const interruptedReconciliation = await reconcileInterrupted(books, shelf, { now });
     const weekLimit = parsePrintWeeklyLimit(process.env.KDP_PRINT_WEEKLY_LIMIT_PER_FORMAT);
     const capacity = getPrintRolloutCapacity({ observedAt: now().toISOString(), weeklyLimit: weekLimit });
+    failureStage = "quota_and_listing_reconciliation";
     const quotaUsageBefore = await getPrintQuotaUsage(utcPrintWeek(now()));
     const listingsReconciled = await reconcileListings(books, { limit: 12 });
     const eligible = ebookId == null ? books : books.filter(book => book.ebookId === Number(ebookId));
     if (!eligible.length) throw new Error("No matching existing KDP ebook found.");
     const outcomes = [];
     let booksTried = 0;
-    let writes = false;
     let platformLimitDetected = false;
+    failureStage = "per_edition_qa_and_submission";
     for (const book of eligible) {
       if (platformLimitDetected || booksTried >= MAX_BOOKS || !printWindowAllowsAction(now(), { start: true })) break;
       // Completed, submitted and uncertain titles cannot consume every future
@@ -337,7 +349,7 @@ export async function runPrintProduction({
         if (!allowed) continue;
         const item = await produceOne(book, format, shelf, {
           now, prepare, aiDisclosure, readKindle,
-          publish: async request => { writes = true; return publish(request); },
+          publish: async request => { writeAttempted = true; return publish(request); },
           weeklyLimit: weekLimit,
         });
         outcomes.push(item);
@@ -360,15 +372,32 @@ export async function runPrintProduction({
       expectedEditions, submittedBefore,
       remainingToSubmit: Math.max(0, expectedEditions - submittedBefore - submittedNow),
       schemaVersion: 1, checkedAt: now().toISOString(), weekUtc: utcPrintWeek(now()),
-      kdpWritesPerformed: writes, maxBooksPerRun: MAX_BOOKS, capacity,
+      kdpWritesPerformed: writeAttempted, maxBooksPerRun: MAX_BOOKS, capacity,
       quotaUsageBefore, quotaUsageAfter, externalWeeklyLimitDetected: platformLimitDetected,
       booksConsidered: booksTried, results: outcomes, listingsReconciled, interruptedReconciliation,
       submitted: outcomes.filter(x => x.status === "submitted_to_kdp_review").length,
       blocked: outcomes.filter(x => ["blocked","uncertain","submission_unverified","kdp_platform_limit_detected"].includes(x.status)).length,
       publicPurchaseAvailabilityVerified: listingsReconciled.some(x => x.status === "live_verified"),
     };
-    report.reportRef = await recordRun(report);
+    failureStage = "persist_production_report";
+    report.reportRef = await record(report);
     return report;
+  } catch (error) {
+    // Earlier failures (notably a timed-out signed-in Bookshelf scan) used to
+    // escape before producing *any* R2 evidence. Keep these diagnostic runs
+    // visible and red while preserving the distinction between read-only and
+    // uncertain remote KDP outcomes. Nothing here retries a Publish click.
+    const failed = {
+      ok: false, schemaVersion: 1, status: writeAttempted ? "failed_after_kdp_write_attempt" : "preflight_failed",
+      checkedAt: now().toISOString(), failureStage,
+      errorName: String(error?.name || "Error").slice(0,80),
+      errorMessage: shortError(error),
+      kdpWritesPerformed: writeAttempted, safeToRetryWithoutKdpReconciliation: !writeAttempted,
+      maxBooksPerRun: MAX_BOOKS,
+    };
+    try { failed.reportRef = await record(failed); }
+    catch (reportError) { failed.reportPersistError = shortError(reportError); }
+    return failed;
   } finally {
     await releaseLease(lease.lease, { reportRef: report?.reportRef || null });
   }
