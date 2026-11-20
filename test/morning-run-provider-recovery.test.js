@@ -248,3 +248,10 @@ test("interrupted render and review recovery preserve replacement limits and re-
   assert.equal(canReuseRenderedReview({ pass: true, skipped: false }), true);
   assert.equal(canReuseRenderedReview(null), false);
 });
+
+
+test("newsletter cutoff uses an injectable clock for deterministic recovery verification", async () => {
+  const delivery = await source("services/newsletter/delivery/aimsDelivery.js");
+  assert.match(delivery, /typeof deps\.clock === "function" \? deps\.clock : \(\) => Date\.now\(\)/);
+  assert.match(delivery, /clock\(\) >= Date\.parse\(buildResult\.metadata\.deliveryCutoffAt\)/);
+});
