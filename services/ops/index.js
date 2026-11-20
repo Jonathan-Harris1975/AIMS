@@ -304,13 +304,13 @@ const OPERATION_WINDOWS = Object.freeze({
   "friday-am": [
     ["rss-rewrite", "/rss/rewrite", { batchSize: 5 }],
     ["blotato-am", "/blotato/autoshorts/schedule", {}],
+    ["zernio-friday", "/zernio/daily/friday", {}],
     // Start all four paid weekend video lanes before newsletter and artwork QA work;
     // independent deferred tasks are reconciled at the end of the window.
     ["blotato-saturday-am", "/blotato/weekend/saturday/am/schedule", {}],
     ["blotato-saturday-pm", "/blotato/weekend/saturday/pm/schedule", {}],
     ["blotato-sunday-am", "/blotato/weekend/sunday/am/schedule", {}],
     ["blotato-sunday-pm", "/blotato/weekend/sunday/pm/schedule", {}],
-    ["zernio-friday", "/zernio/daily/friday", {}],
     ["zernio-saturday", "/zernio/daily/saturday", {}],
     ["zernio-sunday", "/zernio/daily/sunday", {}],
     ["blog-social", "/blog/social/daily/build", {}, null, false, "rss-rewrite"],
