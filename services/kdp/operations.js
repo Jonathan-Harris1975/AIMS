@@ -638,7 +638,9 @@ router.get("/audit/pricing/royalty-floor", asyncRoute(async (_req, res) => {
   res.json(await reconcileRoyaltyFloor({ dryRun: true }));
 }));
 
-router.post("/audit/pricing/royalty-floor/run", requestDedupe("kdp:royalty-floor-rollout"), asyncRoute(async (req, res) =>
+// The R2 royalty ledger and lease own mutation idempotency. Generic requestDedupe
+// returned HTTP 202 without sessionId on MAST retries, hiding actual failed jobs.
+router.post("/audit/pricing/royalty-floor/run", asyncRoute(async (req, res) =>
   startJob(req, res, "audit-royalty-floor", () =>
     reconcileRoyaltyFloor({ dryRun: req.body?.dryRun !== false })),
 ));
