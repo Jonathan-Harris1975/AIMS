@@ -1499,10 +1499,10 @@ export function paidRenderDailyCap(creationDate) {
   const ordinaryCap = positiveIntEnv("BLOTATO_DAILY_PAID_RENDER_CAP", 6, 10);
   const day = new Date(`${creationDate}T12:00:00Z`).getUTCDay();
   if (day !== 5) return ordinaryCap;
-  const fridayCap = Number(process.env.BLOTATO_FRIDAY_PAID_RENDER_CAP || 10);
+  const fridayCap = Number(process.env.BLOTATO_FRIDAY_PAID_RENDER_CAP || 12);
   // A misconfigured cap must never permit unbounded paid requests.
-  if (!Number.isInteger(fridayCap) || fridayCap < ordinaryCap || fridayCap > 10) {
-    throw new Error("Invalid BLOTATO_FRIDAY_PAID_RENDER_CAP; expected an integer no smaller than the normal daily cap and at most 10.");
+  if (!Number.isInteger(fridayCap) || fridayCap < ordinaryCap || fridayCap > 12) {
+    throw new Error("Invalid BLOTATO_FRIDAY_PAID_RENDER_CAP; expected an integer no smaller than the normal daily cap and at most 12.");
   }
   return fridayCap;
 }
