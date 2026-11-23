@@ -25,7 +25,7 @@ Default automated cold email is limited to validated role/editorial addresses on
 - `commsHubOutreachArticle`: 1,200–1,600-word British-English article by default.
 - `commsHubOutreachArticleReview`: independent editorial review, minimum score 9.1/10.
 
-Sonnet 5 writes; Opus 4.8 reviews; GPT-5.6 Sol is fallback. All routes inherit Comms Hub ZDR/data-collection restrictions.
+Sonnet 5 writes; Opus 4.8 reviews; GPT-5.6 Luna is fallback. All routes inherit Comms Hub ZDR/data-collection restrictions.
 
 ## Article gate
 
