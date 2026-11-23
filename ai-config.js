@@ -310,13 +310,13 @@ export const aiConfig = {
     zernioEbook: routeChain(["highQuality", "standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     zernioPodcastPromo: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     // Blotato script quality is production-critical. The dedicated Claude writer
-    // leads; GPT-5.6 Sol is the first independent fallback before the economy lane.
+    // leads; GPT-5.6 Luna is the first independent fallback before the economy lane.
     blotatoNewsShort: routeChain(["blotatoScript", "highQuality", "standard", "fallback"], ["anthropic46", "gpt56Sol", "google25FlashLite"]),
     // Newsletter engine (services/newsletter). Composition uses Claude for
-    // editorial writing; review and fact-check routes lead with GPT-5.6 Sol
+    // editorial writing; review and fact-check routes lead with GPT-5.6 Luna
     // so the first reviewer is an independent provider/model.
     // AI Edge uses task-specific routes. Sonnet handles editorial writing/voice,
-    // GPT-5.6 Sol provides an independent premium fallback, while Gemini handles
+    // GPT-5.6 Luna provides an independent premium fallback, while Gemini handles
     // low-latency subject work. Each route retains provider
     // failover through the shared resilient requester.
     newsletterCompose: routeChain(["newsletterEditorial", "highQuality"], ["gpt56Sol", "claudeOpus"]),
