@@ -56,12 +56,12 @@ function applySpreadsheetOpenRouterEnv() {
   process.env.OPENROUTER_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-5.5";
   process.env.OPENROUTER_CLAUDE_OPUS = "anthropic/claude-opus-5.5";
   delete process.env.OPENROUTER_CLAUDE_OPUS_4_7;
-  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
+  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-luna";
   process.env.OPENROUTER_FREE_PRIMARY_MODEL = "openrouter/free";
   process.env.AI_MODEL_FAST = "openai/gpt-5.6-luna";
   process.env.AI_MODEL_JSON = "openai/gpt-5.6-luna";
   process.env.AI_MODEL_SUMMARY = "openai/gpt-5.6-luna";
-  process.env.AI_MODEL_AUDIT = "openai/gpt-5.6-sol";
+  process.env.AI_MODEL_AUDIT = "openai/gpt-5.6-luna";
   process.env.AI_MODEL_HIGH_QUALITY = "anthropic/claude-sonnet-5.5";
   process.env.NEWSLETTER_MODEL_EDITORIAL = "anthropic/claude-sonnet-5.5";
   process.env.AI_MODEL_BLOCKLIST = "deepseek/*";
@@ -76,7 +76,7 @@ function applySpreadsheetOpenRouterEnv() {
   delete process.env.COMMS_HUB_MODEL_FREE_FALLBACK;
   process.env.COMMS_HUB_MODEL_PAID_ECONOMY = "anthropic/claude-haiku-5.5";
   process.env.COMMS_HUB_MODEL_PAID_PRIMARY = "anthropic/claude-sonnet-5.5";
-  process.env.COMMS_HUB_MODEL_PAID_BACKUP = "openai/gpt-5.6-sol";
+  process.env.COMMS_HUB_MODEL_PAID_BACKUP = "openai/gpt-5.6-luna";
   process.env.COMMS_HUB_MODEL_PAID_FALLBACK = "anthropic/claude-opus-5.5";
   process.env.COMMS_HUB_OPENROUTER_ZDR_ONLY = "true";
   process.env.COMMS_HUB_OPENROUTER_DATA_COLLECTION = "deny";
@@ -127,7 +127,7 @@ test("the free first-pass route only accepts an explicit free model ID", async (
   applySpreadsheetOpenRouterEnv();
 
   try {
-    process.env.OPENROUTER_FREE_PRIMARY_MODEL = "openai/gpt-5.6-sol";
+    process.env.OPENROUTER_FREE_PRIMARY_MODEL = "openai/gpt-5.6-luna";
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?freeRouteGuard=${Date.now()}`);
     const providers = getProviderDiagnosticsForRoute("rssRewriteFirstPass").configuredProviders.filter((provider) => provider.configured);
     assert.equal(providers.some((provider) => provider.providerId === "openrouterFreePrimary"), false);
@@ -206,7 +206,7 @@ test("Comms Hub skips known-bad free routes and uses the economy paid safety net
     const complex = getProviderDiagnosticsForRoute("commsHubDraftComplex").configuredProviders.filter((p) => p.configured);
     assert.deepEqual(complex.map((p) => p.model), [
       "anthropic/claude-sonnet-5.5",
-      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-luna",
       "anthropic/claude-opus-5.5",
     ]);
   } finally {
@@ -257,7 +257,7 @@ test("factual reviews stay strong while newsletter editorial reviews use the eco
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?independentReviews=${Date.now()}`);
     const audit = getProviderDiagnosticsForRoute("auditForensic").configuredProviders.filter((p) => p.configured);
-    assert.equal(audit[0]?.model, "openai/gpt-5.6-sol");
+    assert.equal(audit[0]?.model, "openai/gpt-5.6-luna");
 
     const compose = getProviderDiagnosticsForRoute("newsletterCompose").configuredProviders.filter((p) => p.configured);
     const voiceReview = getProviderDiagnosticsForRoute("newsletterVoiceReview").configuredProviders.filter((p) => p.configured);
@@ -265,8 +265,8 @@ test("factual reviews stay strong while newsletter editorial reviews use the eco
     assert.equal(compose[0]?.model, "anthropic/claude-sonnet-5.5");
     assert.equal(voiceReview[0]?.model, "openai/gpt-5.6-luna");
     assert.equal(audienceReview[0]?.model, "openai/gpt-5.6-luna");
-    assert.ok(voiceReview.some((provider) => provider.model === "openai/gpt-5.6-sol"));
-    assert.ok(audienceReview.some((provider) => provider.model === "openai/gpt-5.6-sol"));
+    assert.ok(voiceReview.some((provider) => provider.model === "openai/gpt-5.6-luna"));
+    assert.ok(audienceReview.some((provider) => provider.model === "openai/gpt-5.6-luna"));
   } finally {
     restoreEnv(oldEnv);
   }
@@ -396,11 +396,11 @@ test("podcast drafting and editorial routes lead with Sonnet and reserve Sol for
 
     const synthesis = getProviderDiagnosticsForRoute("scriptMainSynthesis").configuredProviders.filter((p) => p.configured);
     assert.equal(synthesis[0]?.model, "anthropic/claude-sonnet-5.5", "synthesis should lead with Claude Sonnet 5.5");
-    assert.equal(synthesis[1]?.model, "openai/gpt-5.6-sol", "synthesis should use GPT-5.6 Sol as the independent premium backup");
+    assert.equal(synthesis[1]?.model, "openai/gpt-5.6-luna", "synthesis should use GPT-5.6 Sol as the independent premium backup");
 
     const editorial = getProviderDiagnosticsForRoute("editorialPass").configuredProviders.filter((p) => p.configured);
     assert.equal(editorial[0]?.model, "anthropic/claude-sonnet-5.5", "editorial should lead with Claude Sonnet 5.5");
-    assert.equal(editorial[1]?.model, "openai/gpt-5.6-sol", "editorial/repair should use GPT-5.6 Sol as the independent premium backup");
+    assert.equal(editorial[1]?.model, "openai/gpt-5.6-luna", "editorial/repair should use GPT-5.6 Sol as the independent premium backup");
   } finally {
     restoreEnv(oldEnv);
   }
