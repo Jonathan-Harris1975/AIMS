@@ -128,7 +128,7 @@ function getProviderConfig(providerId) {
   const configuredModel = resolvedModel.value || conf.name;
   // Normalise legacy Sol configuration overrides to Luna during the monitoring rollout.
   // production 404/parameter-relaxation cycle seen in newsletter runs.
-  const model = /^openai\/gpt-(?:5\.6|6)-sol(?:-\d{8})?$/i.test(String(configuredModel || ""))
+  const model = /^openai\/gpt-(?:5\.6|6)-sol(?:-\d{8})?$/i.test(String(configuredModel || "")) || /^openai\/gpt-5\.6-luna-\d{8}$/i.test(String(configuredModel || ""))
     ? "openai/gpt-5.6-luna" : configuredModel;
   const apiKey = resolvedKey.value || conf.apiKey;
 
