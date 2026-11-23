@@ -39,7 +39,7 @@ test("deployment templates never re-enable static artwork fallbacks", () => {
       "NEWSLETTER_HERO_IMAGE_REQUIRED=true",
       "ZERNIO_ALLOW_CURATED_ARTWORK_FALLBACK=false",
       "ZERNIO_ALLOW_DETERMINISTIC_FALLBACK=false",
-      "BLOTATO_DAILY_PAID_RENDER_CAP=4",
+      "BLOTATO_DAILY_PAID_RENDER_CAP=6",
       "BLOTATO_FAILED_RENDER_REPLACEMENTS=1",
     ]) assert.ok(settings.includes(required), `Stale ${required} in ${name}`);
   }
@@ -70,8 +70,8 @@ test("other Zernio post formats require newly generated artwork", () => {
 test("daily Blotato guarantees two independent slots with a bounded render recovery budget", () => {
   const env = source("config/production.defaults.env");
   for (const setting of [
-    "BLOTATO_DAILY_PAID_RENDER_CAP=4",
-    "BLOTATO_FRIDAY_PAID_RENDER_CAP=8",
+    "BLOTATO_DAILY_PAID_RENDER_CAP=6",
+    "BLOTATO_FRIDAY_PAID_RENDER_CAP=12",
     "BLOTATO_FAILED_RENDER_REPLACEMENTS=1",
   ]) assert.ok(env.split("\n").includes(setting), `Missing Blotato recovery policy: ${setting}`);
 
