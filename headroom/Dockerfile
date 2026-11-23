@@ -25,11 +25,16 @@ ARG FILELOCK_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 # Bounded retries absorb transient archive connection failures; fail closed
 # if any signed index cannot be fetched rather than using stale metadata.
-RUN apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
- && apt-get install -y --no-install-recommends \
+RUN --mount=type=secret,id=runner_ca,required=true \
+ cp /run/secrets/runner_ca /tmp/headroom-runner-ca.crt \
+ && chmod 0644 /tmp/headroom-runner-ca.crt \
+ && sed -i 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get -o Acquire::https::CaInfo=/tmp/headroom-runner-ca.crt -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
+ && apt-get -o Acquire::https::CaInfo=/tmp/headroom-runner-ca.crt install -y --no-install-recommends \
       build-essential ca-certificates curl pkg-config \
       libbz2-dev libffi-dev libexpat1-dev liblzma-dev libncursesw6 \
       libreadline-dev libsqlite3-dev libssl-dev uuid-dev zlib1g-dev \
+ && rm -f /tmp/headroom-runner-ca.crt \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -64,13 +69,18 @@ FROM ${UBUNTU_IMAGE} AS headroom-runtime
 ENV DEBIAN_FRONTEND=noninteractive
 # Bounded retries absorb transient archive connection failures; fail closed
 # if any signed index cannot be fetched rather than using stale metadata.
-RUN apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
-  && apt-get upgrade -y --no-install-recommends \
+RUN --mount=type=secret,id=runner_ca,required=true \
+ cp /run/secrets/runner_ca /tmp/headroom-runner-ca.crt \
+ && chmod 0644 /tmp/headroom-runner-ca.crt \
+ && sed -i 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get -o Acquire::https::CaInfo=/tmp/headroom-runner-ca.crt -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update \
+  && apt-get -o Acquire::https::CaInfo=/tmp/headroom-runner-ca.crt upgrade -y --no-install-recommends \
       apt libapt-pkg7.0 \
-  && apt-get install -y --no-install-recommends \
+  && apt-get -o Acquire::https::CaInfo=/tmp/headroom-runner-ca.crt install -y --no-install-recommends \
       ca-certificates passwd libbz2-1.0 libexpat1 libffi8 libgcc-s1 \
       libgomp1 liblzma5 libncursesw6 libreadline8 libsqlite3-0 \
       libssl3t64 libstdc++6 libuuid1 zlib1g \
+ && rm -f /tmp/headroom-runner-ca.crt \
  && rm -rf /var/lib/apt/lists/* \
  && rm -f /usr/bin/pebble \
  && groupadd --gid 10001 nonroot \
