@@ -126,11 +126,10 @@ function getProviderConfig(providerId) {
   const resolvedModel = firstEnvValue(Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames : []);
   const resolvedKey = firstEnvValue(Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames : []);
   const configuredModel = resolvedModel.value || conf.name;
-  // Koyeb still has a dated Sol identifier which OpenRouter resolves to the
-  // current stable slug. Use the verified stable slug directly to avoid the
+  // Normalise legacy Sol configuration overrides to Luna during the monitoring rollout.
   // production 404/parameter-relaxation cycle seen in newsletter runs.
-  const model = /^openai\/gpt-5\.6-sol-\d{8}$/i.test(String(configuredModel || ""))
-    ? "openai/gpt-5.6-sol" : configuredModel;
+  const model = /^openai\/gpt-(?:5\.6|6)-sol(?:-\d{8})?$/i.test(String(configuredModel || ""))
+    ? "openai/gpt-5.6-luna" : configuredModel;
   const apiKey = resolvedKey.value || conf.apiKey;
 
   // The local blocklist is for deliberate provider/model exclusions. Model
