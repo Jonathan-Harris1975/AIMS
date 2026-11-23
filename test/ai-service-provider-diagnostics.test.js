@@ -52,7 +52,7 @@ test("auditForensic route supports current Koyeb spreadsheet model vars with one
   process.env.OPENROUTER_API_KEY = testCredential("openrouter-shared");
   process.env.OPENROUTER_ANTHROPIC_4_6 = "anthropic/claude-sonnet-5.5";
   process.env.OPENROUTER_GOOGLE_2_5_flashlite = "google/gemini-3.5-flash-lite-20260721";
-  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
+  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-luna";
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-shared-key`);
@@ -111,7 +111,7 @@ test("auditForensic route does not expose retired DeepSeek providers", async () 
   const snapshot = snapshotEnv(OPENROUTER_ENV_NAMES);
   clearOpenRouterEnv();
   process.env.OPENROUTER_API_KEY = testCredential("openrouter-shared");
-  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-sol";
+  process.env.OPENROUTER_GPT_5_6_SOL = "openai/gpt-5.6-luna";
 
   try {
     const { getProviderDiagnosticsForRoute } = await import(`../services/shared/utils/ai-service.js?diag=${Date.now()}-retired`);
