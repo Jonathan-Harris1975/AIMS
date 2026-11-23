@@ -204,7 +204,7 @@ test("Blotato scheduled runs use deterministic slots, a daily cap, and bounded r
   const defaults = await source("config/production.defaults.env");
   assert.match(text, /createScheduledSessionId/);
   assert.match(text, /`BLT-\$\{lane\}-\$\{scheduleDate\}-\$\{slot\}`/);
-  assert.match(text, /BLOTATO_DAILY_PAID_RENDER_CAP", 4, 10/);
+  assert.match(text, /BLOTATO_DAILY_PAID_RENDER_CAP", 6, 10/);
   assert.match(guard, /blotato-daily-paid-render-cap/);
   assert.match(text, /BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP/);
   assert.match(text, /reservePaidRender/);
@@ -218,7 +218,7 @@ test("Blotato scheduled runs use deterministic slots, a daily cap, and bounded r
     text,
     /reusableRenderedVideo\(lane\.jobType, articleSource\.article, sessionId, \{\s*scheduleSlot,\s*scheduleDate: activeScheduleDate,\s*briefFingerprint,\s*\}\)/
   );
-  assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=4$/m);
+  assert.match(defaults, /^BLOTATO_DAILY_PAID_RENDER_CAP=6$/m);
 });
 
 test("newsletter composition requests low reasoning rather than disabling required reasoning", async () => {
