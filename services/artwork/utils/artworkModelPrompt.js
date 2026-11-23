@@ -44,6 +44,30 @@ floating panels and labelled diagrams. Communicate the idea through physical act
   },
 };
 
+// Hard production constraints shared by every editorial image family. Quiz artwork
+// deliberately uses exact supplied text, so it has a separate contract.
+const EDITORIAL_SCENE_GUARD = [
+  "FIRST-RENDER ACCEPTANCE: depict one unmistakable source-supported subject and one coherent, physically possible action.",
+  "No decorative laptops, USB sticks, cables, server racks, badges, ID cards, papers or monitor screens unless essential to the stated story.",
+  "When collaboration is the subject, show both participants visibly working on the same artefact; merely sharing a desk does not count.",
+  "Every visible hand has natural finger count, joints, grip, scale and contact with the object; remove hands if not necessary.",
+  "Objects must be supported, correctly oriented, connected and resting on believable surfaces; no floating cards, misplaced plugs or impossible hardware.",
+  "Use a clean photographic scene, not a cover mock-up, thumbnail template, banner, infographic, caption panel or stock office tableau.",
+  "No invented claims, technical results, fabricated events or unrelated background props.",
+].join(" ");
+
+const EDITORIAL_TEXT_GUARD = [
+  "ABSOLUTE ZERO-TYPOGRAPHY IMAGE: no visible text or text-shaped marks anywhere, including tiny equipment labels.",
+  "No letters, numerals, handwriting, pseudo-writing, gibberish, captions, monitor copy, logos, badges, watermarks, signs, stamps or symbols that resemble type.",
+  "Prevent text by staging blank unmarked surfaces and screens turned away, dark or out of frame; do not show paper, cards or interfaces with markings.",
+].join(" ");
+
+function finalSceneGuard(mode) {
+  return mode === "quiz"
+    ? "QUIZ EXCEPTION: only the exact supplied question and answer labels may appear; no extra wording, pseudo-text, logos or watermark. Preserve all four choices."
+    : `${EDITORIAL_SCENE_GUARD} ${EDITORIAL_TEXT_GUARD}`;
+}
+
 function compact(value = "", max = 3000) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max).trim()}…` : text;
@@ -84,6 +108,7 @@ export function buildModelAwareArtworkPrompt({ model, mode = "podcast", creative
       `Style: ${spec.style}.`,
       `Context: ${spec.format}; ${spec.composition}.`,
       `Output discipline: ${spec.textRule}`,
+      `Non-negotiable visual exclusions: ${finalSceneGuard(mode)}`,
     ].filter(Boolean).join("\n");
   }
 
@@ -98,6 +123,7 @@ export function buildModelAwareArtworkPrompt({ model, mode = "podcast", creative
       `CAMERA AND FORMAT: ${spec.format}; editorial framing with strong hierarchy.`,
       `MOOD AND STYLE: ${spec.style}.`,
       `OUTPUT: ${spec.textRule}`,
+      `NON-NEGOTIABLE EXCLUSIONS: ${finalSceneGuard(mode)}`,
     ].join("\n");
   }
 
@@ -111,6 +137,7 @@ export function buildModelAwareArtworkPrompt({ model, mode = "podcast", creative
       `LIGHTING AND COLOUR: ${spec.style}; coherent light direction and controlled colour continuity across the whole frame.`,
       `STORY PRIORITY: communicate one clear editorial idea, not a collage of unrelated technology motifs.`,
       `OUTPUT CONSTRAINT: ${spec.textRule}`,
+      `NON-NEGOTIABLE EXCLUSIONS: ${finalSceneGuard(mode)}`,
     ].filter(Boolean).join("\n");
   }
 
