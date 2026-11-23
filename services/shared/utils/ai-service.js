@@ -758,7 +758,10 @@ export function getProviderDiagnosticsForRoute(routeName) {
       const keyValue = resolvedKey.value || conf.apiKey;
       return {
         providerId,
-        model: /^openai\/gpt-5\.6-(?:sol|luna)(?:-\d{8})?$/i.test(String(modelValue || "")) ? "openai/gpt-5.6-luna" : /^openai\/gpt-6-sol(?:-\d{8})?$/i.test(String(modelValue || "")) ? "openai/gpt-6-luna" : modelValue || undefined,
+        model: /^openai\/gpt-5\.6-(?:sol|luna)(?:-\d{8})?$/i.test(String(modelValue || ""))
+          ? "openai/gpt-5.6-luna"
+          : /^openai\/gpt-6-sol(?:-\d{8})?$/i.test(String(modelValue || ""))
+            ? "openai/gpt-6-luna" : modelValue || undefined,
         modelEnv: resolvedModel.name || (Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames.join("|") : undefined),
         apiKeyEnv: resolvedKey.name || (Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames.join("|") : undefined),
         hasModel: Boolean(modelValue),
