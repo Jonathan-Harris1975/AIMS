@@ -6,9 +6,9 @@ test("economy editorial reviews preserve strong factual and writing routes", asy
     OPENROUTER_API_KEY: "test-only",
     AI_MODEL_FAST: "openai/gpt-5.6-luna",
     AI_MODEL_SUMMARY: "openai/gpt-5.6-luna",
-    AI_MODEL_AUDIT: "openai/gpt-5.6-sol",
+    AI_MODEL_AUDIT: "openai/gpt-5.6-luna",
     AI_MODEL_HIGH_QUALITY: "anthropic/claude-sonnet-5.5",
-    OPENROUTER_GPT_5_6_SOL: "openai/gpt-5.6-sol",
+    OPENROUTER_GPT_5_6_SOL: "openai/gpt-5.6-luna",
     NEWSLETTER_MODEL_EDITORIAL: "anthropic/claude-sonnet-5.5",
     OUTREACH_ARTICLE_MODEL: "article-writer",
     OUTREACH_PITCH_MODEL: "pitch-writer",
@@ -48,8 +48,8 @@ test("newsletter routing blocks retired Fable overrides and canonicalises the ob
     OPENROUTER_API_KEY: "test-only",
     OPENROUTER_CLAUDE_SONNET_5: "anthropic/claude-fable-5.1-20260831",
     AI_MODEL_HIGH_QUALITY: "anthropic/claude-fable-5.1-20260831",
-    AI_MODEL_AUDIT: "openai/gpt-5.6-sol",
-    AI_MODEL_FAST: "openai/gpt-5.6-sol-20260709",
+    AI_MODEL_AUDIT: "openai/gpt-5.6-luna",
+    AI_MODEL_FAST: "openai/gpt-5.6-luna-20260709",
   };
   const prior = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
   Object.assign(process.env, values);
@@ -63,10 +63,10 @@ test("newsletter routing blocks retired Fable overrides and canonicalises the ob
   try {
     const { resilientRequest } = await import(`../services/shared/utils/ai-service.js?model-policy=${Date.now()}`);
     await resilientRequest("newsletterFactCheck", { messages: [{ role: "user", content: "review" }], max_tokens: 10 });
-    assert.deepEqual(called, ["openai/gpt-5.6-sol"], "retired Fable is rejected and the Sol audit fallback is used");
+    assert.deepEqual(called, ["openai/gpt-5.6-luna"], "retired Fable is rejected and the Sol audit fallback is used");
     called.length = 0;
     await resilientRequest("targetedRepair", { messages: [{ role: "user", content: "repair" }], max_tokens: 10 });
-    assert.deepEqual(called, ["openai/gpt-5.6-sol"], "the observed dated Sol override is sent as its verified stable slug");
+    assert.deepEqual(called, ["openai/gpt-5.6-luna"], "the observed dated Sol override is sent as its verified stable slug");
   } finally {
     globalThis.fetch = oldFetch;
     for (const [key, value] of Object.entries(prior)) {
