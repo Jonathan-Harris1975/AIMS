@@ -126,10 +126,12 @@ function getProviderConfig(providerId) {
   const resolvedModel = firstEnvValue(Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames : []);
   const resolvedKey = firstEnvValue(Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames : []);
   const configuredModel = resolvedModel.value || conf.name;
-  // Normalise legacy Sol configuration overrides to Luna during the monitoring rollout.
-  // production 404/parameter-relaxation cycle seen in newsletter runs.
-  const model = /^openai\/gpt-(?:5\.6|6)-sol(?:-\d{8})?$/i.test(String(configuredModel || "")) || /^openai\/gpt-5\.6-luna-\d{8}$/i.test(String(configuredModel || ""))
-    ? "openai/gpt-5.6-luna" : configuredModel;
+  // Canonicalise dated 5.6 aliases and legacy Sol overrides for the Luna trial.
+  // Keep GPT-6 model selections within their own generation.
+  const model = /^openai\/gpt-5\.6-(?:sol|luna)(?:-\d{8})?$/i.test(String(configuredModel || ""))
+    ? "openai/gpt-5.6-luna"
+    : /^openai\/gpt-6-sol(?:-\d{8})?$/i.test(String(configuredModel || ""))
+      ? "openai/gpt-6-luna" : configuredModel;
   const apiKey = resolvedKey.value || conf.apiKey;
 
   // The local blocklist is for deliberate provider/model exclusions. Model
@@ -756,7 +758,7 @@ export function getProviderDiagnosticsForRoute(routeName) {
       const keyValue = resolvedKey.value || conf.apiKey;
       return {
         providerId,
-        model: modelValue || undefined,
+        model: /^openai\/gpt-5\.6-(?:sol|luna)(?:-\d{8})?$/i.test(String(modelValue || "")) ? "openai/gpt-5.6-luna" : /^openai\/gpt-6-sol(?:-\d{8})?$/i.test(String(modelValue || "")) ? "openai/gpt-6-luna" : modelValue || undefined,
         modelEnv: resolvedModel.name || (Array.isArray(conf.modelEnvNames) ? conf.modelEnvNames.join("|") : undefined),
         apiKeyEnv: resolvedKey.name || (Array.isArray(conf.keyEnvNames) ? conf.keyEnvNames.join("|") : undefined),
         hasModel: Boolean(modelValue),
