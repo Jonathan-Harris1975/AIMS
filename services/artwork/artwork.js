@@ -272,7 +272,7 @@ export function selectPublishableSocialArtworkCandidate(candidates = [], options
     .sort((left, right) => candidateRank(right) - candidateRank(left))[0] || null;
 }
 
-async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal, generationKey = "artwork", variation = "initial" } = {}) {
+async function requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction = false, signal, generationKey = "artwork", variation = "initial", originalPrompt = prompt } = {}) {
   const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const instruction = buildModelAwareArtworkPrompt({
     model: provider.model,
@@ -343,7 +343,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             qa = await auditArtworkBase64({
               base64: image,
               mode,
-              creativePrompt: qaPrompt,
+              creativePrompt: originalPrompt,
               sessionId: `artwork-${mode}-${Date.now()}-${qaAttempt}`,
               signal,
             });
@@ -384,7 +384,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, { useSho
             throw err;
           }
 
-          qaPrompt = buildQaRepairPrompt(prompt, qa);
+          qaPrompt = buildQaRepairPrompt(originalPrompt, qa);
           const retryInstruction = buildModelAwareArtworkPrompt({
             model: provider.model,
             mode,
@@ -447,11 +447,12 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
 
   let lastError;
   const qaCandidates = [];
+  let providerPrompt = prompt;
 
   for (const provider of providers) {
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
     try {
-      const image = await requestArtworkFromProvider(provider, prompt, mode, date, { signal, generationKey: stableGenerationKey, variation: "full" });
+      const image = await requestArtworkFromProvider(provider, providerPrompt, mode, date, { signal, generationKey: stableGenerationKey, variation: "full", originalPrompt: prompt });
       if (provider.id === "backup") {
         info("🎨 Artwork generated with backup OpenRouter image model", {
           modelEnv: provider.modelEnv,
@@ -463,6 +464,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
     } catch (e) {
       lastError = e;
       if (e?.artworkCandidate) qaCandidates.push(e.artworkCandidate);
+      if (e?.artworkVisualQa) providerPrompt = buildQaRepairPrompt(prompt, e.artworkVisualQa);
       error("Artwork provider failed", {
         provider: provider.id,
         modelEnv: provider.modelEnv,
@@ -523,7 +525,9 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
     }
   }
 
-  throw new Error(`Failed to generate artwork: ${lastError?.message || "all providers failed"}`);
+  const failure = new Error(`Failed to generate artwork: ${lastError?.message || "all providers failed"}`, { cause: lastError });
+  if (lastError?.artworkVisualQa) failure.artworkVisualQa = lastError.artworkVisualQa;
+  throw failure;
 }
 
 export async function generatePodcastArtwork(prompt, options = {}) {
