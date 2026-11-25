@@ -11,7 +11,7 @@ export const KDP_UK_TARGET_ROYALTY_MINOR = 450
 /**
  * Minimum UK list-price floor yielding at least £4.50 at the
  * 70% royalty rate, calculated as the ceiling of (£4.50 / 0.70) plus
- * verified KDP delivery cost, without crossing KDP's 70% band).
+ * verified KDP delivery cost, without crossing KDP's 70% band.
  * This single floor is shared by the royalty worker and market optimiser
  * so a subsequent research update cannot undo a compliant correction.
  * KDP delivery charge is £0.10/MB, rounded to a penny. The signed-in KDP
