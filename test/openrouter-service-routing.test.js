@@ -594,7 +594,10 @@ test("a successful fallback does not become the next request's primary by defaul
 });
 
 test("approved model migration maps restored defaults and supports explicit rollback", async () => {
-  const keys = ["OPENROUTER_MODEL_MIGRATION_ENABLED", "AI_MODEL_STANDARD", "AI_MODEL_STANDARD_TEST_OVERRIDE", "OPENROUTER_CLAUDE_OPUS", "OPENROUTER_CLAUDE_OPUS_TEST_OVERRIDE", "COMMS_HUB_MODEL_PAID_ECONOMY"];
+  const keys = [
+    "OPENROUTER_MODEL_MIGRATION_ENABLED", "AI_MODEL_STANDARD", "AI_MODEL_STANDARD_TEST_OVERRIDE",
+    "OPENROUTER_CLAUDE_OPUS", "OPENROUTER_CLAUDE_OPUS_TEST_OVERRIDE", "COMMS_HUB_MODEL_PAID_ECONOMY",
+  ];
   const previous = snapshotEnv(keys);
   try {
     Object.assign(process.env, {
@@ -624,7 +627,12 @@ test("Flex covers all approved background workloads only on verified models", as
     const { getServiceTier } = await import("../services/shared/utils/ai-service.js");
     assert.equal(getServiceTier("newsletterCompose", "openai/gpt-6.1-terra"), "flex");
     assert.equal(getServiceTier("scriptMainSynthesis", "openai/gpt-6.1-sol"), "flex");
-    for (const route of ["commsHubOutreachPitch", "commsHubOutreachReply", "commsHubOutreachArticle", "commsHubOutreachArticleReview", "onBrandAudit", "auditForensic", "auditEvidenceReview", "auditFinalReport", "kdpResearchDraft", "kdpResearchCritic", "kdpResearchPaidFallback"]) {
+    const routes = [
+      "commsHubOutreachPitch", "commsHubOutreachReply", "commsHubOutreachArticle", "commsHubOutreachArticleReview",
+      "onBrandAudit", "auditForensic", "auditEvidenceReview", "auditFinalReport",
+      "kdpResearchDraft", "kdpResearchCritic", "kdpResearchPaidFallback",
+    ];
+    for (const route of routes) {
       assert.equal(getServiceTier(route, "openai/gpt-5.6-luna"), "flex", route);
       assert.equal(getServiceTier(route, "openai/gpt-6.1-terra"), "flex", route);
       assert.equal(getServiceTier(route, "openrouter/free"), "default", route);
