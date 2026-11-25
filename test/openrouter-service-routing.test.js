@@ -629,6 +629,9 @@ test("Flex covers all approved background workloads only on verified models", as
       assert.equal(getServiceTier(route, "openai/gpt-6.1-terra"), "flex", route);
       assert.equal(getServiceTier(route, "openrouter/free"), "default", route);
     }
+    assert.equal(getServiceTier("kdpResearchPaidFallback", "google/gemini-2.5-flash-lite"), "flex");
+    assert.equal(getServiceTier("auditFinalReport", "google/gemini-2.5-flash-lite"), "flex");
+    assert.equal(getServiceTier("auditForensic", "google/gemini-3.5-flash-lite-20260721"), "flex");
     assert.equal(getServiceTier("commsHubDraftComplex", "openai/gpt-6.1-terra"), "default");
     process.env.OPENROUTER_SCHEDULED_FLEX_ENABLED = "false";
     assert.equal(getServiceTier("auditForensic", "openai/gpt-6.1-terra"), "default");
