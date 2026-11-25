@@ -222,9 +222,21 @@ function getOpenRouterProviderOptions({ response_format, routeKey } = {}) {
   return Object.keys(provider).length ? provider : undefined;
 }
 
-function getServiceTier() {
+// Flex is a route-specific opt-in, never a global model-family assumption.
+const FLEX_MODELS = new Set(["openai/gpt-6.1-terra", "openai/gpt-6.1-sol"]);
+const FLEX_ROUTES = new Set([
+  "scriptIntro", "scriptMain", "scriptMainSynthesis", "scriptOutro", "editorialPass",
+  "newsletterCompose", "newsletterFactCheck", "newsletterCouncilChair",
+  "blogWeekly", "blogSocial", "zernioDaily", "zernioMiniSeriesTheme",
+  "zernioMiniSeriesPost", "zernioQuiz", "zernioEbook", "zernioPodcastPromo",
+  "blotatoNewsShort",
+]);
+export function getServiceTier(routeKey, model) {
   const value = String(process.env.OPENROUTER_SERVICE_TIER || "").trim().toLowerCase();
-  if (["auto", "default", "flex", "priority"].includes(value)) return value;
+  const enabled = String(process.env.OPENROUTER_SCHEDULED_FLEX_ENABLED || "").toLowerCase() === "true";
+  if ((enabled || value === "flex") && FLEX_ROUTES.has(routeKey) && FLEX_MODELS.has(model)) return "flex";
+  if (value === "flex") return "default";
+  if (["auto", "default", "priority"].includes(value)) return value;
   return undefined;
 }
 
@@ -321,8 +333,20 @@ function extractMessageContent(json) {
   return "";
 }
 
-async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, max_tokens, temperature, top_p,
-  response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false, avoidGoogleVertex = false, onUsage }) {
+async function callOpenRouter(args) {
+  try {
+    return await callOpenRouterAttempt(args);
+  } catch (error) {
+    if (args.relaxedParameters || args.signal?.aborted ||
+        getServiceTier(args.routeKey, args.model) !== "flex" ||
+        !(error?.code === "OPENROUTER_TIMEOUT" || [429, 502, 503, 504].includes(Number(error?.status)))) throw error;
+    // Same model, prompt, schema and privacy policy; one bounded standard attempt.
+    return callOpenRouterAttempt({ ...args, standardTier: true });
+  }
+}
+
+async function callOpenRouterAttempt({ routeKey, providerId, model, apiKey, messages, max_tokens, temperature, top_p,
+  response_format, headers, timeoutMs, reasoning, signal, relaxedParameters = false, avoidGoogleVertex = false, onUsage, standardTier = false }) {
   if (signal?.aborted) {
     throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error("OpenRouter request aborted"), { name: "AbortError", code: "AI_REQUEST_ABORTED" });
   }
@@ -354,7 +378,7 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
     payload.top_p = top_p;
     if (response_format) payload.response_format = response_format;
 
-    const serviceTier = getServiceTier();
+    const serviceTier = standardTier ? "default" : getServiceTier(routeKey, model);
     if (serviceTier) payload.service_tier = serviceTier;
 
     const effectiveReasoning = reasoning === undefined ? getReasoningOptions() : reasoning;
@@ -371,9 +395,11 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
     ...(aiConfig?.headers || {}),
     ...(headers || {}),
   };
-  const effectiveTimeoutMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
+  const baseTimeoutMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
     ? Number(timeoutMs)
     : DEFAULT_TIMEOUT_MS;
+  const flexTimeoutMs = finiteEnvNumber("OPENROUTER_FLEX_TIMEOUT_MS", 180000, { min: 1000, max: 300000, integer: true });
+  const effectiveTimeoutMs = serviceTier === "flex" ? Math.max(baseTimeoutMs, flexTimeoutMs) : baseTimeoutMs;
   const controller = new AbortController();
   let timedOut = false;
   const onExternalAbort = () => controller.abort(signal?.reason);
@@ -393,9 +419,9 @@ async function callOpenRouter({ routeKey, providerId, model, apiKey, messages, m
         warn("ai.openrouter.google_vertex_adapter_rejected", {
           routeKey, providerId, model, action: "retry-once-excluding-google-vertex",
         });
-        return callOpenRouter({ routeKey, providerId, model, apiKey, messages,
+        return callOpenRouterAttempt({ routeKey, providerId, model, apiKey, messages,
           max_tokens, temperature, top_p, response_format, headers, timeoutMs,
-          reasoning, signal, relaxedParameters, avoidGoogleVertex: true, onUsage });
+          reasoning, signal, relaxedParameters, avoidGoogleVertex: true, onUsage, standardTier });
       }
       throw failure;
     }
