@@ -98,6 +98,9 @@ async function requestCouncilJsonImpl(route, { sessionId, messages, maxTokens = 
   const cached = passingReviews.get(cacheKey);
   if (cached) return { ...cached.data, reviewReused: true };
   let lastError = null;
+  const requiredFields = Array.isArray(schema.required) && schema.required.length
+    ? schema.required.join(", ")
+    : "the required fields";
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (attempt > 1) claimRepairAction("recoveries");
     try {
