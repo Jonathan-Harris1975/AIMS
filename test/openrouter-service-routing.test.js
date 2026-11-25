@@ -615,3 +615,19 @@ test("approved model migration maps restored defaults and supports explicit roll
     assert.equal(aiConfig.models.claudeOpus.name, "anthropic/claude-opus-5.5");
   } finally { restoreEnv(previous); }
 });
+
+test("Flex is limited to verified models and scheduled routes", async () => {
+  const keys = ["OPENROUTER_SERVICE_TIER", "OPENROUTER_SCHEDULED_FLEX_ENABLED", "OPENROUTER_OUTREACH_ARTICLE_FLEX_ENABLED"];
+  const previous = snapshotEnv(keys);
+  try {
+    Object.assign(process.env, { OPENROUTER_SERVICE_TIER: "default", OPENROUTER_SCHEDULED_FLEX_ENABLED: "true", OPENROUTER_OUTREACH_ARTICLE_FLEX_ENABLED: "false" });
+    const { getServiceTier } = await import("../services/shared/utils/ai-service.js");
+    assert.equal(getServiceTier("newsletterCompose", "openai/gpt-6.1-terra"), "flex");
+    assert.equal(getServiceTier("scriptMainSynthesis", "openai/gpt-6.1-sol"), "flex");
+    assert.equal(getServiceTier("newsletterCompose", "openai/gpt-5.6-luna"), "default");
+    assert.equal(getServiceTier("commsHubDraftComplex", "openai/gpt-6.1-terra"), "default");
+    assert.equal(getServiceTier("commsHubOutreachArticle", "openai/gpt-6.1-terra"), "default");
+    process.env.OPENROUTER_OUTREACH_ARTICLE_FLEX_ENABLED = "true";
+    assert.equal(getServiceTier("commsHubOutreachArticle", "openai/gpt-6.1-terra"), "flex");
+  } finally { restoreEnv(previous); }
+});
