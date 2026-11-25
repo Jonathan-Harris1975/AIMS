@@ -139,7 +139,7 @@ Prices target comparable medians with average prices retained in the evidence.
 `KDP_RESEARCH_PRICE_FLOOR_USD_MINOR` defaults to 499 and
 `KDP_RESEARCH_PRICE_FLOOR_GBP_MINOR` defaults to 643, both in pennies/cents;
 the UK effective minimum is always the greater of its configured floor and
-`the ceiling of `£4.50 / 0.70` plus verified KDP delivery cost in pennies.
+the ceiling of `£4.50 / 0.70` plus verified KDP delivery cost in pennies.
 Existing lower GBP
 environment overrides cannot defeat that rule. When signed-in delivery size or
 70% plan cannot be verified, UK price changes are blocked rather than guessed.
