@@ -15,7 +15,7 @@ const book = (props = {}) => ({
 const snapshot = (books = [book()]) => ({ syncedAt: new Date().toISOString(), books });
 const catalogue = () => [{ ebookId: 1, asin, title: 'Example' }];
 
-function parsePricing(selectedRadio, hiddenValue) {
+function parsePricing(selectedRadio, hiddenValue, fileSizeBytes = '409600') {
   const file = fs.readFileSync(path.resolve('services/kdp/engine/browser/parseBookPricing.js'), 'utf8');
   const document = {
     body: { innerText: 'ASIN: B012345678' },
@@ -29,7 +29,7 @@ function parsePricing(selectedRadio, hiddenValue) {
         return hiddenValue ? { value: hiddenValue } : null;
       }
       if (selector === 'input[name="data[digital][filesize_bytes]"]') {
-        return { value: '409600' };
+        return { value: fileSizeBytes };
       }
       return null;
     },
@@ -45,13 +45,18 @@ test('KDP pricing parser reads the selected 70% radio but never infers 70% from 
   assert.equal(parsePricing('', 'invalid').royaltyPlan, '');
 });
 
-test('royalty-floor plan matches the complete D1 catalogue and calculates consumer-friendly royalty-safe corrections', () => {
+test('KDP pricing parser rounds signed-in delivery file bytes up to the next KB', () => {
+  assert.equal(parsePricing('70_PERCENT', '', String(400 * 1024 - 1)).fileSizeKb, '400');
+  assert.equal(parsePricing('70_PERCENT', '', String(400 * 1024 + 1)).fileSizeKb, '401');
+});
+
+test('royalty-floor plan matches the complete D1 catalogue and calculates minimum-price corrections', () => {
   const plan = buildRoyaltyFloorPlan(snapshot(), catalogue());
   assert.equal(plan.total, 1);
   assert.equal(plan.belowFloor, 1);
   assert.equal(plan.unverifiedPlan, 0);
   assert.equal(plan.rows[0].priceMinor, 499);
-  assert.equal(plan.rows[0].floorMinor, 699);
+  assert.equal(plan.rows[0].floorMinor, 647);
   assert.equal(buildRoyaltyFloorPlan(snapshot([book({ prices: { UK: '6.99' } })]), catalogue()).belowFloor, 0);
   assert.equal(buildRoyaltyFloorPlan(snapshot([book({ royaltyPlan: '' })]), catalogue()).unverifiedPlan, 1);
   assert.throws(() => buildRoyaltyFloorPlan(snapshot(), []), /catalogue/);
@@ -94,7 +99,7 @@ test('live run saves an exact-title intent before a single UK price submission',
   const report = await reconcileRoyaltyFloor({ ...h.deps, dryRun: false });
   assert.equal(report.kdpWritesPerformed, true);
   assert.equal(report.results[0].status, 'submitted');
-  assert.equal(report.results[0].targetMinor, 699);
+  assert.equal(report.results[0].targetMinor, 647);
   assert.ok(h.events.indexOf('save:pricing/royalty-floor/ledger.json') < h.events.indexOf('publish'));
   const ledger = h.saved.get('pricing/royalty-floor/ledger.json');
   assert.equal(ledger.entries[titleId].status, 'submitted');
