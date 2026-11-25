@@ -14,6 +14,7 @@ const DEFAULT_ROUTES = Object.freeze([
   "scriptMainSynthesis",
   "scriptOutro",
   "compose",
+  "ebookManuscript",
   "editorialPass",
   "editAndFormat",
   "metadata",
