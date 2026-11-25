@@ -32,7 +32,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>server.js:201<br>services/shared/middleware/suiteAuth.js:60 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
 | `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1330<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
-| `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:247 |
+| `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:269 |
 | `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:186<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:76 |
 | `API_HUNTER_KEY` | Yes | services/outreach/services/outreachCore.js:15 |
 | `API_KEY_PODCAST_INDEX` | Yes | services/shared/utils/podcastIndexClient.js:31 |
@@ -320,11 +320,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_PROVIDER_IGNORE` | No | services/shared/utils/ai-service.js:197 |
 | `OPENROUTER_PROVIDER_ONLY` | No | services/shared/utils/ai-service.js:194 |
 | `OPENROUTER_PROVIDER_ORDER` | No | services/shared/utils/ai-service.js:191 |
-| `OPENROUTER_REASONING_EFFORT` | No | services/shared/utils/ai-service.js:238 |
+| `OPENROUTER_REASONING_EFFORT` | No | services/shared/utils/ai-service.js:260 |
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:203 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:204 |
 | `OPENROUTER_SCHEDULED_FLEX_ENABLED` | Yes | services/shared/utils/ai-service.js:240 |
-| `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:226 |
+| `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:239 |
 | `OPENROUTER_SITE_URL` | Yes | ai-config.js:372<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:373 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:186 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
