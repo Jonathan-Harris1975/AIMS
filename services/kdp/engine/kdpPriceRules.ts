@@ -10,19 +10,24 @@ export const KDP_UK_TARGET_ROYALTY_MINOR = 450
 
 /**
  * Minimum UK list-price floor yielding at least £4.50 at the
- * 70% royalty rate, rounded UP to the next penny (without crossing KDP's 70% band).
+ * 70% royalty rate, calculated as the ceiling of (£4.50 / 0.70) plus
+ * verified KDP delivery cost, without crossing KDP's 70% band).
  * This single floor is shared by the royalty worker and market optimiser
  * so a subsequent research update cannot undo a compliant correction.
  * KDP delivery charge is £0.10/MB, rounded to a penny. The signed-in KDP
  * parser rounds the exact byte count up to KB before this calculation.
  * A missing file size cannot establish a royalty guarantee.
  */
+function deliveryCostMinorForKb(kb: number): number {
+  return Math.max(1, Math.round((kb * 10) / 1024))
+}
+
 export function uk70RoyaltyFloorMinor(fileSizeKb: string | number | null | undefined): number | null {
   const raw = String(fileSizeKb ?? '').trim()
   if (!/^\d+$/.test(raw)) return null
   const kb = Number(raw)
   if (!Number.isSafeInteger(kb) || kb > 1_000_000) return null
-  const deliveryMinor = Math.max(1, Math.round((kb * 10) / 1024))
+  const deliveryMinor = deliveryCostMinorForKb(kb)
   const minimumMinor = Math.ceil((KDP_UK_TARGET_ROYALTY_MINOR * 10) / 7) + deliveryMinor
   return minimumMinor
 }
@@ -43,7 +48,7 @@ export function uk70RoyaltyPriceRange(fileSizeKb: string | number | null | undef
   const minimumMinor = uk70RoyaltyFloorMinor(fileSizeKb)
   if (minimumMinor === null || minimumMinor > 1299) return null
   const kb = Number(String(fileSizeKb).trim())
-  const deliveryCostMinor = Math.max(1, Math.round((kb * 10) / 1024))
+  const deliveryCostMinor = deliveryCostMinorForKb(kb)
   const sizeTier = Math.min(6, Math.max(1, 1 + Math.floor((kb - 300) / 50)))
   const maximumMinor = Math.min(1299, minimumMinor + sizeTier * 100)
   return {
