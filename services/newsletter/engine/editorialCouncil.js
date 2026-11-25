@@ -119,7 +119,14 @@ async function requestCouncilJsonImpl(route, { sessionId, messages, maxTokens = 
         temperature: attempt === 1 ? 0.15 : 0,
         messages: attempt === 1
           ? messages
-          : [{ ...messages[0], content: `${messages[0]?.content || ""}\n\nYour previous response failed schema validation. Return exactly one JSON object with these required fields: ${requiredFields}. Arrays must be JSON arrays of strings;\n            "do not omit any required field and do not add commentary."` }, ...messages.slice(1)],
+          : [{
+            ...messages[0],
+            content: `${messages[0]?.content || ""}\n\n${[
+              `Your previous response failed schema validation. Return exactly one JSON object with these required fields: ${requiredFields}.`,
+              "Arrays must be JSON arrays of strings.",
+              "Do not omit any required field and do not add commentary.",
+            ].join(" ")}`,
+          }, ...messages.slice(1)],
       });
       const data = parseNewsletterReview(raw, schema, "newsletter council response");
       if (Number.isFinite(data.score) && data.score >= THRESHOLDS.newsletter.qaPassThreshold &&
