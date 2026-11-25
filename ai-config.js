@@ -25,11 +25,12 @@ function provider(providerId, modelEnvNames, keyEnvNames) {
       if (override) return override;
       const configured = envValue(...modelEnvNames);
       if (String(process.env.OPENROUTER_MODEL_MIGRATION_ENABLED || "").toLowerCase() !== "true") return configured;
-      return ({
-        "anthropic/claude-sonnet-5.5": "openai/gpt-6.1-terra",
-        "anthropic/claude-opus-5.5": "openai/gpt-6.1-sol",
-        "anthropic/claude-haiku-5.5": "openai/gpt-5.6-luna",
-      })[configured] || configured;
+      const replacements = new Map([
+        ["anthropic/claude-sonnet-5.5", "openai/gpt-6.1-terra"],
+        ["anthropic/claude-opus-5.5", "openai/gpt-6.1-sol"],
+      ]);
+      if (providerId === "commsPaidEconomy" && configured === "anthropic/claude-haiku-5.5") return "openai/gpt-5.6-luna";
+      return replacements.get(configured) || configured;
     },
     get apiKey() {
       // Never use legacy provider-specific OpenRouter credentials.
