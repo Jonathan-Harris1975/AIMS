@@ -234,7 +234,9 @@ const FLEX_ROUTES = new Set([
 export function getServiceTier(routeKey, model) {
   const value = String(process.env.OPENROUTER_SERVICE_TIER || "").trim().toLowerCase();
   const enabled = String(process.env.OPENROUTER_SCHEDULED_FLEX_ENABLED || "").toLowerCase() === "true";
-  if ((enabled || value === "flex") && FLEX_ROUTES.has(routeKey) && FLEX_MODELS.has(model)) return "flex";
+  const articleEnabled = routeKey === "commsHubOutreachArticle" &&
+    String(process.env.OPENROUTER_OUTREACH_ARTICLE_FLEX_ENABLED || "").toLowerCase() === "true";
+  if ((enabled || value === "flex") && (FLEX_ROUTES.has(routeKey) || articleEnabled) && FLEX_MODELS.has(model)) return "flex";
   if (value === "flex") return "default";
   if (["auto", "default", "priority"].includes(value)) return value;
   return undefined;
