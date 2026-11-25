@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **536**
-- Present in curated templates: **404**
+- Runtime variables referenced in production code: **539**
+- Present in curated templates: **407**
 - Not present in curated templates: **132**
 
 | Variable | Curated template | Production references |
@@ -43,9 +43,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:400 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:10 |
-| `APP_TITLE` | Yes | ai-config.js:362<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:374 |
+| `APP_TITLE` | Yes | ai-config.js:373<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:374 |
 | `APP_TMP_DIR` | Yes | scripts/tempStorage.js:10<br>services/blotato/utils/renderedVideoQa.js:308<br>services/shared/utils/stateFile.js:11<br>services/tts/utils/editingProcessor.js:22<br>services/tts/utils/mergeProcessor.js:14<br>services/tts/utils/podcastProcessor.js:56 |
-| `APP_URL` | Yes | ai-config.js:361<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:373<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
+| `APP_URL` | Yes | ai-config.js:372<br>audits/utils/orchestrator.js:143<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:373<br>services/rss-feed-creator/utils/feedGenerator.js:32 |
 | `APP_VERSION` | No | server.js:399<br>server.js:418<br>services/shared/utils/operationalExcellence.js:193 |
 | `ARTWORK_CAPABILITY_CACHE_MS` | No | services/artwork/utils/openrouterImageCapabilities.js:21 |
 | `ARTWORK_CAPABILITY_DISCOVERY_ENABLED` | No | services/artwork/utils/openrouterImageCapabilities.js:55 |
@@ -311,18 +311,21 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:138 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |
-| `OPENROUTER_APP_NAME` | Yes | ai-config.js:362<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:374 |
+| `OPENROUTER_APP_NAME` | Yes | ai-config.js:373<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:374 |
 | `OPENROUTER_BASE_URL` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_DATA_COLLECTION` | No | services/shared/utils/ai-service.js:214 |
 | `OPENROUTER_ENABLE_FALLBACKS` | Yes | services/shared/utils/ai-service.js:200 |
+| `OPENROUTER_MODEL_MIGRATION_ENABLED` | Yes | ai-config.js:27 |
+| `OPENROUTER_OUTREACH_ARTICLE_FLEX_ENABLED` | Yes | services/shared/utils/ai-service.js:246 |
 | `OPENROUTER_PROVIDER_IGNORE` | No | services/shared/utils/ai-service.js:197 |
 | `OPENROUTER_PROVIDER_ONLY` | No | services/shared/utils/ai-service.js:194 |
 | `OPENROUTER_PROVIDER_ORDER` | No | services/shared/utils/ai-service.js:191 |
 | `OPENROUTER_REASONING_EFFORT` | No | services/shared/utils/ai-service.js:238 |
 | `OPENROUTER_REQUIRE_PARAMETERS` | No | services/shared/utils/ai-service.js:203 |
 | `OPENROUTER_REQUIRE_PARAMETERS_FOR_JSON` | Yes | services/shared/utils/ai-service.js:204 |
+| `OPENROUTER_SCHEDULED_FLEX_ENABLED` | Yes | services/shared/utils/ai-service.js:240 |
 | `OPENROUTER_SERVICE_TIER` | Yes | services/shared/utils/ai-service.js:226 |
-| `OPENROUTER_SITE_URL` | Yes | ai-config.js:361<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:373 |
+| `OPENROUTER_SITE_URL` | Yes | ai-config.js:372<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:373 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:186 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
 | `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:32 |
