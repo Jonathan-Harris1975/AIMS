@@ -25,6 +25,7 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0024_newsletter_audience",
   "0025_autonomy_newsletter_reliability",
   "0026_newsletter_delivery_evidence",
+  "0027_restore_missing_autonomy_policies",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;

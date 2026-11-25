@@ -218,3 +218,25 @@ test("readiness detail exposes safe startup stage and warning codes", () => {
     "ready_with_warnings:backup=cloudflare_backup_api_failed"
   );
 });
+
+test("policy recovery restores missing approved defaults without overriding operator changes", () => {
+  const db = new DatabaseSync(":memory:");
+  for (const name of COMMS_HUB_REQUIRED_MIGRATIONS.filter((name) => !name.startsWith("0027_"))) {
+    db.exec(fs.readFileSync(new URL(`../services/comms-hub/migrations/${name}.sql`, import.meta.url), "utf8"));
+  }
+  const recovery = fs.readFileSync(new URL("../services/comms-hub/migrations/0027_restore_missing_autonomy_policies.sql", import.meta.url), "utf8");
+  db.exec("DELETE FROM comms_hub_autonomous_reply_policies");
+  db.exec(recovery);
+  const policies = db.prepare("SELECT policy_key, status, minimum_confidence FROM comms_hub_autonomous_reply_policies ORDER BY policy_key").all();
+  assert.equal(policies.length, 4);
+  assert.equal(policies.find((p) => p.policy_key === "full-email-low-risk").minimum_confidence, 0.86);
+  db.exec("UPDATE comms_hub_autonomous_reply_policies SET status='disabled' WHERE policy_key='full-email-low-risk'");
+  db.exec(recovery);
+  assert.equal(db.prepare("SELECT status FROM comms_hub_autonomous_reply_policies WHERE policy_key='full-email-low-risk'").get().status, "disabled");
+  db.exec("DELETE FROM comms_hub_autonomous_reply_policies");
+  db.exec(`INSERT INTO comms_hub_audit_events
+    (id,occurred_at,actor,actor_role,action,object_type,outcome,chain_sha256)
+    VALUES ('test','2026-01-01','operator','admin','autonomous_policy_upserted','autonomous_policy','success','hash')`);
+  db.exec(recovery);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM comms_hub_autonomous_reply_policies").get().count, 0);
+});
