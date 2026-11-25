@@ -592,3 +592,26 @@ test("a successful fallback does not become the next request's primary by defaul
     globalThis.fetch = oldFetch;
   }
 });
+
+test("approved model migration maps restored defaults and supports explicit rollback", async () => {
+  const keys = ["OPENROUTER_MODEL_MIGRATION_ENABLED", "AI_MODEL_STANDARD", "AI_MODEL_STANDARD_TEST_OVERRIDE", "OPENROUTER_CLAUDE_OPUS", "OPENROUTER_CLAUDE_OPUS_TEST_OVERRIDE", "COMMS_HUB_MODEL_PAID_ECONOMY"];
+  const previous = snapshotEnv(keys);
+  try {
+    Object.assign(process.env, {
+      OPENROUTER_MODEL_MIGRATION_ENABLED: "true",
+      AI_MODEL_STANDARD: "anthropic/claude-sonnet-5.5",
+      OPENROUTER_CLAUDE_OPUS: "anthropic/claude-opus-5.5",
+      COMMS_HUB_MODEL_PAID_ECONOMY: "anthropic/claude-haiku-5.5",
+    });
+    delete process.env.AI_MODEL_STANDARD_TEST_OVERRIDE;
+    delete process.env.OPENROUTER_CLAUDE_OPUS_TEST_OVERRIDE;
+    const { aiConfig } = await import("../ai-config.js");
+    assert.equal(aiConfig.models.standard.name, "openai/gpt-6.1-terra");
+    assert.equal(aiConfig.models.claudeOpus.name, "openai/gpt-6.1-sol");
+    assert.equal(aiConfig.models.commsPaidEconomy.name, "openai/gpt-5.6-luna");
+    process.env.AI_MODEL_STANDARD_TEST_OVERRIDE = "anthropic/claude-sonnet-5.5";
+    process.env.OPENROUTER_CLAUDE_OPUS_TEST_OVERRIDE = "anthropic/claude-opus-5.5";
+    assert.equal(aiConfig.models.standard.name, "anthropic/claude-sonnet-5.5");
+    assert.equal(aiConfig.models.claudeOpus.name, "anthropic/claude-opus-5.5");
+  } finally { restoreEnv(previous); }
+});
