@@ -223,7 +223,7 @@ function getOpenRouterProviderOptions({ response_format, routeKey } = {}) {
 }
 
 // Flex is a route-specific opt-in, never a global model-family assumption.
-const FLEX_MODELS = new Set(["openai/gpt-6.1-terra", "openai/gpt-6.1-sol"]);
+const FLEX_MODELS = new Set(["openai/gpt-5.6-luna", "openai/gpt-6.1-terra", "openai/gpt-6.1-sol"]);
 const FLEX_ROUTES = new Set([
   "scriptIntro", "scriptMain", "scriptMainSynthesis", "scriptOutro", "editorialPass",
   "newsletterCompose", "newsletterFactCheck", "newsletterCouncilChair",
@@ -234,9 +234,13 @@ const FLEX_ROUTES = new Set([
 export function getServiceTier(routeKey, model) {
   const value = String(process.env.OPENROUTER_SERVICE_TIER || "").trim().toLowerCase();
   const enabled = String(process.env.OPENROUTER_SCHEDULED_FLEX_ENABLED || "").toLowerCase() === "true";
-  const articleEnabled = routeKey === "commsHubOutreachArticle" &&
+  // Outreach, audit and KDP are explicitly approved for asynchronous Flex.
+  // Interactive Comms Hub remains outside this policy, as do unsupported models.
+  const background = /^(commsHubOutreach|audit|kdp)/i.test(String(routeKey || "")) ||
+    ["onBrandAudit", "artworkVisualQa", "blotatoVisualQa"].includes(routeKey);
+  const outreachLegacy = routeKey === "commsHubOutreachArticle" &&
     String(process.env.OPENROUTER_OUTREACH_ARTICLE_FLEX_ENABLED || "").toLowerCase() === "true";
-  if ((enabled || value === "flex") && (FLEX_ROUTES.has(routeKey) || articleEnabled) && FLEX_MODELS.has(model)) return "flex";
+  if ((enabled || value === "flex") && (FLEX_ROUTES.has(routeKey) || background || outreachLegacy) && FLEX_MODELS.has(model)) return "flex";
   if (value === "flex") return "default";
   if (["auto", "default", "priority"].includes(value)) return value;
   return undefined;
@@ -341,7 +345,7 @@ async function callOpenRouter(args) {
   } catch (error) {
     if (args.relaxedParameters || args.signal?.aborted ||
         getServiceTier(args.routeKey, args.model) !== "flex" ||
-        !(error?.code === "OPENROUTER_TIMEOUT" || [429, 502, 503, 504].includes(Number(error?.status)))) throw error;
+        !(error?.code === "OPENROUTER_TIMEOUT" || [404, 408, 429, 502, 503, 504].includes(Number(error?.status)))) throw error;
     // Same model, prompt, schema and privacy policy; one bounded standard attempt.
     return callOpenRouterAttempt({ ...args, standardTier: true });
   }
