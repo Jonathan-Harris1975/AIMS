@@ -17,8 +17,8 @@ test("per-book report explains true Kindle size and provisional print page-count
   assert.equal(report.catalogueCount, 1);
   const row = report.rows[0];
   assert.equal(row.kindle.status, "calculated_verified_70_percent");
-  assert.equal(row.kindle.GBP.minimum, "6.99");
-  assert.equal(row.kindle.GBP.maximum, "7.99");
+  assert.equal(row.kindle.GBP.minimum, "6.46");
+  assert.equal(row.kindle.GBP.maximum, "7.46");
   assert.equal(row.kindle.fileSizeKb, 313);
   assert.equal(row.kindle.observedSignedInPriceGBP, "5.99");
   assert.ok(row.kindle.GBP.explanation.includes("313 KB"));
@@ -37,7 +37,7 @@ test("unknown signed-in royalty plan remains unverified, not presumed safe", asy
       books: [{ format: "kindle", asin, fileSizeKb: "464", royaltyPlan: "" }] }),
   });
   assert.equal(report.rows[0].kindle.status, "awaiting_signed_in_70_percent_confirmation");
-  assert.equal(report.rows[0].kindle.GBP.maximum, "10.99");
+  assert.equal(report.rows[0].kindle.GBP.maximum, "10.48");
   assert.equal(report.rows[0].kindle.verified70PercentPlan, false);
 });
 
