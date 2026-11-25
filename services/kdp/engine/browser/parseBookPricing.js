@@ -55,7 +55,7 @@
 
   const fileSizeBytes = readHidden('data[digital][filesize_bytes]')
   const fileSizeKb = fileSizeBytes
-    ? String(Math.round(Number(fileSizeBytes) / 1024))
+    ? String(Math.ceil(Number(fileSizeBytes) / 1024))
     : ''
 
   return {
