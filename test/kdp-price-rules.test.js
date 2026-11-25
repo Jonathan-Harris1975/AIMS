@@ -145,8 +145,8 @@ test('eBook £4.50 is an estimated per-sale royalty floor, NOT a list price', ()
     const estimatedRoyalty = 0.70 * (price - deliveryPennies)
     assert.ok(estimatedRoyalty >= 450,
       `GBP price ${price}p for ${kb} KB returned ${estimatedRoyalty}p, below £4.50`)
-    assert.equal(price - 1 < Math.ceil((450 * 10) / 7) + deliveryPennies, true,
-      'the previous penny must fall below the royalty floor')
+    assert.equal(price, Math.ceil((450 * 10) / 7) + deliveryPennies,
+      'price must be the exact minimum penny meeting the royalty floor')
   }
   // A £4.50 list price cannot deliver £4.50 royalty under the 70% plan.
   assert.ok(0.70 * (450 - 4) < 450)
