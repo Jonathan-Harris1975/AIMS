@@ -244,7 +244,7 @@ export function getServiceTier(routeKey, model) {
     ["onBrandAudit", "artworkVisualQa", "blotatoVisualQa"].includes(routeKey);
   const outreachLegacy = routeKey === "commsHubOutreachArticle" &&
     String(process.env.OPENROUTER_OUTREACH_ARTICLE_FLEX_ENABLED || "").toLowerCase() === "true";
-  if ((enabled || value === "flex") && (FLEX_ROUTES.has(routeKey) || background || outreachLegacy) && FLEX_MODELS.has(model)) return "flex";
+  if ((enabled || value === "flex" || outreachLegacy) && (FLEX_ROUTES.has(routeKey) || background) && FLEX_MODELS.has(model)) return "flex";
   if (value === "flex") return "default";
   if (["auto", "default", "priority"].includes(value)) return value;
   return undefined;
@@ -349,7 +349,7 @@ async function callOpenRouter(args) {
   } catch (error) {
     if (args.relaxedParameters || args.signal?.aborted ||
         getServiceTier(args.routeKey, args.model) !== "flex" ||
-        !(error?.code === "OPENROUTER_TIMEOUT" || [404, 408, 429, 502, 503, 504].includes(Number(error?.status)))) throw error;
+        !(error?.code === "OPENROUTER_TIMEOUT" || [408, 429, 502, 503, 504].includes(Number(error?.status)))) throw error;
     // Same model, prompt, schema and privacy policy; one bounded standard attempt.
     return callOpenRouterAttempt({ ...args, standardTier: true });
   }
