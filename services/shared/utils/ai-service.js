@@ -223,7 +223,11 @@ function getOpenRouterProviderOptions({ response_format, routeKey } = {}) {
 }
 
 // Flex is a route-specific opt-in, never a global model-family assumption.
-const FLEX_MODELS = new Set(["openai/gpt-5.6-luna", "openai/gpt-6.1-terra", "openai/gpt-6.1-sol"]);
+// OpenRouter explicitly lists Flex for each of these configured models.
+const FLEX_MODELS = new Set([
+  "openai/gpt-5.6-luna", "openai/gpt-5.6-sol", "openai/gpt-6.1-terra", "openai/gpt-6.1-sol",
+  "google/gemini-2.5-flash-lite", "google/gemini-3.5-flash-lite-20260721", "google/gemini-3.5-flash-lite",
+]);
 const FLEX_ROUTES = new Set([
   "scriptIntro", "scriptMain", "scriptMainSynthesis", "scriptOutro", "editorialPass",
   "newsletterCompose", "newsletterFactCheck", "newsletterCouncilChair",
