@@ -47,8 +47,8 @@ Cold email defaults are deliberately conservative:
 
 Discovery itself uses no LLM. Outreach writing is intentionally a premium, low-volume path:
 
-- Pitch/reply/article writer: `anthropic/claude-sonnet-5.5`
-- Independent article reviewer: `anthropic/claude-opus-5.5`
+- Pitch/reply/article writer: `openai/gpt-6.1-terra`
+- Independent article reviewer: `openai/gpt-6.1-sol`
 - Fallback: `openai/gpt-5.6-luna`
 
 All Outreach AI routes use the `commsHub...` namespace, so the shared OpenRouter privacy router applies ZDR-only routing and `data_collection=deny`.

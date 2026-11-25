@@ -13,13 +13,24 @@ function envValue(...names) {
   return undefined;
 }
 
+// Legacy ENV role names remain stable. Explicit role overrides provide paired
+// testing and rollback without changing prompts or provider ordering.
 function provider(providerId, modelEnvNames, keyEnvNames) {
   return {
     providerId,
     modelEnvNames,
     keyEnvNames,
     get name() {
-      return envValue(...modelEnvNames);
+      const override = envValue(...modelEnvNames.map(name => name + "_TEST_OVERRIDE"));
+      if (override) return override;
+      const configured = envValue(...modelEnvNames);
+      if (String(process.env.OPENROUTER_MODEL_MIGRATION_ENABLED || "").toLowerCase() !== "true") return configured;
+      const replacements = new Map([
+        ["anthropic/claude-sonnet-5.5", "openai/gpt-6.1-terra"],
+        ["anthropic/claude-opus-5.5", "openai/gpt-6.1-sol"],
+      ]);
+      if (providerId === "commsPaidEconomy" && configured === "anthropic/claude-haiku-5.5") return "openai/gpt-5.6-luna";
+      return replacements.get(configured) || configured;
     },
     get apiKey() {
       // Never use legacy provider-specific OpenRouter credentials.
