@@ -115,15 +115,17 @@ test('70% plan updates also respect the marketplace upper price band', () => {
   )
 })
 
-test('UK 70% pricing floors round up to .99 above £4.50 after KDP delivery', () => {
-  assert.equal(uk70RoyaltyFloorMinor('1024'), 699)
-  assert.equal(uk70RoyaltyFloorMinor('2048'), 699)
-  assert.equal(uk70RoyaltyFloorMinor('3072'), 699)
-  assert.equal(uk70RoyaltyFloorMinor('5120'), 699)
+test('UK 70% pricing floors use the lowest penny price above £4.50 after KDP delivery', () => {
+  assert.equal(uk70RoyaltyFloorMinor('1024'), 653)
+  assert.equal(uk70RoyaltyFloorMinor('2048'), 663)
+  assert.equal(uk70RoyaltyFloorMinor('3072'), 673)
+  assert.equal(uk70RoyaltyFloorMinor('5120'), 693)
+  assert.equal(uk70RoyaltyFloorMinor('358'), 646,
+    'KDP rounds file size up to KB before rounding the delivery charge to pennies')
   assert.equal(uk70RoyaltyFloorMinor(''), null)
   assert.equal(uk70RoyaltyFloorMinor('-1'), null)
   assert.equal(uk70RoyaltyFloorMinor('1.5'), null)
-  for (const [fileSizeKb, floorMinor] of [['1024', 699], ['5120', 699]]) {
+  for (const [fileSizeKb, floorMinor] of [['1024', 653], ['5120', 693]]) {
     const low = ((floorMinor - 1) / 100).toFixed(2)
     assert.match(
       validateKdpPriceChanges('kindle', { prices: { UK: low }, royaltyPlan: '70_PERCENT' }, undefined, fileSizeKb).join(' '),
@@ -139,11 +141,12 @@ test('UK 70% pricing floors round up to .99 above £4.50 after KDP delivery', ()
 test('eBook £4.50 is an estimated per-sale royalty floor, NOT a list price', () => {
   for (const kb of [0, 1, 313, 437, 1024, 2048, 5120, 10000]) {
     const price = uk70RoyaltyFloorMinor(String(kb))
-    const deliveryPennies = Math.max(1, Math.round(((kb + 1) * 10) / 1024))
+    const deliveryPennies = Math.max(1, Math.round((kb * 10) / 1024))
     const estimatedRoyalty = 0.70 * (price - deliveryPennies)
     assert.ok(estimatedRoyalty >= 450,
       `GBP price ${price}p for ${kb} KB returned ${estimatedRoyalty}p, below £4.50`)
-    assert.equal(price % 100, 99, 'commercial shelf prices must end .99')
+    assert.equal(price, Math.ceil((450 * 10) / 7) + deliveryPennies,
+      'price must be the exact minimum penny meeting the royalty floor')
   }
   // A £4.50 list price cannot deliver £4.50 royalty under the 70% plan.
   assert.ok(0.70 * (450 - 4) < 450)
@@ -152,14 +155,14 @@ test('eBook £4.50 is an estimated per-sale royalty floor, NOT a list price', ()
 test('UK royalty target refuses unknown delivery sizes and 35% plans', () => {
   assert.match(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '70_PERCENT').join(' '), /delivery file size/)
   assert.match(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '35_PERCENT', '1024').join(' '), /requires a verified 70%/)
-  assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GBP: '6.99' } }, '70_PERCENT', '1024'), [])
+  assert.deepEqual(validateKdpPriceChanges('kindle', { prices: { GBP: '6.53' } }, '70_PERCENT', '1024'), [])
 })
 
 test('signed-in KDP audit reports a UK royalty shortfall or unverifiable cost', () => {
   const low = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.52' } })])
   assert.equal(low.belowMinimumCount, 1)
   assert.equal(low.issues[0].code, 'below_target_royalty')
-  assert.equal(low.issues[0].recommendedPrice, 6.99)
+  assert.equal(low.issues[0].recommendedPrice, 6.53)
   assert.equal(analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', fileSizeKb: '1024', prices: { GB: '6.99' } })]).issueCount, 0)
   const unknown = analyzeKdpPriceFloors([book({ royaltyPlan: '70_PERCENT', prices: { GB: '6.99' } })])
   assert.equal(unknown.issues[0].code, 'target_royalty_unverifiable')
@@ -168,10 +171,10 @@ test('signed-in KDP audit reports a UK royalty shortfall or unverifiable cost', 
 
 
 test('file-size-specific Kindle bands protect the £4.50 royalty and vary testing ceilings', () => {
-  for (const [kb, expectedMax] of [[309, '7.99'], [349, '7.99'], [350, '8.99'],
-    [399, '8.99'], [400, '9.99'], [449, '9.99'], [450, '10.99'], [464, '10.99']]) {
+  for (const [kb, expectedMin, expectedMax] of [[309, '6.46', '7.46'], [349, '6.46', '7.46'], [350, '6.46', '8.46'],
+    [399, '6.47', '8.47'], [400, '6.47', '9.47'], [449, '6.47', '9.47'], [450, '6.47', '10.47'], [464, '6.48', '10.48']]) {
     const range = uk70RoyaltyPriceRange(String(kb))
-    assert.equal(range.minimumPrice, '6.99', `minimum ${kb} KB`)
+    assert.equal(range.minimumPrice, expectedMin, `minimum ${kb} KB`)
     assert.equal(range.maximumPrice, expectedMax, `maximum ${kb} KB`)
     assert.ok(range.estimatedRoyaltyAtMinimum >= 4.50)
     assert.ok(range.priceRationale.includes(String(kb)))

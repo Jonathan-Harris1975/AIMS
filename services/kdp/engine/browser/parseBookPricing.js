@@ -54,8 +54,9 @@
   }
 
   const fileSizeBytes = readHidden('data[digital][filesize_bytes]')
-  const fileSizeKb = fileSizeBytes
-    ? String(Math.round(Number(fileSizeBytes) / 1024))
+  // KDP rounds the exact byte count up to KB for delivery calculation.
+  const fileSizeKbRoundedUp = fileSizeBytes
+    ? String(Math.ceil(Number(fileSizeBytes) / 1024))
     : ''
 
   return {
@@ -64,7 +65,7 @@
     prices,
     territory,
     royaltyPlan,
-    fileSizeKb,
+    fileSizeKb: fileSizeKbRoundedUp,
     kdpSelect:
       readHidden('data[digital][kdp_select_enrolled]') === 'true' ||
       readHidden('data[is_select]') === 'true',
