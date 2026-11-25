@@ -178,6 +178,12 @@ const newsletterEditorial = provider(
   SHARED_OPENROUTER_KEY
 );
 
+const ebookManuscript = provider(
+  "ebookManuscript",
+  ["EBOOK_MANUSCRIPT_MODEL", "AI_MODEL_STANDARD"],
+  SHARED_OPENROUTER_KEY
+);
+
 const blotatoScript = provider(
   "blotatoScript",
   ["BLOTATO_SCRIPT_MODEL", "BLOTATO_NEWS_SCRIPT_MODEL", "OPENROUTER_BLOTATO_SCRIPT_MODEL"],
@@ -207,6 +213,7 @@ const modelRegistry = {
   google: google25FlashLite,
   chatgpt: gpt56Sol,
   blotatoScript,
+  ebookManuscript,
   anthropic: anthropic46,
   meta,
   art,
@@ -319,6 +326,8 @@ export const aiConfig = {
     zernioMiniSeriesPost: routeChain(["highQuality", "standard", "audit"], ["claudeSonnet5", "anthropic46"]),
     zernioQuiz: routeChain(["highQuality", "standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     zernioEbook: routeChain(["highQuality", "standard", "fast", "fallback"], ["gpt56Sol", "google25FlashLite"]),
+    // Explicit manuscript-generation lane. Keep manuscript writing on Luna unless a measured test approves a change.
+    ebookManuscript: fixedRouteChain(["ebookManuscript"]),
     zernioPodcastPromo: routeChain(["highQuality", "standard", "fallback"], ["gpt56Sol", "google25FlashLite"]),
     // Blotato script quality is production-critical. The dedicated Claude writer
     // leads; GPT-5.6 Luna is the first independent fallback before the economy lane.
