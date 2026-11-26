@@ -58,6 +58,17 @@ function safeSubject(value, fallback = "Guest article idea") { return String(val
 function slug(value) { return String(value || "article").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100) || "article"; }
 function unique(values) { return [...new Set(values.filter(Boolean))]; }
 
+function nextAuthorisedBusinessSession(from, policy) {
+  if (policy.endHour <= 9 || policy.startHour >= 11) return null;
+  let cursor = from instanceof Date ? from : new Date(from);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const businessTime = ensureFutureBusinessTime(cursor, policy, cursor);
+    if (isAuthorisedOutreachSession(businessTime)) return businessTime;
+    cursor = nextAuthorisedOutreachSession(new Date(businessTime.getTime() + 2 * 60 * 60_000));
+  }
+  return null;
+}
+
 export function emailValidationScore(validation = {}) {
   const status = String(validation?.status || "unknown").toLowerCase();
   if (status === "valid") return 1;
@@ -95,8 +106,8 @@ export class OutreachAutomationService {
       enabled: bool(env.OUTREACH_AUTOMATION_ENABLED, true),
       sendEnabled: bool(env.OUTREACH_SEND_ENABLED, false),
       followUpEnabled: bool(env.OUTREACH_FOLLOW_UP_ENABLED, false),
-      followUpDays: int(env.OUTREACH_FOLLOW_UP_DAYS, 5, 2, 30),
-      maxFollowUps: int(env.OUTREACH_MAX_FOLLOW_UPS, 1, 0, 3),
+      followUpDays: int(env.OUTREACH_FOLLOW_UP_DAYS, 7, 7, 30),
+      maxFollowUps: int(env.OUTREACH_MAX_FOLLOW_UPS, 1, 0, 1),
       maxBatch: int(env.OUTREACH_MAX_SENDS_PER_BATCH, 5, 1, 50),
       maxDaily: int(env.OUTREACH_MAX_SENDS_PER_DAY, 10, 1, 100),
       allowCatchAll: bool(env.OUTREACH_ALLOW_CATCH_ALL, false),
@@ -297,22 +308,45 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     const target = result?.results?.[0];
     if (!target) return { skipped: true, reason: "target_missing" };
     const cfg = this.config();
-    if (!cfg.followUpEnabled || Number(target.follow_up_count || 0) >= cfg.maxFollowUps || target.state !== "contacted") return { skipped: true, reason: "follow_up_not_needed" };
-    if (!isAuthorisedOutreachSession(new Date())) {
+    if (!cfg.enabled || !cfg.sendEnabled || !cfg.followUpEnabled) return { skipped: true, reason: "dispatch_disabled" };
+    if (Number(target.follow_up_count || 0) >= cfg.maxFollowUps || target.state !== "contacted" || target.last_reply_at) return { skipped: true, reason: "follow_up_not_needed" };
+    const now = this.now();
+    const policy = businessHoursPolicy(this.context.config);
+    if (!isAuthorisedOutreachSession(now) || !isWithinBusinessHours(now, policy)) {
+      const dueAt = nextAuthorisedBusinessSession(now, policy);
+      if (!dueAt) return { skipped: true, reason: "no_authorised_business_hours_overlap" };
       return {
         deferred: true,
         reason: "outside_authorised_morning_session",
-        dueAt: nextAuthorisedOutreachSession(new Date()).toISOString(),
+        dueAt: dueAt.toISOString(),
       };
+    }
+    const sentAt = Date.parse(target.last_sent_at || "");
+    const minimumDueAt = sentAt + cfg.followUpDays * 86_400_000;
+    if (!Number.isFinite(sentAt) || now.getTime() < minimumDueAt) {
+      return { deferred: true, reason: "follow_up_not_due", dueAt: Number.isFinite(minimumDueAt) ? new Date(minimumDueAt).toISOString() : null };
     }
     if (await this.repository.isSuppressed(target.email, target.domain)) return { skipped: true, reason: "suppressed" };
     const body = `Hi,\n\nJust following up on the guest article idea I sent over. If it isn't a fit for your editorial plans, no problem at all. If it is potentially useful, \
 I'm happy to send a short outline or work to your contributor guidelines.${this.signatureAndOptOut()}`;
     this.assertOutbound(body, { allowedUrls: [cfg.authorSite, cfg.privacyUrl] });
-    const next = Number(target.follow_up_count || 0) + 1;
-    const sent = await this.context.emailService.send({ conversationId: target.conversation_id, bodyText: body, idempotencyKey: `outreach-followup-send:${target.id}:${next}`,
-       scheduledDelivery: true });
-    await this.repository.updateTarget(target.id, { state: "followed_up", followUpCount: next, lastSentAt: new Date().toISOString() });
+    // Recheck the durable target and every send switch after workflow delay and
+    // immediately before handing the message to the communications provider.
+    const latestResult = await this.context.d1.query(`SELECT * FROM comms_hub_outreach_targets WHERE id = ?`, [targetId]);
+    const latest = latestResult?.results?.[0];
+    const current = this.config();
+    if (!latest || !current.enabled || !current.sendEnabled || !current.followUpEnabled) return { skipped: true, reason: "dispatch_disabled_or_target_missing" };
+    if (latest.state !== "contacted" || latest.last_reply_at || Number(latest.follow_up_count || 0) >= current.maxFollowUps) {
+      return { skipped: true, reason: "follow_up_not_needed" };
+    }
+    const latestSentAt = Date.parse(latest.last_sent_at || "");
+    if (!Number.isFinite(latestSentAt) || now.getTime() < latestSentAt + current.followUpDays * 86_400_000) {
+      return { deferred: true, reason: "follow_up_not_due" };
+    }
+    if (await this.repository.isSuppressed(latest.email, latest.domain)) return { skipped: true, reason: "suppressed" };
+    const next = Number(latest.follow_up_count || 0) + 1;
+    const sent = await this.sendThreadReply(latest, body, { idempotencyKey: `outreach-followup-send:${latest.id}:${next}` });
+    await this.repository.updateTarget(latest.id, { state: "followed_up", followUpCount: next, lastSentAt: now.toISOString() });
     return { sent: true, duplicate: Boolean(sent?.duplicate), followUpCount: next };
   }
 
