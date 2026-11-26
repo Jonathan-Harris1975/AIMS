@@ -60,6 +60,7 @@ export async function analysePublishedBook(book, {
       if (!status) status = characters === 0 ? "no_text_content" : page.readable ? "readable" : "insufficient_text";
       return { pdfPage: page.pdfPage, characters, status };
     }),
+    sourcePages: extraction.pages.map(({ pdfPage, text, textOffsetStart }) => ({ pdfPage, text, textOffsetStart })),
     candidates: candidateReferences(extraction), cacheKey: key };
 }
 
@@ -83,7 +84,8 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
   }
   try {
     const analysis = await analyse(book);
-    const referenceEvidence = await repository.recordCandidateEvidence(campaign.id, analysis.sha256, analysis.candidates);
+    const referenceEvidence = await repository.recordCandidateEvidence(campaign.id, analysis.sha256,
+      analysis.candidates, analysis.sourcePages);
     const reportKey = `outreach/book-feature/campaigns/${occurrence.week}/${occurrence.localDate}.json`;
     await persist("kdp", reportKey, { campaignId: campaign.id, occurrenceId: occurrence.id, ebookId: book.ebookId,
       title: book.title, manuscriptSha256: analysis.sha256, totalPages: analysis.totalPages,
