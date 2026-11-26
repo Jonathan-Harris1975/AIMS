@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { effectiveMode } from "./core.js";
 
 const first = (response) => response?.results?.[0] || null;
@@ -76,6 +76,36 @@ export class BookFeatureRepository {
     return first(await this.d1.query("SELECT * FROM book_feature_occurrences WHERE id=?", [id]));
   }
 
+  async recordCandidateEvidence(campaignId, manuscriptSha256, candidates = []) {
+    if (!campaignId || !/^[a-f0-9]{64}$/i.test(String(manuscriptSha256 || "")) || !Array.isArray(candidates)) {
+      throw new TypeError("Campaign ID, manuscript SHA-256 and candidate evidence are required.");
+    }
+    const statements = [];
+    for (const candidate of candidates) {
+      const name = String(candidate?.name || "").trim();
+      if (!name || name.length > 200 || !Array.isArray(candidate.occurrences)) continue;
+      for (const occurrence of candidate.occurrences) {
+        const page = Number(occurrence?.pdfPage);
+        const offset = Number(occurrence?.offset);
+        const passage = String(occurrence?.passage || "").trim();
+        if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(offset) || offset < 0 ||
+            passage.length < 20 || passage.length > 2000 || !passage.toLowerCase().includes(name.toLowerCase())) continue;
+        const id = createHash("sha256").update([campaignId, manuscriptSha256.toLowerCase(), page, offset, name.toLowerCase()].join("\u001f")).digest("hex");
+        statements.push({ sql: `INSERT OR IGNORE INTO book_feature_evidence
+          (id,campaign_id,organisation_id,manuscript_sha256,pdf_page,text_offset,passage,validation,evidence_class,created_at)
+          VALUES (?,?,NULL,?,?,?,?, 'candidate','direct',?)`,
+          params: [id,campaignId,manuscriptSha256.toLowerCase(),page,offset,passage,this.now().toISOString()] });
+      }
+    }
+    if (!statements.length) return { attempted: 0, recorded: 0 };
+    let recorded = 0;
+    for (let offset = 0; offset < statements.length; offset += 100) {
+      const result = await this.d1.batch(statements.slice(offset, offset + 100));
+      recorded += result.reduce((sum, item) => sum + changes(item), 0);
+    }
+    return { attempted: statements.length, recorded };
+  }
+
   async overview() {
     const campaigns = (await this.d1.query(`SELECT id,iso_week,ebook_id,title,state,manuscript_sha256,updated_at
       FROM book_feature_campaigns ORDER BY iso_week DESC LIMIT 10`)).results || [];
@@ -84,7 +114,11 @@ export class BookFeatureRepository {
     const opportunities = first(await this.d1.query(`SELECT COUNT(*) AS total,
       SUM(CASE WHEN state IN ('qualified','eligible','drafted','qa_passed','queued','sent','awaiting_reply','engaged','developing','outcome_verified') THEN 1 ELSE 0 END) AS qualified
       FROM book_feature_opportunities`));
+    const evidence = first(await this.d1.query(`SELECT COUNT(*) AS candidates,
+      SUM(CASE WHEN validation='validated' THEN 1 ELSE 0 END) AS validated
+      FROM book_feature_evidence`));
     return { campaigns, occurrences, opportunities: { total: Number(opportunities?.total || 0), qualified: Number(opportunities?.qualified || 0) },
+      evidence: { candidateReferences: Number(evidence?.candidates || 0), validatedReferences: Number(evidence?.validated || 0) },
       dispatched: 0, delivered: null, responses: null, meaningfulEngagement: null,
       actualCostUsd: null, costPerQualifiedOpportunity: null, costPerMeaningfulEngagement: null,
       deliveryRate: null, responseRate: null, attribution: "unavailable", evidenceStatus: "pre_dispatch" };

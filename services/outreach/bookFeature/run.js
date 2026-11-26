@@ -83,15 +83,18 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
   }
   try {
     const analysis = await analyse(book);
+    const referenceEvidence = await repository.recordCandidateEvidence(campaign.id, analysis.sha256, analysis.candidates);
     const reportKey = `outreach/book-feature/campaigns/${occurrence.week}/${occurrence.localDate}.json`;
     await persist("kdp", reportKey, { campaignId: campaign.id, occurrenceId: occurrence.id, ebookId: book.ebookId,
       title: book.title, manuscriptSha256: analysis.sha256, totalPages: analysis.totalPages,
       pagesAnalysed: analysis.pagesAnalysed, candidates: analysis.candidates, extractionCacheKey: analysis.cacheKey,
+      referenceEvidence, evidenceStatus: "candidate_only_identity_and_qualification_pending",
       verifiedOrganisations: 0, qualifiedOpportunities: 0, contactEligibleOpportunities: 0,
       dispatched: 0, status: "assessment_pending_entity_validation", observedAt: now.toISOString() });
     await repository.finishOccurrence(lease, "completed_zero", { reportKey });
     return { ok: true, status: "completed_zero", campaignId: campaign.id, occurrenceId: occurrence.id,
       pagesAnalysed: analysis.pagesAnalysed, totalPages: analysis.totalPages, candidatePhrases: analysis.candidates.length,
+      candidateEvidenceRecorded: referenceEvidence.recorded,
       verifiedOrganisations: 0, qualifiedOpportunities: 0, dispatched: 0 };
   } catch (error) {
     try {
