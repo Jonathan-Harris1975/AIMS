@@ -28,6 +28,13 @@ test("featured metadata, passage matching, scoring and dispatch mode fail closed
   assert.throws(() => verifyBook({ title: "Book 1", bookUrl: "https://other.example" }, book(1)));
   assert.throws(() => verifyBook({ title: "Book 1" }, { ...book(1), publicationDate: "2099-01-01" }));
   assert.throws(() => verifyBook({ title: "Book 1" }, { ...book(1), titleAlignmentStatus: "Mismatch" }));
+  const canonical = "Artificial Intelligence in Construction: Building a Sustainable Future";
+  const caseDrift = { ...book(1), title: canonical,
+    manuscriptTitleObserved: "Artificial intelligence in Construction: Building a Sustainable Future",
+    titleAlignmentStatus: "Minor punctuation/casing drift; workbook retained as canonical" };
+  assert.equal(verifyBook({ title: canonical, bookUrl: caseDrift.bookUrl }, caseDrift), caseDrift);
+  assert.throws(() => verifyBook({ title: canonical, bookUrl: caseDrift.bookUrl },
+    { ...caseDrift, manuscriptTitleObserved: "Artificial intelligence in Construction: A Different Future" }));
   assert.equal(matchedPassage("The Acme Group developed reliable services.", "Acme Group developed reliable services."), true);
   assert.equal(matchedPassage("The Acme Group developed reliable services.", "Acme Group recommends my book."), false);
   const components = { depth: 25, positiveContext: 20, mutualBenefit: 20, currentRelevance: 15, audienceAlignment: 10, relationshipPotential: 10 };
