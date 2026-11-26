@@ -31,3 +31,19 @@ export function isAuthorisedOutreachSession(date = new Date(), { windowMinutes =
     && minuteOfDay < OUTREACH_SESSION_START_MINUTE + Number(windowMinutes);
 }
 
+export function nextAuthorisedOutreachSession(date = new Date()) {
+  const original = new Date(date);
+  const start = new Date(original);
+  start.setSeconds(0, 0);
+  for (let minute = 0; minute <= 8 * 24 * 60; minute += 1) {
+    const candidate = new Date(start.getTime() + minute * 60_000);
+    const parts = londonParts(candidate);
+    if (candidate > original
+      && OUTREACH_AUTHORISED_WEEKDAYS.includes(parts.weekday)
+      && parts.hour * 60 + parts.minute === OUTREACH_SESSION_START_MINUTE) {
+      return candidate;
+    }
+  }
+  throw new Error("Unable to calculate the next authorised outreach session");
+}
+

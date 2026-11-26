@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { bestEmail } from "../services/outreach/services/outreachService.js";
-import { classifyEditorialEvidence, scoreOpportunity } from "../services/outreach/utils/qualification.js";
-import { isAuthorisedOutreachSession, londonParts } from "../services/outreach/utils/schedule.js";
+import { classifyEditorialEvidence, scoreOpportunity, relevanceScore } from "../services/outreach/utils/qualification.js";
+import { isAuthorisedOutreachSession, londonParts, nextAuthorisedOutreachSession } from "../services/outreach/utils/schedule.js";
 
 test("editorial evidence is classified conservatively", () => {
   const confirmed = classifyEditorialEvidence({
@@ -13,6 +13,7 @@ test("editorial evidence is classified conservatively", () => {
   assert.equal(confirmed.classification, "confirmed");
   assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com/insights", pageText: "Recent guest authors and an editorial contact route." }).classification, "strong_probable");
   assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com", pageText: "Sponsored post only. Pay to publish." }).classification, "unsuitable");
+  assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com/write-for-us", pageText: "We do not accept contributed articles or guest posts." }).classification, "unsuitable");
   assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com/blog", pageText: "Our blog publishes company news." }).classification, "unconfirmed");
 });
 
@@ -47,6 +48,25 @@ test("recipient ranking rejects generic non-editorial and cross-domain contacts"
   assert.equal(bestEmail({ ...entry, editorialEvidence: { classification: "confirmed", editorialRoute: false } }), null);
 });
 
+test("named editorial contacts require explicit opt-in", () => {
+  const entry = {
+    domain: "example.com",
+    editorialEvidence: { classification: "confirmed", editorialRoute: true },
+    emails: [
+      { email: "jane@example.com", validation: { status: "valid" }, hunter: { firstName: "Jane", position: "Editor" } },
+      { email: "editor@example.com", validation: { status: "valid" }, hunter: { type: "generic" } },
+    ],
+  };
+  assert.equal(bestEmail(entry, { OUTREACH_ALLOW_NAMED_BUSINESS_CONTACTS: "false" }).email, "editor@example.com");
+  assert.equal(bestEmail({ ...entry, emails: [entry.emails[0]] }, { OUTREACH_ALLOW_NAMED_BUSINESS_CONTACTS: "true" }).email, "jane@example.com");
+});
+
+test("relevance uses the configured campaign topic rather than only a fixed word list", () => {
+  assert.equal(relevanceScore("model monitoring in production", {
+    supportingExcerpt: "We publish practical guidance on model monitoring in production operations.",
+  }), 25);
+});
+
 test("authorised outreach sessions use Europe/London and only Monday, Wednesday and Friday mornings", () => {
   assert.deepEqual(londonParts(new Date("2026-01-05T09:00:00.000Z")), { weekday: "monday", date: "2026-01-05", hour: 9, minute: 0 });
   assert.equal(isAuthorisedOutreachSession(new Date("2026-01-05T09:00:00.000Z")), true);
@@ -54,5 +74,6 @@ test("authorised outreach sessions use Europe/London and only Monday, Wednesday 
   assert.equal(isAuthorisedOutreachSession(new Date("2026-07-06T09:00:00.000Z")), true);
   assert.equal(isAuthorisedOutreachSession(new Date("2026-07-07T09:00:00.000Z")), false);
   assert.equal(isAuthorisedOutreachSession(new Date("2026-07-06T11:00:00.000Z")), false);
+  assert.equal(nextAuthorisedOutreachSession(new Date("2026-07-07T09:00:00.000Z")).toISOString(), "2026-07-08T08:00:00.000Z");
 });
 
