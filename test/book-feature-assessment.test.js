@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { selectSample, verifyBook, londonOccurrence, matchedPassage, scoreOpportunity, effectiveMode } from "../services/outreach/bookFeature/core.js";
-import { extractManuscript, assessThreeBooks, validateExtraction } from "../services/outreach/bookFeature/assessment.js";
+import { extractManuscript, candidateReferences, assessBook, assessThreeBooks, validateExtraction } from "../services/outreach/bookFeature/assessment.js";
 import { statusUrlFor } from "../services/shared/utils/asyncServiceStatusUrl.js";
 import express from "express";
 import request from "supertest";
@@ -73,9 +73,37 @@ test("PDF extraction checks every page and blocks deficient coverage", async () 
   assert.equal(result.pagesAnalysed, 2);
   assert.equal(result.readablePages, 1);
   assert.deepEqual(result.coverageManifest.map((page) => page.status), ["readable", "no_text_content"]);
+  assert.equal(result.pages[0].textOffsetStart, 0);
+  assert.equal(result.pages[0].textOffsetEnd, result.pages[0].text.length);
+  assert.equal(result.pages[1].textOffsetStart, result.pages[0].text.length + 1);
+  assert.equal(result.pages[1].textOffsetEnd, result.pages[1].textOffsetStart);
   assert.deepEqual(result.deficientPages, [2]);
   assert.equal(result.complete, false);
   assert.equal(validateExtraction(result), false);
+});
+
+test("read-only assessment rejects extraction whose checksum does not match the retrieved manuscript", async () => {
+  const buffer = Buffer.from("%PDF-" + "x".repeat(100));
+  const extraction = { sha256: "wrong-checksum", totalPages: 1, pagesProcessed: 1, pagesAnalysed: 1,
+    readablePages: 1, coverageComplete: true, complete: true,
+    pages: [{ pdfPage: 1, text: "A sufficiently long page with readable manuscript evidence.", characters: 56, readable: true }] };
+  await assert.rejects(assessBook(book(1), { readObject: async () => buffer, extract: async () => extraction }), /checksum/);
+});
+
+test("candidate passage offsets use the cumulative normalized manuscript text position", async () => {
+  const pagesText = [
+    "This first page contains enough readable introductory text for coverage.",
+    "Acme Group developed a useful product with independently verifiable benefits.",
+  ];
+  const result = await extractManuscript(Buffer.from("%PDF-" + "x".repeat(100)), { documentLoader: () => ({
+    destroy: async () => {}, promise: Promise.resolve({ numPages: pagesText.length,
+      getPage: async (index) => ({ getTextContent: async () => ({ items: [{ str: pagesText[index - 1] }] }), cleanup() {} }),
+    }),
+  }) });
+  const reference = candidateReferences(result).find((candidate) => candidate.name === "Acme Group");
+  assert.ok(reference);
+  assert.equal(reference.occurrences[0].pdfPage, 2);
+  assert.equal(reference.occurrences[0].offset, pagesText[0].length + 1);
 });
 
 test("extraction validation requires contiguous, readable page coverage", () => {
@@ -84,6 +112,7 @@ test("extraction validation requires contiguous, readable page coverage", () => 
     { pdfPage: 2, text: "Another sufficiently long page with readable extracted content.", readable: true },
   ], coverageComplete: true, complete: true };
   assert.equal(validateExtraction(valid), true);
+  assert.equal(validateExtraction({ ...valid, coverageComplete: false, complete: false }), false);
   assert.equal(validateExtraction({ ...valid, pages: [valid.pages[0]] }), false);
   assert.equal(validateExtraction({ ...valid, pages: [{ ...valid.pages[0], pdfPage: 2 }, valid.pages[1]] }), false);
   assert.equal(validateExtraction({ ...valid, pages: [valid.pages[0], { ...valid.pages[1], readable: false }], complete: false }), false);
