@@ -2207,12 +2207,8 @@ async function runPublishJobImpl({
       const blockSoftQaFailures = scheduledTime
         ? false
         : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
-      const blockHardQaFailures = scheduledTime
-        ? true
-        : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES, false);
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
         blockSoftFailures: blockSoftQaFailures,
-        blockHardFailures: blockHardQaFailures,
       });
       const hardQaFailure = qaPublication.hardFailure;
       updateJob(lane.jobType, sessionId, {
@@ -2241,7 +2237,6 @@ async function runPublishJobImpl({
         technical: renderedVideoQa.technical,
         hardQaFailure,
         blockSoftQaFailures,
-        blockHardQaFailures,
       });
       if (qaPublication.block) {
         throw buildRenderedVideoQaError(renderedVideoQa);
