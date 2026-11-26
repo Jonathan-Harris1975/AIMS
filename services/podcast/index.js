@@ -104,7 +104,7 @@ router.post("/run", requestDedupe("podcast:run"), async (req, res) => {
     void runPodcastPipeline({
       ...payload,
       sessionId,
-      targetMinutes: payload.targetMinutes || 60,
+      targetMinutes: payload.targetMinutes || 65,
     })
       .then((result) => {
         if (!podcastPipelineSucceeded(result)) {
