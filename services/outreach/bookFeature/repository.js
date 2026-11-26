@@ -46,7 +46,9 @@ export class BookFeatureRepository {
       book.manuscriptR2Key, JSON.stringify(selection || {}), at, at]);
     const current = first(await this.d1.query("SELECT * FROM book_feature_campaigns WHERE iso_week=?", [week]));
     if (!current || Number(current.ebook_id) !== book.ebookId || current.title !== book.title ||
-        current.canonical_url !== book.bookUrl || current.manuscript_key !== book.manuscriptR2Key) {
+        current.author !== (book.author || "") || current.canonical_url !== book.bookUrl ||
+        current.cover_url !== (book.coverArtUrl || "") || current.manuscript_key !== book.manuscriptR2Key ||
+        current.selection_json !== JSON.stringify(selection || {})) {
       throw new Error("Weekly featured-book selection changed; campaign requires authoritative reconciliation.");
     }
     return current;
@@ -57,15 +59,17 @@ export class BookFeatureRepository {
     const now = at.toISOString();
     const expires = new Date(at.getTime() + 15 * 60_000).toISOString();
     const owner = this.leaseId();
-    await this.d1.query(`INSERT OR IGNORE INTO book_feature_occurrences
-      (id,campaign_id,local_date,weekday,status,attempts,created_at,updated_at)
-      VALUES (?,?,?,?, 'failed',0,?,?)`, [occurrence.id,campaignId,occurrence.localDate,occurrence.day,now,now]);
-    const result = await this.d1.query(`UPDATE book_feature_occurrences
-      SET status='leased',lease_owner=?,lease_expires_at=?,attempts=attempts+1,updated_at=?
-      WHERE id=? AND campaign_id=? AND attempts<3
-        AND (status IN ('failed','blocked') OR (status='leased' AND lease_expires_at<=?))`,
-    [owner,expires,now,occurrence.id,campaignId,now]);
-    return changes(result) === 1 ? { id: occurrence.id, owner, expiresAt: expires } : null;
+    const result = await this.d1.batch([
+      { sql: `INSERT OR IGNORE INTO book_feature_occurrences
+        (id,campaign_id,local_date,weekday,status,attempts,created_at,updated_at)
+        VALUES (?,?,?,?, 'failed',0,?,?)`, params: [occurrence.id,campaignId,occurrence.localDate,occurrence.day,now,now] },
+      { sql: `UPDATE book_feature_occurrences
+        SET status='leased',lease_owner=?,lease_expires_at=?,attempts=attempts+1,updated_at=?
+        WHERE id=? AND campaign_id=? AND attempts<3
+          AND (status IN ('failed','blocked') OR (status='leased' AND lease_expires_at<=?))`,
+        params: [owner,expires,now,occurrence.id,campaignId,now] },
+    ]);
+    return changes(result[1]) === 1 ? { id: occurrence.id, owner, expiresAt: expires } : null;
   }
 
   async getOccurrence(id) {

@@ -84,7 +84,12 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
       pagesAnalysed: analysis.pagesAnalysed, totalPages: analysis.totalPages, candidatePhrases: analysis.candidates.length,
       verifiedOrganisations: 0, qualifiedOpportunities: 0, dispatched: 0, privateReportKey: reportKey };
   } catch (error) {
-    await repository.finishOccurrence(lease, "blocked", { errorCode: String(error?.code || "assessment_failed").slice(0, 100) });
+    try {
+      await repository.finishOccurrence(lease, "blocked", { errorCode: String(error?.code || "assessment_failed").slice(0, 100) });
+    } catch (cleanupError) {
+      // Preserve the original failure while retaining the cleanup failure for diagnostics.
+      if (error && typeof error === "object") error.cleanupError = cleanupError;
+    }
     throw error;
   }
 }

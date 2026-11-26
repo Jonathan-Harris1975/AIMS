@@ -46,12 +46,28 @@ test("a selected campaign cannot silently change and occurrences cannot overlap"
   const occurrence = scheduledLondonOccurrence(new Date("2026-07-07T08:00:00Z"));
   const campaign = await repository.campaign(occurrence.week, book, { method: "weekly" });
   await assert.rejects(repository.campaign(occurrence.week, { ...book, ebookId: 22 }, {}));
+  await assert.rejects(repository.campaign(occurrence.week, { ...book, author: "Other author" }, { method: "weekly" }));
+  await assert.rejects(repository.campaign(occurrence.week, { ...book, coverArtUrl: "https://example.com/new-cover" }, { method: "weekly" }));
+  await assert.rejects(repository.campaign(occurrence.week, book, { method: "reselected" }));
   const lease = await repository.claimOccurrence(occurrence, campaign.id);
   assert.ok(lease);
   assert.equal(await repository.claimOccurrence(occurrence, campaign.id), null);
   await repository.finishOccurrence(lease, "completed_zero", { reportKey: "private/report.json" });
   assert.equal(await repository.claimOccurrence(occurrence, campaign.id), null);
   assert.equal((await repository.getOccurrence(occurrence.id)).attempts, 1);
+});
+
+test("a cleanup lease failure preserves the original assessment failure", async (t) => {
+  const { db, d1 } = fixture(); t.after(() => db.close());
+  const repository = new BookFeatureRepository(d1, { now: () => new Date("2026-07-07T08:00:00Z") });
+  repository.finishOccurrence = async () => { throw new Error("lease taken"); };
+  const failure = new Error("PDF extraction failed");
+  await assert.rejects(runBookFeatureAssessment({ repository, now: new Date("2026-07-07T08:00:00Z"),
+    resolveBook: async () => ({ book, selection: {} }), analyse: async () => { throw failure; } }), (error) => {
+    assert.equal(error, failure);
+    assert.equal(error.cleanupError.message, "lease taken");
+    return true;
+  });
 });
 
 test("scheduled assessment accepts GMT/BST and bounded catch-up but no other weekday", () => {
