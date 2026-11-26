@@ -394,9 +394,9 @@ export async function enrichDomain(domain, serpMeta = {}) {
   const editorialBonus = hasEditorial ? 5 : 0;
   const emailBonus = emails.size ? 5 : 0;
 
-  const totalScore = Math.round(
-    serpScore + oprScore + editorialBonus + emailBonus
-  );
+  // Search rank is retained as context for diagnosis, but is not added to
+  // authority: doing so double-counted the same SERP position in prioritisation.
+  const totalScore = Math.round(oprScore + editorialBonus + emailBonus);
 
   return {
     domain: d,
