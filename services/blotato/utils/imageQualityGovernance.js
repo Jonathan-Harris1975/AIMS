@@ -90,7 +90,7 @@ export function imageQualityScore({
 export function boundedImageAttempts({ maxAttempts = DEFAULT_MAX_ATTEMPTS, maxEscalations = DEFAULT_MAX_ESCALATIONS } = {}) {
   return {
     maxAttempts: Math.max(1, Math.min(3, Number(maxAttempts) || DEFAULT_MAX_ATTEMPTS)),
-    maxEscalations: Math.max(0, Math.min(2, Number(maxEscalations) || DEFAULT_MAX_ESCALATIONS)),
+    maxEscalations: Math.max(0, Math.min(2, Number.isFinite(Number(maxEscalations)) ? Number(maxEscalations) : DEFAULT_MAX_ESCALATIONS)),
   };
 }
 
