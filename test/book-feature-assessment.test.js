@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { selectSample, verifyBook, londonOccurrence, matchedPassage, scoreOpportunity, effectiveMode } from "../services/outreach/bookFeature/core.js";
-import { extractManuscript, assessThreeBooks } from "../services/outreach/bookFeature/assessment.js";
+import { extractManuscript, assessThreeBooks, validateExtraction } from "../services/outreach/bookFeature/assessment.js";
 import { statusUrlFor } from "../services/shared/utils/asyncServiceStatusUrl.js";
 import express from "express";
 import request from "supertest";
@@ -52,9 +52,24 @@ test("PDF extraction checks every page and blocks deficient coverage", async () 
   }), destroy: async () => {} }) });
   const result = await extractManuscript(Buffer.from("%PDF-" + "x".repeat(100)), { documentLoader });
   assert.equal(result.totalPages, 2);
-  assert.equal(result.pagesAnalysed, 1);
+  assert.equal(result.pagesProcessed, 2);
+  assert.equal(result.pagesAnalysed, 2);
+  assert.equal(result.readablePages, 1);
+  assert.deepEqual(result.coverageManifest.map((page) => page.status), ["readable", "no_text_content"]);
   assert.deepEqual(result.deficientPages, [2]);
   assert.equal(result.complete, false);
+  assert.equal(validateExtraction(result), false);
+});
+
+test("extraction validation requires contiguous, readable page coverage", () => {
+  const valid = { totalPages: 2, pages: [
+    { pdfPage: 1, text: "A sufficiently long page with readable extracted content.", readable: true },
+    { pdfPage: 2, text: "Another sufficiently long page with readable extracted content.", readable: true },
+  ], coverageComplete: true, complete: true };
+  assert.equal(validateExtraction(valid), true);
+  assert.equal(validateExtraction({ ...valid, pages: [valid.pages[0]] }), false);
+  assert.equal(validateExtraction({ ...valid, pages: [{ ...valid.pages[0], pdfPage: 2 }, valid.pages[1]] }), false);
+  assert.equal(validateExtraction({ ...valid, pages: [valid.pages[0], { ...valid.pages[1], readable: false }], complete: false }), false);
 });
 
 test("assessment job polling URL resolves to its registered route", async () => {
