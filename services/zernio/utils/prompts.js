@@ -205,7 +205,13 @@ export function buildAccountVariant(canonicalContent = "", { variantIndex = 1, a
   return text;
 }
 
-export function buildQuizPrompt({ questionDate, answerDate, history = [] }) {
+export function buildQuizPrompt({ questionDate, answerDate, history = [], format = "standard" }) {
+  const formatInstructions = {
+    standard: "Use the standard knowledge-check format: ask one direct practical question, then four parallel A)–D) options.",
+    scenario: "Use a short workplace scenario: begin with a realistic AI decision or problem, then ask what the best interpretation or action is, followed by four parallel A)–D) options.",
+    myth: "Use a myth-versus-reality format: present a common AI belief, ask which statement best corrects it, then give four plausible A)–D) explanations.",
+    prediction: "Use a practical prediction format: describe a concrete AI system or workflow, ask what is most likely to happen next, then give four plausible A)–D) outcomes.",
+  }[format] || "Use the standard knowledge-check format: ask one direct practical question, then four parallel A)–D) options.";
   return {
     system: `${BRAND_VOICE}
 Return valid JSON only with exactly these keys: topic, questionTitle, questionContent, answerTitle, answerContent.
@@ -222,6 +228,8 @@ Recent quiz topics to avoid repeating:
 ${renderHistoryBlock(history)}
 
 Requirements:
+- Quiz format for this week: ${format}
+- ${formatInstructions}
 - Topic must be AI, machine learning, or computing literacy
 - Make the question feel clean, quick to read, genuinely answerable, and interesting enough to stop a social scroll
 - Prefer questions that test practical AI understanding rather than obscure trivia
