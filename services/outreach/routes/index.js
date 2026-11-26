@@ -29,7 +29,9 @@ router.post("/book-feature/assessment/three-books", asyncRoute(async (req, res) 
     statusBasePath: "/outreach/book-feature/assessment/jobs", reuseTerminal: true,
     runner: async () => {
       const report = await assessThreeBooks(seed);
-      return { ok: true, seed, selected: report.selection.selected, completeAnalyses: report.completeAnalyses,
+      return { ok: report.completeAnalyses === 3, partialFailure: report.completeAnalyses !== 3,
+        reason: report.completeAnalyses === 3 ? null : "One or more selected manuscripts could not be fully analysed.",
+        seed, selected: report.selection.selected, completeAnalyses: report.completeAnalyses,
         statuses: report.books.map(({ ebookId, status }) => ({ ebookId, status })), privateReportKey: report.privateReportKey, dispatched: 0 };
     } });
   res.status(202).json(job);
