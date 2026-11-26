@@ -228,6 +228,22 @@ watermarks, or a sequence that does not match the source story.",
   ].join("\n");
 }
 
+function calibratedVideoScore(parsed = {}) {
+  const weighted = [
+    [parsed.hookPerformance, 0.15],
+    [parsed.visualQuality, 0.20],
+    [parsed.sourceRelevance, 0.15],
+    [parsed.sceneAlignment, 0.15],
+    [parsed.continuity, 0.10],
+    [parsed.voiceAudio ?? parsed.continuity, 0.10],
+    [parsed.captionLegibility, 0.10],
+    [parsed.brandConsistency ?? parsed.visualQuality, 0.05],
+  ];
+  const values = weighted.map(([value]) => Number(value)).filter(Number.isFinite);
+  if (values.length < 6) return score(parsed.score);
+  return score(weighted.reduce((sum, [value, weight]) => sum + score(value) * weight, 0));
+}
+
 export function normaliseRenderedVideoQa(raw, {
   threshold = DEFAULT_THRESHOLD,
   technical = {},
