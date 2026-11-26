@@ -3,10 +3,10 @@ import { log } from '../../../logger.js';
 import { safeErrorLog } from '../domain/redaction.js';
 import { CommsHubError } from '../errors.js';
 import { businessHoursPolicy, isWithinBusinessHours, nextBusinessOpening } from '../domain/businessHours.js';
-import { isAuthorisedOutreachSession, nextAuthorisedOutreachSession } from '../../outreach/utils/schedule.js';
 import { sendReplyDraft } from '../replyDraftService.js';
 import { runInboundConversationAutomation } from '../inboundAutomationService.js';
 import { handleSocialDmHumanContact } from '../socialService.js';
+import { isAuthorisedOutreachSession, nextAuthorisedOutreachSession } from '../../outreach/utils/schedule.js';
 
 function parse(value) {
   try { return JSON.parse(value || '{}'); } catch { return {}; }
@@ -214,16 +214,17 @@ export class CommsHubDelayedActionWorker {
       if (businessReplyTypes.has(item.action_type)) {
         const policy = businessHoursPolicy(this.context.config);
         const now = new Date();
-        if (item.action_type === 'outreach_follow_up' && !isAuthorisedOutreachSession(now)) {
-          const dueAt = nextAuthorisedOutreachSession(now).toISOString();
-          await this.context.operationsRepository.deferDelayedAction({ id: item.id, workerId: this.workerId, dueAt, at: now.toISOString() });
-          return { id: item.id, status: 'deferred_outreach_session', dueAt };
-        }
         if (!isWithinBusinessHours(now, policy)) {
           const dueAt = nextBusinessOpening(now, policy).toISOString();
           await this.context.operationsRepository.deferDelayedAction({ id: item.id, workerId: this.workerId, dueAt, at: now.toISOString() });
           return { id: item.id, status: 'deferred_business_hours', dueAt };
         }
+      }
+      if (item.action_type === 'outreach_follow_up' && !isAuthorisedOutreachSession(new Date())) {
+        const now = new Date();
+        const dueAt = nextAuthorisedOutreachSession(now).toISOString();
+        await this.context.operationsRepository.deferDelayedAction({ id: item.id, workerId: this.workerId, dueAt, at: now.toISOString() });
+        return { id: item.id, status: 'deferred_outreach_session', dueAt };
       }
       const result = await this.execute(item);
       if (result?.deferred && result.dueAt) {
