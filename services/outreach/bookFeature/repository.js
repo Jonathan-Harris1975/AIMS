@@ -98,8 +98,12 @@ export class BookFeatureRepository {
       }
     }
     if (!statements.length) return { attempted: 0, recorded: 0 };
-    const result = await this.d1.batch(statements);
-    return { attempted: statements.length, recorded: result.reduce((sum, item) => sum + changes(item), 0) };
+    let recorded = 0;
+    for (let offset = 0; offset < statements.length; offset += 100) {
+      const result = await this.d1.batch(statements.slice(offset, offset + 100));
+      recorded += result.reduce((sum, item) => sum + changes(item), 0);
+    }
+    return { attempted: statements.length, recorded };
   }
 
   async overview() {
