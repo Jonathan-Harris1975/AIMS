@@ -54,8 +54,12 @@ export async function analysePublishedBook(book, {
   return { sha256, totalPages: extraction.totalPages, pagesAnalysed: extraction.pagesAnalysed,
     pagesProcessed: extraction.pagesProcessed ?? extraction.pagesAnalysed,
     readablePages: extraction.readablePages ?? extraction.pages.filter((page) => page.readable).length,
-    coverageManifest: extraction.coverageManifest ?? extraction.pages.map(({ pdfPage, characters, readable }) =>
-      ({ pdfPage, characters, status: readable ? "readable" : "deficient" })),
+    coverageManifest: extraction.coverageManifest ?? extraction.pages.map((page) => {
+      const characters = page.characters ?? page.text?.length ?? 0;
+      let status = page.status;
+      if (!status) status = characters === 0 ? "no_text_content" : page.readable ? "readable" : "insufficient_text";
+      return { pdfPage: page.pdfPage, characters, status };
+    }),
     candidates: candidateReferences(extraction), cacheKey: key };
 }
 
