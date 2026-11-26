@@ -73,12 +73,28 @@ export function imageQualityScore({
   technical = 0,
   criticalDefects = [],
 } = {}) {
-  const score = Math.round(relevance * 0.25 + visualQuality * 0.2 + composition * 0.15 + brand * 0.15 + originality * 0.1 + platform * 0.1 + technical * 0.05);
-  return { score: Math.max(0, Math.min(100, score)), criticalDefects: Array.isArray(criticalDefects) ? criticalDefects : [], pass: (!criticalDefects?.length && score >= Number(process.env.SOCIAL_IMAGE_QA_THRESHOLD || 75)) };
+  const score = Math.round(
+    relevance * 0.25
+    + visualQuality * 0.2
+    + composition * 0.15
+    + brand * 0.15
+    + originality * 0.1
+    + platform * 0.1
+    + technical * 0.05,
+  );
+  const defects = Array.isArray(criticalDefects) ? criticalDefects : [];
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    criticalDefects: defects,
+    pass: !defects.length && score >= Number(process.env.SOCIAL_IMAGE_QA_THRESHOLD || 75),
+  };
 }
 
 export function boundedImageAttempts({ maxAttempts = DEFAULT_MAX_ATTEMPTS, maxEscalations = DEFAULT_MAX_ESCALATIONS } = {}) {
-  return { maxAttempts: Math.max(1, Math.min(3, Number(maxAttempts) || DEFAULT_MAX_ATTEMPTS)), maxEscalations: Math.max(0, Math.min(2, Number(maxEscalations) || DEFAULT_MAX_ESCALATIONS)) };
+  return {
+    maxAttempts: Math.max(1, Math.min(3, Number(maxAttempts) || DEFAULT_MAX_ATTEMPTS)),
+    maxEscalations: Math.max(0, Math.min(2, Number(maxEscalations) || DEFAULT_MAX_ESCALATIONS)),
+  };
 }
 
 export function buildTargetedRepairPrompt({ basePrompt = "", defects = [] } = {}) {
