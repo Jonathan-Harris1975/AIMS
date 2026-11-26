@@ -49,9 +49,9 @@ test("a selected campaign cannot silently change and occurrences cannot overlap"
   await assert.rejects(repository.campaign(occurrence.week, { ...book, author: "Other author" }, { method: "weekly" }));
   await assert.rejects(repository.campaign(occurrence.week, { ...book, coverArtUrl: "https://example.com/new-cover" }, { method: "weekly" }));
   await assert.rejects(repository.campaign(occurrence.week, book, { method: "reselected" }));
-  const passage = "Acme Group delivered a useful platform with meaningful practical outcomes for its customers.";
-  const candidates = [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, nameOffsetInPassage: 0, passage }] }];
-  const sourcePages = [{ pdfPage: 4, text: `${" ".repeat(120)}${passage}`, textOffsetStart: 0 }];
+  const passage = " Acme Group delivered a useful platform with meaningful practical outcomes for its customers.";
+  const candidates = [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, nameOffsetInPassage: 1, passage }] }];
+  const sourcePages = [{ pdfPage: 4, text: `${" ".repeat(119)}${passage}`, textOffsetStart: 0 }];
   const checksum = "b".repeat(64);
   assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates, sourcePages), { attempted: 1, recorded: 1 });
   assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates, sourcePages), { attempted: 1, recorded: 0 });
