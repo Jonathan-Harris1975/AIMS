@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { effectiveMode } from "./core.js";
+import { effectiveMode, matchedPassage } from "./core.js";
 
 const first = (response) => response?.results?.[0] || null;
 const changes = (response) => Number(response?.meta?.changes || 0);
@@ -76,10 +76,12 @@ export class BookFeatureRepository {
     return first(await this.d1.query("SELECT * FROM book_feature_occurrences WHERE id=?", [id]));
   }
 
-  async recordCandidateEvidence(campaignId, manuscriptSha256, candidates = []) {
-    if (!campaignId || !/^[a-f0-9]{64}$/i.test(String(manuscriptSha256 || "")) || !Array.isArray(candidates)) {
+  async recordCandidateEvidence(campaignId, manuscriptSha256, candidates = [], sourcePages = []) {
+    if (!campaignId || !/^[a-f0-9]{64}$/i.test(String(manuscriptSha256 || "")) ||
+        !Array.isArray(candidates) || !Array.isArray(sourcePages)) {
       throw new TypeError("Campaign ID, manuscript SHA-256 and candidate evidence are required.");
     }
+    const pages = new Map(sourcePages.map((page) => [Number(page?.pdfPage), page]));
     const statements = [];
     for (const candidate of candidates) {
       const name = String(candidate?.name || "").trim();
@@ -87,9 +89,17 @@ export class BookFeatureRepository {
       for (const occurrence of candidate.occurrences) {
         const page = Number(occurrence?.pdfPage);
         const offset = Number(occurrence?.offset);
+        const nameOffset = Number(occurrence?.nameOffsetInPassage);
         const passage = String(occurrence?.passage || "").trim();
         if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(offset) || offset < 0 ||
-            passage.length < 20 || passage.length > 2000 || !passage.toLowerCase().includes(name.toLowerCase())) continue;
+            !Number.isSafeInteger(nameOffset) || nameOffset < 0 || nameOffset > passage.length - name.length ||
+            passage.length < 20 || passage.length > 2000 ||
+            passage.slice(nameOffset, nameOffset + name.length).toLowerCase() !== name.toLowerCase()) continue;
+        const sourcePage = pages.get(page);
+        if (typeof sourcePage?.text !== "string" || !Number.isSafeInteger(sourcePage.textOffsetStart)) continue;
+        const localNameOffset = offset - sourcePage.textOffsetStart;
+        const passageStart = localNameOffset - nameOffset;
+        if (passageStart < 0 || !matchedPassage(sourcePage.text.slice(passageStart, passageStart + passage.length), passage)) continue;
         const id = createHash("sha256").update([campaignId, manuscriptSha256.toLowerCase(), page, offset, name.toLowerCase()].join("\u001f")).digest("hex");
         statements.push({ sql: `INSERT OR IGNORE INTO book_feature_evidence
           (id,campaign_id,organisation_id,manuscript_sha256,pdf_page,text_offset,passage,validation,evidence_class,created_at)
