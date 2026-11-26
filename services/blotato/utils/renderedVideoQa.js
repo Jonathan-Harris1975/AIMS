@@ -11,7 +11,7 @@ import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/util
 const execFileAsync = promisify(execFile);
 const DEFAULT_MIN_SECONDS = Number(process.env.BLOTATO_RENDERED_MIN_SECONDS || 35);
 const DEFAULT_MAX_SECONDS = Number(process.env.BLOTATO_RENDERED_MAX_SECONDS || 55);
-const DEFAULT_THRESHOLD = Number(process.env.BLOTATO_RENDERED_QA_THRESHOLD || 70);
+const DEFAULT_THRESHOLD = Number(process.env.BLOTATO_RENDERED_QA_THRESHOLD || 80);
 const DEFAULT_FRAME_COUNT = Math.max(4, Math.min(12, Number(process.env.BLOTATO_RENDERED_QA_FRAMES || 8)));
 const DEFAULT_MAX_BYTES = Math.max(10_000_000, Number(process.env.BLOTATO_RENDERED_QA_MAX_BYTES || 120_000_000));
 const RENDERED_VIDEO_QA_SCHEMA = Object.freeze({
@@ -236,7 +236,8 @@ export function normaliseRenderedVideoQa(raw, {
   const defects = stringArray(parsed?.defects);
   const hardDefects = stringArray(parsed?.hardDefects);
   const result = {
-    score: score(parsed?.score),
+    score: calibratedVideoScore(parsed),
+    reportedScore: score(parsed?.score),
     threshold: Math.max(1, Math.min(100, Number(threshold || DEFAULT_THRESHOLD))),
     hookPerformance: score(parsed?.hookPerformance),
     sourceRelevance: score(parsed?.sourceRelevance),
@@ -245,6 +246,8 @@ export function normaliseRenderedVideoQa(raw, {
     visualProgression: score(parsed?.visualProgression),
     visualQuality: score(parsed?.visualQuality),
     captionLegibility: score(parsed?.captionLegibility),
+    voiceAudio: score(parsed?.voiceAudio ?? parsed?.continuity),
+    brandConsistency: score(parsed?.brandConsistency ?? parsed?.visualQuality),
     defects,
     hardDefects,
     summary: compact(parsed?.summary, 900),
