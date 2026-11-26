@@ -44,6 +44,8 @@ Cold email defaults are deliberately conservative:
 
 Initial qualification uses the versioned `outreach-qualification-v1` rubric: contribution evidence 30, expertise relevance 25, editorial contact suitability 20, recent activity 10, credibility 10 and historical engagement 5. The initial automated threshold is 75/100, with mandatory evidence, recipient, validation, suppression and compliance gates overriding the score. Unknown historical engagement is neutral.
 
+Eligible opportunities are ranked by topic relevance first, then confirmed editorial evidence and freshness. Authority is only a late tie-breaker; SERP position is retained as diagnostic context and is excluded from the authority total to avoid counting it twice. A lower-authority specialist publication can therefore outrank a larger, less relevant outlet.
+
 ## Automated editorial workflow
 
 1. A qualified lead is stored in R2 and checked against D1 outreach/suppression state.
