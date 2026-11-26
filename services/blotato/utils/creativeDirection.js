@@ -92,8 +92,12 @@ export function buildCreativeBrief({ topic = "", angle = "", audience = "", core
     impact: text(impact || "Immediate intellectual curiosity followed by a useful conclusion.", 240),
     lane: text(lane, 120),
     theme,
-    colourGuidance: theme === "futuristic" ? "Deep navy, controlled cyan/blue accents, high contrast, restrained glow." : "Contemporary editorial palette, controlled accents, realistic natural colour.",
-    composition: theme === "futuristic" ? "Subject-led technical environment with purposeful depth and negative space." : "Clear subject focus, credible human/business context and strong editorial hierarchy.",
+    colourGuidance: theme === "futuristic"
+      ? "Deep navy, controlled cyan/blue accents, high contrast, restrained glow."
+      : "Contemporary editorial palette, controlled accents, realistic natural colour.",
+    composition: theme === "futuristic"
+      ? "Subject-led technical environment with purposeful depth and negative space."
+      : "Clear subject focus, credible human/business context and strong editorial hierarchy.",
     subjectPlacement: "Keep the primary subject in the central safe area; reserve lower 20% and outer edges for captions/platform UI.",
     platform,
     safeZones: { top: 0.12, bottom: 0.2, left: 0.08, right: 0.08 },
