@@ -5,10 +5,11 @@ const first = (response) => response?.results?.[0] || null;
 const changes = (response) => Number(response?.meta?.changes || 0);
 
 export class BookFeatureRepository {
-  constructor(d1, { now = () => new Date(), leaseId = randomUUID } = {}) {
+  constructor(d1, { now = () => new Date(), leaseId = randomUUID, leaseMs = 15 * 60_000 } = {}) {
     this.d1 = d1;
     this.now = now;
     this.leaseId = leaseId;
+    this.leaseMs = leaseMs;
   }
 
   async mode(env = process.env) {
@@ -57,7 +58,7 @@ export class BookFeatureRepository {
   async claimOccurrence(occurrence, campaignId) {
     const at = this.now();
     const now = at.toISOString();
-    const expires = new Date(at.getTime() + 15 * 60_000).toISOString();
+    const expires = new Date(at.getTime() + this.leaseMs).toISOString();
     const owner = this.leaseId();
     const result = await this.d1.batch([
       { sql: `INSERT OR IGNORE INTO book_feature_occurrences
@@ -74,6 +75,27 @@ export class BookFeatureRepository {
 
   async getOccurrence(id) {
     return first(await this.d1.query("SELECT * FROM book_feature_occurrences WHERE id=?", [id]));
+  }
+
+  async renewOccurrence(lease) {
+    if (!lease?.id || !lease?.owner) throw new TypeError("A valid Book Feature occurrence lease is required.");
+    const now = this.now();
+    const at = now.toISOString();
+    const expires = new Date(now.getTime() + this.leaseMs).toISOString();
+    const result = await this.d1.query(`UPDATE book_feature_occurrences
+      SET lease_expires_at=?,updated_at=?
+      WHERE id=? AND status='leased' AND lease_owner=? AND lease_expires_at>?`,
+    [expires, at, lease.id, lease.owner, at]);
+    if (changes(result) !== 1) return false;
+    lease.expiresAt = expires;
+    return true;
+  }
+
+  async assertOccurrenceOwned(lease) {
+    if (!lease?.id || !lease?.owner) return false;
+    const row = await this.getOccurrence(lease.id);
+    return row?.status === "leased" && row.lease_owner === lease.owner &&
+      Date.parse(row.lease_expires_at || "") > this.now().getTime();
   }
 
   async recordCandidateEvidence(campaignId, manuscriptSha256, candidates = [], sourcePages = []) {
@@ -138,9 +160,10 @@ export class BookFeatureRepository {
 
   async finishOccurrence(lease, state, { reportKey = null, errorCode = null } = {}) {
     if (!["completed", "completed_zero", "blocked", "failed"].includes(state)) throw new Error("Invalid occurrence terminal state.");
+    const at = this.now().toISOString();
     const result = await this.d1.query(`UPDATE book_feature_occurrences SET status=?,report_key=?,error_code=?,
-      lease_owner=NULL,lease_expires_at=NULL,updated_at=? WHERE id=? AND status='leased' AND lease_owner=?`,
-    [state,reportKey,errorCode,this.now().toISOString(),lease.id,lease.owner]);
+      lease_owner=NULL,lease_expires_at=NULL,updated_at=? WHERE id=? AND status='leased' AND lease_owner=? AND lease_expires_at>?`,
+    [state,reportKey,errorCode,at,lease.id,lease.owner,at]);
     if (changes(result) !== 1) throw new Error("Occurrence lease expired or was taken by another worker.");
   }
 }
