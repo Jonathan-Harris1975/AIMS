@@ -84,9 +84,19 @@ export function resolveImageProviderPlan({
   const safeStrategy = ["existing-first", "quality-first", "existing-only"].includes(String(strategy))
     ? String(strategy)
     : "existing-first";
+  const allowFallback = safeStrategy !== "existing-only" && bool(fallbackEnabled, true);
+  const allowEscalation = safeStrategy !== "existing-only" && bool(escalationEnabled);
+  const requestedEscalations = maxEscalations == null || maxEscalations === ""
+    ? DEFAULT_MAX_ESCALATIONS
+    : Number(maxEscalations);
+  const escalationLimit = Math.max(0, Math.min(2, Number.isFinite(requestedEscalations)
+    ? requestedEscalations
+    : DEFAULT_MAX_ESCALATIONS));
+  const qualityModelReservedForAttempt = safeStrategy === "quality-first"
+    || (allowEscalation && escalationLimit > 0);
   const configuredFallback = findConfigured(fallback, "Fallback");
   const fallbackModel = configuredFallback || models.find((model) =>
-    model !== primaryModel && (safeStrategy !== "quality-first" || model !== qualityModel));
+    model !== primaryModel && (!qualityModelReservedForAttempt || model !== qualityModel));
   if (fallbackModel && fallbackModel === primaryModel) {
     const error = new Error("Image fallback must differ from the primary model");
     error.code = "CIRCULAR_IMAGE_FALLBACK";
@@ -99,10 +109,6 @@ export function resolveImageProviderPlan({
     error.statusCode = 422;
     throw error;
   }
-  const allowFallback = safeStrategy !== "existing-only" && bool(fallbackEnabled, true);
-  const allowEscalation = safeStrategy !== "existing-only" && bool(escalationEnabled);
-  const escalationLimit = Math.max(0, Math.min(2, Number(maxEscalations) || 0));
-
   let sequence;
   if (safeStrategy === "quality-first") {
     if (!qualityModel) {
@@ -119,10 +125,15 @@ export function resolveImageProviderPlan({
   if (allowFallback && fallbackModel) sequence.push(fallbackModel);
 
   const orderedModels = [...new Set(sequence)].slice(0, Math.max(1, Math.min(3, Number(maxAttempts) || 3)));
+  // A model may be configured with more than one independently credentialed
+  // provider entry. Keep every central-route entry for each selected model so
+  // an account-specific failure does not hide a working credential.
+  const orderedProviders = orderedModels.flatMap((model) =>
+    available.filter((provider) => String(provider.model).trim() === model));
   return {
     strategy: safeStrategy,
     models: orderedModels,
-    providers: orderedModels.map((model) => available.find((provider) => provider.model === model)),
+    providers: orderedProviders,
     primaryModel,
     qualityTierModel: qualityModel || null,
     fallbackModel: allowFallback ? fallbackModel || null : null,
