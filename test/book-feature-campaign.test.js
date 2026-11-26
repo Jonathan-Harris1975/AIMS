@@ -83,6 +83,43 @@ test("a selected campaign cannot silently change and occurrences cannot overlap"
   assert.equal((await repository.getOccurrence(occurrence.id)).attempts, 1);
 });
 
+test("renewed Book Feature leases prevent stale occurrence recovery and fence old owners", async (t) => {
+  const { db, d1 } = fixture(); t.after(() => db.close());
+  let current = new Date("2026-07-07T08:00:00.000Z");
+  let sequence = 0;
+  const repository = new BookFeatureRepository(d1, { now: () => current, leaseMs: 1000, leaseId: () => `lease-${++sequence}` });
+  const occurrence = scheduledLondonOccurrence(current);
+  const campaign = await repository.campaign(occurrence.week, book, {});
+  const first = await repository.claimOccurrence(occurrence, campaign.id);
+  current = new Date("2026-07-07T08:00:00.800Z");
+  assert.equal(await repository.renewOccurrence(first), true);
+  current = new Date("2026-07-07T08:00:01.200Z");
+  assert.equal(await repository.claimOccurrence(occurrence, campaign.id), null);
+  current = new Date("2026-07-07T08:00:01.900Z");
+  const recovered = await repository.claimOccurrence(occurrence, campaign.id);
+  assert.ok(recovered);
+  assert.equal(await repository.renewOccurrence(first), false);
+  await assert.rejects(repository.finishOccurrence(first, "completed_zero"), /taken by another worker/);
+});
+
+test("long Book Feature assessment renews its occurrence lease while PDF analysis runs", async (t) => {
+  const { db, d1 } = fixture(); t.after(() => db.close());
+  const repository = new BookFeatureRepository(d1, { leaseMs: 30 });
+  const now = new Date("2026-07-07T08:00:00.000Z");
+  const occurrence = scheduledLondonOccurrence(now);
+  let competingClaim;
+  const result = await runBookFeatureAssessment({ repository, now,
+    resolveBook: async () => ({ book, selection: {} }),
+    analyse: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+      const row = await repository.getOccurrence(occurrence.id);
+      competingClaim = await repository.claimOccurrence(occurrence, row.campaign_id);
+      return { sha256: "c".repeat(64), totalPages: 1, pagesAnalysed: 1, candidates: [], sourcePages: [], cacheKey: "private/cache" };
+    }, persist: async () => {}, heartbeatIntervalMs: 10 });
+  assert.equal(result.status, "completed_zero");
+  assert.equal(competingClaim, null);
+});
+
 test("a cleanup lease failure preserves the original assessment failure", async (t) => {
   const { db, d1 } = fixture(); t.after(() => db.close());
   const repository = new BookFeatureRepository(d1, { now: () => new Date("2026-07-07T08:00:00Z") });
