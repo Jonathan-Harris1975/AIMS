@@ -41,7 +41,7 @@ test("terminal Zernio async replay returns the existing pollable job rather than
   assert.ok(getPublicJob(asyncServiceJobType("zernio", lane), sessionId));
 });
 
-test("failed Zernio async job stays retryable until its bounded attempt limit, then fails closed with pollable identity", async () => {
+test("failed Zernio async job has failed status, stays retryable to its bounded limit, then fails closed", async () => {
   const lane = "newsletter-promo";
   const sessionId = stableZernioAsyncPayload(lane, {},
     "test-failure-recovery-" + process.pid + "-" + Date.now()).sessionId;
@@ -60,11 +60,13 @@ test("failed Zernio async job stays retryable until its bounded attempt limit, t
   assert.equal(oneMore.sessionId, sessionId);
   // Durable acceptance has happened; wait for the scheduled in-process worker
   // to settle, rather than issuing a second write.
-  for (let i = 0; i < 40 && getPublicJob(type, sessionId)?.status !== "completed"; i++) {
+  for (let i = 0; i < 40 && !["completed", "failed"].includes(getPublicJob(type, sessionId)?.status); i++) {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   assert.equal(calls, 1);
   await flushJobStoreWrites({ throwOnError: true });
+  assert.equal(getPublicJob(type, sessionId)?.status, "failed");
+  assert.equal(getPublicJob(type, sessionId)?.result.ok, false);
   const terminal = await startAsyncServiceRouteJob({
     service: "zernio", lane, payload: { sessionId },
     runner: async () => { calls++; return { ok: true }; }, reuseTerminal: true,
