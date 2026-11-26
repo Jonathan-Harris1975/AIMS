@@ -332,7 +332,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OUTREACH_BATCH_CYCLE` | Yes | services/outreach/services/batchService.js:151 |
 | `OUTREACH_BATCH_SIZE` | Yes | services/outreach/services/batchService.js:147<br>services/outreach/utils/r2ProgressStore.js:7 |
 | `OUTREACH_KEYWORDS_FILE` | No | services/outreach/utils/keywordLoader.js:27<br>services/outreach/utils/keywordLoader.js:32 |
-| `OUTREACH_MAX_DOMAINS_PER_SEARCH` | No | services/outreach/services/serp-OutreachService.js:85 |
+| `OUTREACH_MAX_DOMAINS_PER_SEARCH` | No | services/outreach/services/serp-OutreachService.js:98 |
 | `OUTREACH_PROGRESS_KEY` | Yes | services/outreach/utils/r2ProgressStore.js:28<br>services/outreach/utils/r2ProgressStore.js:44 |
 | `PERF_HEALTH_CONCURRENCY` | No | scripts/performanceGate.js:13 |
 | `PERF_HEALTH_MAX_ERROR_RATE` | No | scripts/performanceGate.js:16 |
