@@ -45,8 +45,9 @@ export function bestEmail(entry, env = process.env) {
   }).filter((item) => item.eligibility.eligible);
   return candidates.sort((a, b) => b.score - a.score)[0] || null;
 }
-export async function runKeyword(keyword) {
+export async function runKeyword(keyword, { assertLease = async () => {} } = {}) {
   const result = await serpOutreach(keyword);
+  await assertLease();
   const collection = Array.isArray(result?.acceptedDomains) ? result.acceptedDomains : [];
   const seenDomains = new Set();
   const sourceRows = [];
@@ -83,11 +84,13 @@ export async function runKeyword(keyword) {
   }
   const good = extractGoodLeads(sourceRows, keyword);
   const thresholds = resolveOutreachThresholds();
+  await assertLease();
   const storage = good.length ? await (await import("./leadStore.js")).saveLeadBatch({ keyword, leads: good, thresholds }) : null;
   let automation = null;
   if (good.length && String(process.env.OUTREACH_AUTOMATION_ENABLED || "true").toLowerCase() !== "false") {
+    await assertLease();
     const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
-    automation = await getCommsHubContext().outreachAutomationService.automateLeads(good, { keyword });
+    automation = await getCommsHubContext().outreachAutomationService.automateLeads(good, { keyword, assertLease });
   }
   return {
     keyword,
