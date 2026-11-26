@@ -2196,17 +2196,16 @@ async function runPublishJobImpl({
         throw qaError;
       }
     }
-    if (scheduledTime && renderedVideoQa.skipped) {
+    if (renderedVideoQa.skipped) {
       const error = new Error("Finished-video review unavailable; the existing render requires review before scheduling.");
       error.code = "blotato-rendered-qa-unavailable";
       throw error;
     }
     if (!renderedVideoQa.pass) {
-      // Scheduled work may tolerate minor polish but material hard defects
-      // require bounded repair before a public provider handoff.
-      const blockSoftQaFailures = scheduledTime
-        ? false
-        : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
+      // A render that misses the configured quality score is not publishable.
+      // Keep the already-paid asset for bounded repair and recovery, but never
+      // convert a failed QA result into a successful schedule submission.
+      const blockSoftQaFailures = true;
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
         blockSoftFailures: blockSoftQaFailures,
       });
@@ -2220,8 +2219,8 @@ async function runPublishJobImpl({
         mediaUrl: video.mediaUrl,
         renderedVideoQa: {
           ...renderedVideoQa,
-          acceptedAfterSoftFailure: qaPublication.softFailure && !qaPublication.block,
-          acceptedForScheduling: !qaPublication.block,
+          acceptedAfterSoftFailure: false,
+          acceptedForScheduling: false,
         },
       });
       warn("blotato.finished_video.qa_failed", {
@@ -2238,20 +2237,7 @@ async function runPublishJobImpl({
         hardQaFailure,
         blockSoftQaFailures,
       });
-      if (qaPublication.block) {
-        throw buildRenderedVideoQaError(renderedVideoQa);
-      }
-      renderedVideoQa.acceptedAfterSoftFailure = qaPublication.softFailure;
-      renderedVideoQa.acceptedForScheduling = true;
-      warn(hardQaFailure
-        ? "blotato.finished_video.qa_hard_failure_advisory"
-        : "blotato.finished_video.qa_soft_failure_accepted", {
-        sessionId,
-        lane: lane.slug,
-        visualId: video.visualId,
-        score: renderedVideoQa.score,
-        threshold: renderedVideoQa.threshold,
-      });
+      throw buildRenderedVideoQaError(renderedVideoQa);
     }
     info(renderedVideoQa.pass ? "blotato.finished_video.qa_passed" : "blotato.finished_video.qa_accepted", {
       sessionId,

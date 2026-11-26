@@ -4,6 +4,7 @@ import {
   assessRenderedVideoQaPublication,
   buildRenderedVideoQaPrompt,
   evaluateRenderedVideoTechnical,
+  evaluateRenderedVideoAudioTechnical,
   normaliseRenderedVideoQa,
   renderedVideoSampleTimes,
 } from "../services/blotato/utils/renderedVideoQa.js";
@@ -17,6 +18,16 @@ test("the observed 40.87 second vertical render passes technical duration QA", (
   });
   assert.equal(result.pass, true);
   assert.equal(result.aspectRatio, 0.5625);
+});
+
+test("finished-video audio integrity requires a present, duration-matched stream", () => {
+  assert.equal(evaluateRenderedVideoAudioTechnical({
+    durationSeconds: 40.8, audioStreamCount: 1, audioDurationSeconds: 40.9,
+  }).pass, true);
+  assert.equal(evaluateRenderedVideoAudioTechnical({ durationSeconds: 40.8, audioStreamCount: 0 }).pass, false);
+  assert.equal(evaluateRenderedVideoAudioTechnical({
+    durationSeconds: 40.8, audioStreamCount: 1, audioDurationSeconds: 35,
+  }).pass, false);
 });
 
 test("finished-video hard defects always block publication", () => {
@@ -45,7 +56,7 @@ test("finished-video hard defects always block publication", () => {
   assert.equal(assessRenderedVideoQaPublication(result).block, true);
 });
 
-test("finished-video performance scores are advisory unless strict mode is enabled", () => {
+test("finished-video performance scores fail the publication gate below threshold", () => {
   const result = normaliseRenderedVideoQa({
     score: 68,
     hookPerformance: 62,
