@@ -140,13 +140,14 @@ jobs:
         timeout-minutes: 10
         env:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+          EXPECTED_DEPLOYMENT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           # Run from the exact production SHA already verified above. Koyeb
           # resolves D1_API_KEY and the Cloudflare account ID inside the service.
           # Node uploads the canonical module directly: npm/npx are deliberately
           # absent from this hardened runtime. No token is copied into Actions.
-          printf -v exec_command 'koyeb services exec %q node -- scripts/deployCommsHubDataPlaneWorker.js' "$KOYEB_SERVICE"
+          printf -v exec_command 'koyeb services exec %q env KOYEB_GIT_SHA=%q node -- scripts/deployCommsHubDataPlaneWorker.js' "$KOYEB_SERVICE" "$EXPECTED_DEPLOYMENT_SHA"
           script -q -e -c "$exec_command" /dev/null < /dev/null
       - name: Synchronise AIMS-owned AIMS-UI Worker secrets
         timeout-minutes: 5
