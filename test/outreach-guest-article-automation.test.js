@@ -55,6 +55,19 @@ test('initial pitch refuses dispatch if send mode is disabled after draft creati
   assert.equal(providerCalls, 0);
 });
 
+test('guest article sends fail closed when dispatch flags are absent', async () => {
+  const s = service();
+  const status = await s.status();
+  assert.equal(status.sendEnabled, false);
+  assert.equal(status.followUpEnabled, false);
+  assert.equal(status.articleAutoSendEnabled, false);
+  let providerCalls = 0;
+  s.context.emailService = { send: async () => { providerCalls += 1; } };
+  await assert.rejects(s.sendThreadReply({ conversation_id: 'conversation-1' }, 'Reply', { idempotencyKey: 'reply-1' }),
+    (error) => error.code === 'OUTREACH_DISPATCH_DISABLED');
+  assert.equal(providerCalls, 0);
+});
+
 test('deterministic reply routing recognises opt-out, decline, paid placement and article request', () => {
   assert.equal(classifyOutreachReplyText('Please remove me from your list.'), 'opt_out');
   assert.equal(classifyOutreachReplyText('No thanks, this is not a fit.'), 'decline');
