@@ -252,7 +252,8 @@ export function normaliseRenderedVideoQa(raw, {
   const defects = stringArray(parsed?.defects);
   const hardDefects = stringArray(parsed?.hardDefects);
   const result = {
-    score: calibratedVideoScore(parsed),
+    score: score(parsed?.score),
+    calibratedScore: calibratedVideoScore(parsed),
     reportedScore: score(parsed?.score),
     threshold: Math.max(1, Math.min(100, Number(threshold || DEFAULT_THRESHOLD))),
     hookPerformance: score(parsed?.hookPerformance),
@@ -273,7 +274,7 @@ export function normaliseRenderedVideoQa(raw, {
   result.pass = Boolean(
     technical?.pass !== false
       && hardDefects.length === 0
-      && result.score >= result.threshold
+      && result.calibratedScore >= result.threshold
       && result.hookPerformance >= 65
       && result.sourceRelevance >= 70
       && result.sceneAlignment >= 65
