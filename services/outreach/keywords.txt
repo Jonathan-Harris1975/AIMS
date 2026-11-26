@@ -249,3 +249,14 @@ academic analytics platforms
 ai governance in education
 automation in knowledge delivery
 future of ai in education
+
+# Contributor-intent variants are deliberately paired with the existing topic
+# categories so discovery finds editorial routes, not generic SEO pages.
+"AI governance" "contributor guidelines"
+"artificial intelligence" "write for us"
+"enterprise automation" "submit an article"
+"AI agents" "contributed articles"
+"AI publishing" "editorial submissions"
+"responsible AI" "expert commentary"
+"business automation" "submit a pitch"
+"AI operations" "practitioner perspectives"

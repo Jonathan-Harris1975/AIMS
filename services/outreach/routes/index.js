@@ -31,8 +31,8 @@ router.post("/keyword", requestDedupe("outreach:keyword"), asyncRoute(async (req
   res.json({ ok: true, ...result });
 }));
 
-router.post("/batch/next", requestDedupe("outreach:batchNext"), asyncRoute(async (_req, res) => {
-  const result = await runNextBatch();
+router.post("/batch/next", requestDedupe("outreach:batchNext"), asyncRoute(async (req, res) => {
+  const result = await runNextBatch({ triggerRunKey: req.idempotencyKey || "" });
   res.json({ ok: true, ...result });
 }));
 

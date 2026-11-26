@@ -18,6 +18,21 @@ function normaliseHost(host) {
   return String(host || "").toLowerCase().replace(/^www\./, "").trim();
 }
 
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function consume() {
+    while (true) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, consume));
+  return results;
+}
+
 /* ============================================================
    🚀 SERP OUTREACH
 ============================================================ */
@@ -67,10 +82,9 @@ export async function serpOutreach(keyword) {
   /* ------------------------------
      🧬 ENRICH
   ------------------------------ */
-  const enriched = [];
-  for (const d of allowed) {
-    enriched.push(await enrichDomain(d.domain, d));
-  }
+  const maxDomains = Math.max(1, Math.min(50, Number(process.env.OUTREACH_MAX_DOMAINS_PER_SEARCH) || 20));
+  const boundedAllowed = allowed.slice(0, maxDomains);
+  const enriched = await mapWithConcurrency(boundedAllowed, 3, (d) => enrichDomain(d.domain, d));
 
   /* ------------------------------
      📧 EMAIL VALIDATION
@@ -97,10 +111,8 @@ export async function serpOutreach(keyword) {
      🎯 POLICY-DRIVEN ACCEPTANCE
   ------------------------------ */
   const thresholds = resolveOutreachThresholds();
-  const accepted = enriched.filter(
-    (e) =>
-      e.authority.totalScore >= thresholds.minAuthorityScore &&
-      e.emails.length > 0
+  const accepted = enriched.filter((e) =>
+    ["confirmed", "strong_probable"].includes(e.editorialEvidence?.classification) && e.emails.length > 0
   );
 
   /* ------------------------------
@@ -109,6 +121,7 @@ export async function serpOutreach(keyword) {
   accepted.sort((a, b) => {
     const tierWeight = { A: 1, B: 2, C: 3 };
     return (
+      (b.editorialEvidence?.classification === "confirmed" ? 1 : 0) - (a.editorialEvidence?.classification === "confirmed" ? 1 : 0) ||
       tierWeight[b.authority.tier] - tierWeight[a.authority.tier] ||
       b.emails.length - a.emails.length ||
       b.authority.totalScore - a.authority.totalScore
@@ -132,8 +145,9 @@ export async function serpOutreach(keyword) {
     keyword,
     acceptedDomains: accepted.length,
     emails: accepted.reduce((a, b) => a + b.emails.length, 0),
+    evidenceQualifiedDomains: accepted.length,
     testMode: thresholds.testMode,
-    minAuthorityScore: thresholds.minAuthorityScore,
+    policy: "evidence-first",
   });
 
   return {

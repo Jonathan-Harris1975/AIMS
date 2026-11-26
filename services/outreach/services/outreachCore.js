@@ -1,8 +1,19 @@
 import axios from "axios";
+import net from "node:net";
+import { classifyEditorialEvidence } from "../utils/qualification.js";
 
 const http = axios.create({
   timeout: 15000,
   maxRedirects: 3,
+});
+
+const editorialHttp = axios.create({
+  timeout: 12000,
+  maxRedirects: 0,
+  maxContentLength: 750_000,
+  maxBodyLength: 750_000,
+  responseType: "text",
+  validateStatus: (status) => status >= 200 && status < 300,
 });
 
 /* ============================================================
@@ -18,6 +29,56 @@ const KEY_HUNTER = process.env.API_HUNTER_KEY || process.env.HUNTER_API_KEY;
    ⏱️ RATE CONTROL
 ============================================================ */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function safePublicUrl(value) {
+  let url;
+  try { url = new URL(String(value || "")); } catch { return null; }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.port) return null;
+  const hostname = url.hostname.toLowerCase();
+  if (net.isIP(hostname) || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname === "metadata.google.internal") return null;
+  return url;
+}
+
+function stripMarkup(value) {
+  let text = String(value || "");
+  for (const tag of ["script", "style"]) {
+    const open = new RegExp(`<${tag}\\b`, "i");
+    const close = `</${tag}>`;
+    let match = open.exec(text);
+    while (match) {
+      const end = text.toLowerCase().indexOf(close, match.index);
+      text = end < 0
+        ? text.slice(0, match.index)
+        : `${text.slice(0, match.index)} ${text.slice(end + close.length)}`;
+      match = open.exec(text);
+    }
+  }
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 6000);
+}
+
+export async function verifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", sourceSnippet = "" } = {}) {
+  const retrievedAt = new Date().toISOString();
+  const url = safePublicUrl(sourceUrl);
+  if (!url) return classifyEditorialEvidence({ sourceUrl, sourceTitle, sourceSnippet, retrievedAt });
+  try {
+    const response = await editorialHttp.get(url.toString(), { headers: { "User-Agent": "Jonathan-Harris-Outreach/1.0" } });
+    return classifyEditorialEvidence({
+      sourceUrl: response.request?.res?.responseUrl || url.toString(),
+      sourceTitle,
+      sourceSnippet,
+      pageText: stripMarkup(response.data),
+      retrievedAt,
+    });
+  } catch {
+    return classifyEditorialEvidence({ sourceUrl: url.toString(), sourceTitle, sourceSnippet, retrievedAt });
+  }
+}
 
 /* ============================================================
    🚫 DOMAIN BLOCKING (JUNK + NO-REPLY TARGETS)
@@ -236,6 +297,24 @@ export async function enrichDomain(domain, serpMeta = {}) {
     return { domain: d, blocked: true, reason: block.reason };
   }
 
+  // Editorial evidence is the first paid-enrichment gate. A search result or
+  // authority score is not proof that a publication accepts contributors.
+  const editorialEvidence = await verifyEditorialEvidence(serpMeta);
+  if (!["confirmed", "strong_probable"].includes(editorialEvidence.classification)) {
+    return {
+      domain: d,
+      emails: [],
+      emailCandidates: [],
+      sourceUrl: serpMeta.sourceUrl || null,
+      sourceTitle: serpMeta.sourceTitle || null,
+      sourceSnippet: serpMeta.sourceSnippet || null,
+      editorialEvidence,
+      authority: { serpPosition: serpMeta.position || null, serpScore: 0, openPageRank: null, openPageRankRank: null, editorialSurface: false, totalScore: 0 },
+      blocked: false,
+      rejectedReason: `editorial_evidence_${editorialEvidence.classification}`,
+    };
+  }
+
   const emails = new Set();
   const emailCandidates = [];
 
@@ -290,6 +369,7 @@ export async function enrichDomain(domain, serpMeta = {}) {
       editorialSurface: hasEditorial,
       totalScore,
     },
+    editorialEvidence,
     blocked: false,
   };
 }

@@ -120,7 +120,7 @@ function positiveInt(name, fallback, min = 1, max = 1440) {
   return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
-export async function runNextBatch() {
+export async function runNextBatch({ triggerRunKey = "" } = {}) {
   if (batchRunning) return { processed: 0, skipped: true, reason: "OUTREACH_BATCH_ALREADY_RUNNING" };
   batchRunning = true;
   try {
@@ -153,7 +153,14 @@ export async function runNextBatch() {
     if (index >= keywords.length && cycle) index = 0;
     if (index >= keywords.length) return { processed: 0, done: true, skipped: true, reason: "OUTREACH_KEYWORDS_COMPLETE", lastProcessedIndex: index, keywordCount: keywords.length };
 
-    await saveProgress({ ...progress, lastProcessedIndex: index, batchSize, lastTriggeredAt: new Date(now).toISOString() });
+    const trigger = String(triggerRunKey || "").trim().slice(0, 200);
+    await saveProgress({
+      ...progress,
+      lastProcessedIndex: index,
+      batchSize,
+      lastTriggeredAt: new Date(now).toISOString(),
+      lastTriggerRunKey: trigger || progress.lastTriggerRunKey || null,
+    });
     let processed = 0;
     const automation = { sent: 0, queued: 0, skipped: 0, failed: 0 };
     const results = [];
@@ -169,12 +176,27 @@ export async function runNextBatch() {
       for (const key of Object.keys(automation)) automation[key] += Number(result?.automation?.[key] || 0);
       index += 1;
       processed += 1;
-      await saveProgress({ lastProcessedIndex: index, batchSize, lastTriggeredAt: new Date(now).toISOString() });
+      await saveProgress({
+        lastProcessedIndex: index,
+        batchSize,
+        lastTriggeredAt: new Date(now).toISOString(),
+        lastTriggerRunKey: trigger || progress.lastTriggerRunKey || null,
+      });
       if (delayMs > 0 && processed < batchSize) await wait(delayMs);
       if (!cycle && index >= keywords.length) break;
     }
     const done = !cycle && index >= keywords.length;
-    return { processed, done, cycle, lastProcessedIndex: index, keywordSource: keywordConfig.source, keywordCount: keywords.length, automation, results };
+    return {
+      processed,
+      done,
+      cycle,
+      lastProcessedIndex: index,
+      triggerRunKey: trigger || null,
+      keywordSource: keywordConfig.source,
+      keywordCount: keywords.length,
+      automation,
+      results,
+    };
   } finally {
     batchRunning = false;
   }
