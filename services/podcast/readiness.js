@@ -55,7 +55,7 @@ export function getPodcastReadiness({ env = process.env, checkCommand = commandA
   };
 
   requireEnv("OPENROUTER_API_KEY");
-  requireOneOf("podcast_model", ["OPENROUTER_CLAUDE_SONNET_5", "OPENROUTER_GPT_5_6_SOL", "AI_MODEL_HIGH_QUALITY"]);
+  requireOneOf("podcast_model", ["AI_MODEL_STANDARD", "OPENROUTER_GPT_5_6_SOL"]);
   requireEnv("AWS_ACCESS_KEY_ID");
   requireEnv("AWS_SECRET_ACCESS_KEY");
   requireEnv("AWS_REGION");
