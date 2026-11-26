@@ -71,7 +71,8 @@ export function candidateReferences(extraction) {
       const after = Math.min(page.text.length, match.index + name.length + 90);
       const passage = page.text.slice(before, after);
       const row = candidates.get(name) || { name, occurrences: [] };
-      row.occurrences.push({ pdfPage: page.pdfPage, offset: (page.textOffsetStart || 0) + match.index, passage });
+      row.occurrences.push({ pdfPage: page.pdfPage, offset: (page.textOffsetStart || 0) + match.index,
+        nameOffsetInPassage: match.index - before, passage });
       candidates.set(name, row);
     }
   }
