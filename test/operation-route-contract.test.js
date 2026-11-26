@@ -44,6 +44,11 @@ test("all weekday morning endpoints exist in their mounted service routers", () 
   assert.match(blotato, /"\/shorts\/:lane\/schedule"/);
 });
 
+test("Guest Article batch replay control is owned by the durable occurrence ledger", () => {
+  assert.match(outreach, /getRequestIdempotencyKey\(req\)/);
+  assert.doesNotMatch(outreach, /router\.post\("\/batch\/next",\s*requestDedupe/);
+});
+
 test("Friday podcast and operation status endpoints exist", () => {
   assert.match(podcast, /router\.post\("\/readiness"/);
   assert.match(podcast, /router\.post\("\/run"/);

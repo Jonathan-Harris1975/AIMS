@@ -198,7 +198,8 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     });
   }
 
-  async assertInitialPitchDispatchAllowed(lead) {
+  async assertInitialPitchDispatchAllowed(lead, assertLease = async () => {}) {
+    await assertLease();
     const cfg = this.config();
     if (!cfg.enabled || !cfg.sendEnabled) throw Object.assign(new Error("Guest Article dispatch is disabled."), { code: "OUTREACH_DISPATCH_DISABLED" });
     const now = this.now();
@@ -218,14 +219,16 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     if (await this.repository.countInitialSendsSince(dayStart.toISOString()) >= cfg.maxDaily) {
       throw Object.assign(new Error("Daily Guest Article send cap was reached before dispatch."), { code: "OUTREACH_DAILY_SEND_CAP" });
     }
+    await assertLease();
   }
 
-  async sendInitialPitch({ lead, keyword, pitch, recipientType }) {
+  async sendInitialPitch({ lead, keyword, pitch, recipientType, assertLease = async () => {} }) {
+    await assertLease();
     const convo = await this.createConversationForLead({ lead, keyword, subject: pitch.subject });
     // Generation and conversation setup can take long enough for an opt-out,
     // send-mode change or contact to be recorded. Recheck at the last app-level
     // boundary before handing the message to the Comms Hub provider.
-    await this.assertInitialPitchDispatchAllowed(lead);
+    await this.assertInitialPitchDispatchAllowed(lead, assertLease);
     const idempotencyKey = `outreach-initial:${lead.email.toLowerCase()}:${slug(keyword)}`;
     const sent = await this.context.emailService.send({
       conversationId: convo.conversationId,
@@ -260,7 +263,7 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     }, { actor: "outreach-automation", role: "admin" });
   }
 
-  async automateLeads(leads = [], { keyword = "" } = {}) {
+  async automateLeads(leads = [], { keyword = "", assertLease = async () => {} } = {}) {
     const cfg = this.config();
     if (!cfg.enabled || !cfg.sendEnabled) return { enabled: false, sent: 0, queued: 0, skipped: leads.length, failed: 0, results: [] };
     const policy = businessHoursPolicy(this.context.config);
@@ -275,6 +278,7 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     let remaining = Math.max(0, Math.min(cfg.maxBatch, cfg.maxDaily - alreadyToday));
     const results = [];
     for (const lead of leads) {
+      await assertLease();
       if (remaining <= 0) { results.push({ email: lead.email, status: "skipped", reason: "send_cap" }); continue; }
       try {
         const eligibility = this.recipientEligibility(lead);
@@ -285,7 +289,8 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
         const existingDomain = await this.repository.getTargetByDomain(lead.domain);
         if (existingDomain?.last_sent_at) { results.push({ email: lead.email, status: "skipped", reason: "publication_already_contacted" }); continue; }
         const pitch = await this.generatePitch({ lead, keyword });
-        const sent = await this.sendInitialPitch({ lead, keyword, pitch, recipientType: eligibility.recipientType });
+        await assertLease();
+        const sent = await this.sendInitialPitch({ lead, keyword, pitch, recipientType: eligibility.recipientType, assertLease });
         results.push({ email: lead.email, status: "sent", conversationId: sent.target.conversation_id, proposedTitle: pitch.proposedTitle });
         remaining -= 1;
       } catch (error) {

@@ -429,7 +429,7 @@ function operationNewsletterEnabled() {
 }
 
 function operationOutreachEnabled() {
-  // Compatibility/status flag only. Outreach execution is clocked exclusively by MAST at 09:00 and 16:00 weekdays.
+  // MAST is the only scheduler: Guest Article runs on Monday, Wednesday and Friday at 09:00 Europe/London.
   return booleanEnv("AIMS_OPERATION_OUTREACH_ENABLED", false);
 }
 
