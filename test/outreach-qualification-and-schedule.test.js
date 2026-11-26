@@ -107,5 +107,11 @@ test("evidence retrieval rejects loopback, private and reserved addresses", () =
   assert.equal(isPublicAddress("[::1]"), false);
   assert.equal(isPublicAddress("10.0.0.1"), false);
   assert.equal(isPublicAddress("169.254.169.254"), false);
+  assert.equal(isPublicAddress("198.51.100.1"), false);
+  assert.equal(isPublicAddress("203.0.113.1"), false);
+  assert.equal(isPublicAddress("198.51.101.1"), true);
+  assert.equal(isPublicAddress("203.0.114.1"), true);
+  assert.equal(isPublicAddress("192.0.2.1"), false);
+  assert.equal(isPublicAddress("192.0.3.1"), true);
   assert.equal(isPublicAddress("8.8.8.8"), true);
 });
