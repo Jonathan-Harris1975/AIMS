@@ -40,9 +40,20 @@ function safePublicUrl(value) {
 }
 
 function stripMarkup(value) {
-  return String(value || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+  let text = String(value || "");
+  for (const tag of ["script", "style"]) {
+    const open = new RegExp(`<${tag}\\b`, "i");
+    const close = `</${tag}>`;
+    let match = open.exec(text);
+    while (match) {
+      const end = text.toLowerCase().indexOf(close, match.index);
+      text = end < 0
+        ? text.slice(0, match.index)
+        : `${text.slice(0, match.index)} ${text.slice(end + close.length)}`;
+      match = open.exec(text);
+    }
+  }
+  return text
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
