@@ -373,6 +373,9 @@ export const aiConfig = {
     commsHubOutreachReply: routeChain(["outreachReply"], ["outreachFallback"]),
     commsHubOutreachArticle: routeChain(["outreachWriter"], ["outreachFallback"]),
     commsHubOutreachArticleReview: routeChain(["outreachReviewer"], ["outreachFallback"]),
+    // Contextual Book Feature manuscript analysis uses the same central,
+    // privacy-gated Comms Hub model policy. It only produces unverified leads.
+    commsHubBookFeatureResearch: routeChain(commsRoutineProviderIds, []),
   },
 
   commonParams: { temperature: 0.65, top_p: 0.9, timeout: 90000 },
