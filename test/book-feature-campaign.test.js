@@ -49,6 +49,25 @@ test("a selected campaign cannot silently change and occurrences cannot overlap"
   await assert.rejects(repository.campaign(occurrence.week, { ...book, author: "Other author" }, { method: "weekly" }));
   await assert.rejects(repository.campaign(occurrence.week, { ...book, coverArtUrl: "https://example.com/new-cover" }, { method: "weekly" }));
   await assert.rejects(repository.campaign(occurrence.week, book, { method: "reselected" }));
+  const passage = "Acme Group delivered a useful platform with meaningful practical outcomes for its customers.";
+  const candidates = [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, passage }] }];
+  const checksum = "b".repeat(64);
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates), { attempted: 1, recorded: 1 });
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates), { attempted: 1, recorded: 0 });
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, [
+    { name: "Invented Org", occurrences: [{ pdfPage: 5, offset: 0, passage }] },
+  ]), { attempted: 0, recorded: 0 });
+  await assert.rejects(repository.recordCandidateEvidence(campaign.id, "not-a-checksum", candidates), /SHA-256/);
+  const batchSizes = [];
+  const originalBatch = d1.batch;
+  d1.batch = async (statements) => { batchSizes.push(statements.length); return originalBatch(statements); };
+  const manyCandidates = Array.from({ length: 205 }, (_, index) => ({
+    name: `Organisation ${index}`,
+    occurrences: [{ pdfPage: 5, offset: 1_000 + index, passage: `Organisation ${index} produced a useful product with documented practical results.` }],
+  }));
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, manyCandidates),
+    { attempted: 205, recorded: 205 });
+  assert.deepEqual(batchSizes, [100, 100, 5]);
   const lease = await repository.claimOccurrence(occurrence, campaign.id);
   assert.ok(lease);
   assert.equal(await repository.claimOccurrence(occurrence, campaign.id), null);
@@ -83,11 +102,15 @@ test("scheduled run holds the same weekly book and never dispatches", async (t) 
   const repository = new BookFeatureRepository(d1, { now: () => new Date("2026-07-07T08:00:00Z"), leaseId: () => "lease2" });
   const writes = [];
   const base = { repository, now: new Date("2026-07-07T08:00:00Z"), resolveBook: async () => ({ book, selection: {} }),
-    analyse: async () => ({ sha256: "checksum", totalPages: 10, pagesAnalysed: 10, candidates: [], cacheKey: "private/extract" }),
+    analyse: async () => ({ sha256: "a".repeat(64), totalPages: 10, pagesAnalysed: 10, candidates: [
+      { name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, passage: "Acme Group delivered a useful platform with meaningful practical outcomes for its customers." }] },
+    ], cacheKey: "private/extract" }),
     persist: async (...args) => writes.push(args) };
   const first = await runBookFeatureAssessment(base);
   assert.equal(first.status, "completed_zero");
   assert.equal(first.dispatched, 0);
+  assert.equal(first.candidateEvidenceRecorded, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM book_feature_evidence WHERE validation='candidate'").get().n, 1);
   assert.equal(Object.hasOwn(first, "privateReportKey"), false);
   assert.equal(writes.length, 1);
   assert.equal((await runBookFeatureAssessment(base)).status, "already_completed");
