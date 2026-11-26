@@ -1,7 +1,9 @@
 import express from "express";
 import { startAsyncServiceRouteJob, getAsyncServiceRouteJobFresh } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { assessThreeBooks } from "../bookFeature/assessment.js";
-import { effectiveMode } from "../bookFeature/core.js";
+import { scheduledLondonOccurrence } from "../bookFeature/core.js";
+import { runBookFeatureAssessment } from "../bookFeature/run.js";
+import { BookFeatureRepository } from "../bookFeature/repository.js";
 import { runKeyword } from "../services/outreachService.js";
 import { runNextBatch, resetProgress } from "../services/batchService.js";
 import { requestDedupe } from "../../shared/utils/requestDedupe.js";
@@ -14,14 +16,49 @@ import {
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-router.get("/book-feature/status", (_req, res) => {
+router.get("/book-feature/status", asyncRoute(async (_req, res) => {
+  const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
+  const mode = await new BookFeatureRepository(getCommsHubContext().d1).mode();
   res.set("Cache-Control", "no-store");
-  res.json({ ok: true, service: "book_feature_outreach", mode: effectiveMode(process.env.BOOK_FEATURE_OUTREACH_MODE, "assessment"),
-    dispatchEnabled: false, schedulerRegistered: false, pilotAuthorised: false });
-});
+  res.json({ ok: true, service: "book_feature_outreach", mode: mode.effective, configurationVersion: mode.version,
+    dispatchEnabled: false, schedulerOwner: "MAST", pilotAuthorised: false });
+}));
+
+router.put("/book-feature/mode", asyncRoute(async (req, res) => {
+  const next = req.body?.mode;
+  const version = req.body?.expectedVersion;
+  if (!["disabled", "assessment", "shadow", "suspended"].includes(next) ||
+      !Number.isSafeInteger(version) || version < 1) {
+    return res.status(400).json({ ok: false, error: "Safe mode and expectedVersion are required." });
+  }
+  const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
+  const mode = await new BookFeatureRepository(getCommsHubContext().d1)
+    .transitionMode(next, "authenticated_suite_operator", version);
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, mode });
+}));
+
+router.post("/book-feature/run", asyncRoute(async (req, res) => {
+  const now = new Date();
+  const occurrence = scheduledLondonOccurrence(now);
+  if (!occurrence) return res.status(409).json({ ok: false, error: "Outside Book Feature assessment window." });
+  const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
+  const job = await startAsyncServiceRouteJob({ service: "book-feature", lane: "run", req,
+    payload: { sessionId: occurrence.id },
+    statusBasePath: "/outreach/book-feature/jobs", reuseTerminal: true,
+    runner: () => runBookFeatureAssessment({ now, d1: getCommsHubContext().d1 }) });
+  res.status(202).json(job);
+}));
+
+router.get("/book-feature/jobs/run/:sessionId", asyncRoute(async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const job = await getAsyncServiceRouteJobFresh("book-feature", "run", req.params.sessionId, req);
+  res.status(job ? 200 : 404).json(job || { ok: false, error: "Scheduled assessment job not found." });
+}));
 
 router.post("/book-feature/assessment/three-books", asyncRoute(async (req, res) => {
-  const mode = effectiveMode(process.env.BOOK_FEATURE_OUTREACH_MODE, "assessment");
+  const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
+  const { effective: mode } = await new BookFeatureRepository(getCommsHubContext().d1).mode();
   if (mode === "disabled" || mode === "suspended") return res.status(409).json({ ok: false, error: `Service mode is ${mode}.` });
   const seed = String(req.body?.seed || "");
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(seed)) return res.status(400).json({ ok: false, error: "Provide a short reproducible alphanumeric seed." });

@@ -64,3 +64,10 @@ test("assessment job polling URL resolves to its registered route", async () => 
   assert.equal(response.status, 404);
   assert.deepEqual(response.body, { ok: false, error: "Assessment job not found." });
 });
+
+test("mode endpoint refuses production activation without reaching storage", async () => {
+  const app = express(); app.use("/outreach", outreachRouter);
+  const response = await request(app).put("/outreach/book-feature/mode")
+    .send({ mode: "production", expectedVersion: 1 });
+  assert.equal(response.status, 400);
+});
