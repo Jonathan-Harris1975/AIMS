@@ -58,6 +58,17 @@ function safeSubject(value, fallback = "Guest article idea") { return String(val
 function slug(value) { return String(value || "article").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100) || "article"; }
 function unique(values) { return [...new Set(values.filter(Boolean))]; }
 
+function nextAuthorisedBusinessSession(from, policy) {
+  if (policy.endHour <= 9 || policy.startHour >= 11) return null;
+  let cursor = from instanceof Date ? from : new Date(from);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const businessTime = ensureFutureBusinessTime(cursor, policy, cursor);
+    if (isAuthorisedOutreachSession(businessTime)) return businessTime;
+    cursor = nextAuthorisedOutreachSession(new Date(businessTime.getTime() + 2 * 60 * 60_000));
+  }
+  return null;
+}
+
 export function emailValidationScore(validation = {}) {
   const status = String(validation?.status || "unknown").toLowerCase();
   if (status === "valid") return 1;
@@ -300,11 +311,14 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     if (!cfg.enabled || !cfg.sendEnabled || !cfg.followUpEnabled) return { skipped: true, reason: "dispatch_disabled" };
     if (Number(target.follow_up_count || 0) >= cfg.maxFollowUps || target.state !== "contacted" || target.last_reply_at) return { skipped: true, reason: "follow_up_not_needed" };
     const now = this.now();
-    if (!isAuthorisedOutreachSession(now)) {
+    const policy = businessHoursPolicy(this.context.config);
+    if (!isAuthorisedOutreachSession(now) || !isWithinBusinessHours(now, policy)) {
+      const dueAt = nextAuthorisedBusinessSession(now, policy);
+      if (!dueAt) return { skipped: true, reason: "no_authorised_business_hours_overlap" };
       return {
         deferred: true,
         reason: "outside_authorised_morning_session",
-        dueAt: nextAuthorisedOutreachSession(now).toISOString(),
+        dueAt: dueAt.toISOString(),
       };
     }
     const sentAt = Date.parse(target.last_sent_at || "");
