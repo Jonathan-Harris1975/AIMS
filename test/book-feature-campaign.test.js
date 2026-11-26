@@ -118,7 +118,7 @@ test("PDF cache is keyed to content and refuses incomplete coverage", async () =
   const options = { readObject: async () => buffer,
     readCache: async () => { if (!cached) throw Object.assign(new Error("missing"), { name: "NoSuchKey" }); return JSON.stringify(cached); },
     writeCache: async (_bucket, _key, value) => { cached = value; },
-    extract: async () => { extracts++; return { sha256: createHash("sha256").update(buffer).digest("hex"), totalPages: 1, pagesAnalysed: 1, complete: true,
+    extract: async () => { extracts++; return { sha256: createHash("sha256").update(buffer).digest("hex"), totalPages: 1, pagesAnalysed: 1, coverageComplete: true, complete: true,
       pages: [{ pdfPage: 1, text: "A verified example of an ordinary sentence with enough words.", readable: true }] }; } };
   await analysePublishedBook(book, options);
   await analysePublishedBook(book, options);
