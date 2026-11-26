@@ -44,7 +44,9 @@ function prepareCandidate(candidate) {
     offset: occurrence.offset,
     passage: String(occurrence.passage || "").slice(0, MAX_PASSAGE_LENGTH),
   }));
-  if (!candidate.name || !occurrences.length || occurrences.some((row) => row.passage.length < 20)) {
+  if (!candidate.name || !occurrences.length || occurrences.some((row) =>
+    !Number.isSafeInteger(row.pdfPage) || row.pdfPage < 1 || !Number.isSafeInteger(row.offset) || row.offset < 0 ||
+    row.passage.length < 20)) {
     throw new Error("Manuscript entity analysis requires exact, page-linked passages for every candidate.");
   }
   return { id: stableCandidateId(candidate), name: candidate.name, occurrences };
