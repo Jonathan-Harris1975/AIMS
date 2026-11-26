@@ -3658,10 +3658,13 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
   try {
     const quizHistory = getQuizHistory();
 
+    const quizFormats = ["standard", "scenario", "myth", "prediction"];
+    const format = quizFormats[(quizHistory.nextFormatIndex || 0) % quizFormats.length];
     const prompt = buildQuizPrompt({
       questionDate: questionPublishDate,
       answerDate: answerPublishDate,
       history: quizHistory.topics,
+      format,
     });
 
     const sessionId = `ZERNIO-QUIZ-${questionPublishDate}`;
@@ -3894,6 +3897,7 @@ async function buildAndScheduleQuizSeriesImpl(options = {}) {
       const runtimeCorrect = parseQuizCorrectAnswer(answerPost.content, runtimeQuiz.options);
       recordQuizSchedule({
         topic: generated.topic,
+        format,
         questionDateTime,
         answerDateTime,
         questionTitle: questionPost.title,
