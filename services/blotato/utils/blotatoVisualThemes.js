@@ -80,7 +80,7 @@ export function formatCreativeDirection(brief = {}) {
     `Palette: ${brief.palette || "controlled brand palette"}`,
     `Composition: ${brief.composition || "clear mobile-first editorial hierarchy"}`,
     `Safe zones: ${JSON.stringify(brief.safeZones || {})}`,
-    `Prohibited: ${(brief.prohibited || []).join(", ")}`,\n    `Recent visual history to avoid: ${(brief.recentHistory || []).map((item) => `${item.theme || "unknown"} — ${item.concept || "unspecified concept"}`).join("; ") || "none recorded"}`,
+    `Prohibited: ${(brief.prohibited || []).join(", ")}`,\n    `Recent visual history to avoid: ${(brief.recentHistory || []).map((item) => [item.theme || "unknown", item.concept || "unspecified concept"].join(" — ")).join("; ") || "none recorded"}`,
     `Factual constraint: ${brief.factualConstraints || "source-grounded visuals only"}`,
   ].join("\n");
 }
