@@ -81,10 +81,11 @@ export function classifyOutreachReplyText(value) {
 }
 
 export class OutreachAutomationService {
-  constructor({ context, env = process.env, aiRequest = resilientRequest }) {
+  constructor({ context, env = process.env, aiRequest = resilientRequest, now = () => new Date() }) {
     this.context = context;
     this.env = env;
     this.aiRequest = aiRequest;
+    this.now = now;
     this.repository = new OutreachRepository(context.d1);
   }
 
@@ -186,8 +187,34 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     });
   }
 
+  async assertInitialPitchDispatchAllowed(lead) {
+    const cfg = this.config();
+    if (!cfg.enabled || !cfg.sendEnabled) throw Object.assign(new Error("Guest Article dispatch is disabled."), { code: "OUTREACH_DISPATCH_DISABLED" });
+    const now = this.now();
+    if (!isWithinBusinessHours(now, businessHoursPolicy(this.context.config)) || !isAuthorisedOutreachSession(now)) {
+      throw Object.assign(new Error("Guest Article dispatch is outside its authorised session."), { code: "OUTREACH_OUTSIDE_AUTHORISED_SESSION" });
+    }
+    const eligibility = this.recipientEligibility(lead);
+    if (!eligibility.eligible) throw Object.assign(new Error("Recipient eligibility changed before dispatch."), { code: "OUTREACH_RECIPIENT_INELIGIBLE" });
+    if (await this.repository.isSuppressed(lead.email, lead.domain)) {
+      throw Object.assign(new Error("Recipient or publication was suppressed before dispatch."), { code: "OUTREACH_SUPPRESSED" });
+    }
+    const existing = await this.repository.getTargetByEmail(lead.email);
+    if (existing?.last_sent_at) throw Object.assign(new Error("Recipient was contacted before dispatch."), { code: "OUTREACH_RECIPIENT_ALREADY_CONTACTED" });
+    const existingDomain = await this.repository.getTargetByDomain(lead.domain);
+    if (existingDomain?.last_sent_at) throw Object.assign(new Error("Publication was contacted before dispatch."), { code: "OUTREACH_PUBLICATION_ALREADY_CONTACTED" });
+    const dayStart = new Date(now); dayStart.setUTCHours(0, 0, 0, 0);
+    if (await this.repository.countInitialSendsSince(dayStart.toISOString()) >= cfg.maxDaily) {
+      throw Object.assign(new Error("Daily Guest Article send cap was reached before dispatch."), { code: "OUTREACH_DAILY_SEND_CAP" });
+    }
+  }
+
   async sendInitialPitch({ lead, keyword, pitch, recipientType }) {
     const convo = await this.createConversationForLead({ lead, keyword, subject: pitch.subject });
+    // Generation and conversation setup can take long enough for an opt-out,
+    // send-mode change or contact to be recorded. Recheck at the last app-level
+    // boundary before handing the message to the Comms Hub provider.
+    await this.assertInitialPitchDispatchAllowed(lead);
     const idempotencyKey = `outreach-initial:${lead.email.toLowerCase()}:${slug(keyword)}`;
     const sent = await this.context.emailService.send({
       conversationId: convo.conversationId,
