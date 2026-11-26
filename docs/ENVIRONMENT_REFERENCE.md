@@ -554,4 +554,3 @@ This inventory makes the runtime configuration contract auditable without duplic
 ## Governance
 
 CI runs `npm run env:reference:check`. Any new, removed or renamed production environment dependency changes this generated file and fails verification until the reference is deliberately regenerated and reviewed. Secrets must never be written into this document.
-| `APPROVED_IMAGE_MODELS` | Yes | services/blotato/utils/imageQualityGovernance.js:9 |\n
