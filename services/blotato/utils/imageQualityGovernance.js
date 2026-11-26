@@ -86,9 +86,10 @@ export function resolveImageProviderPlan({
     : "existing-first";
   const allowFallback = safeStrategy !== "existing-only" && bool(fallbackEnabled, true);
   const allowEscalation = safeStrategy !== "existing-only" && bool(escalationEnabled);
+  const escalationLimit = Math.max(0, Math.min(2, Number(maxEscalations) || 0));
   const configuredFallback = findConfigured(fallback, "Fallback");
   const fallbackModel = configuredFallback || models.find((model) =>
-    model !== primaryModel && (!allowEscalation || model !== qualityModel));
+    model !== primaryModel && (!(allowEscalation && escalationLimit > 0) || model !== qualityModel));
   if (fallbackModel && fallbackModel === primaryModel) {
     const error = new Error("Image fallback must differ from the primary model");
     error.code = "CIRCULAR_IMAGE_FALLBACK";
@@ -101,8 +102,6 @@ export function resolveImageProviderPlan({
     error.statusCode = 422;
     throw error;
   }
-  const escalationLimit = Math.max(0, Math.min(2, Number(maxEscalations) || 0));
-
   let sequence;
   if (safeStrategy === "quality-first") {
     if (!qualityModel) {

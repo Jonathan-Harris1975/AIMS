@@ -65,6 +65,16 @@ test("image-provider plans stay inside the central route and bound fallback atte
   assert.deepEqual(independentlyCredentialed.providers.map((provider) => provider.id), ["p-key-a", "p-key-b", "b-key-a"]);
   const existingOnly = resolveImageProviderPlan({ providers, strategy: "existing-only" });
   assert.deepEqual(existingOnly.models, ["route/primary"]);
+
+  const qualityAsFallbackWhenEscalationIsCapped = resolveImageProviderPlan({
+    providers: [providers[0], providers[1]],
+    primary: "route/primary",
+    qualityTier: "route/quality",
+    strategy: "existing-first",
+    escalationEnabled: true,
+    maxEscalations: 0,
+  });
+  assert.deepEqual(qualityAsFallbackWhenEscalationIsCapped.models, ["route/primary", "route/quality"]);
   assert.throws(() => resolveImageProviderPlan({ providers, fallback: "unapproved/model" }), /central artwork route/);
   assert.throws(() => resolveImageProviderPlan({ providers: [] }), /No centrally configured image models/);
 });
