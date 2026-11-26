@@ -116,7 +116,11 @@ export function buildStoryboard({ script = "", hook = "", scenes = [], durationS
     purpose: index === 0 ? "hook" : index === sourceScenes.length - 1 ? "conclusion" : "evidence-and-analysis",
     narration: text(scene?.script || (index === 0 ? hook : script), 900),
     visualConcept: text(scene?.mediaSource || creativeBrief.coreMessage, 700),
-    imagePrompt: buildImagePrompt({ concept: scene?.mediaSource || creativeBrief.coreMessage, brief: creativeBrief, index }),
+    imagePrompt: buildImagePrompt({
+      concept: scene?.mediaSource || creativeBrief.coreMessage,
+      brief: creativeBrief,
+      index,
+    }),
     composition: creativeBrief.composition || "",
     camera: index === 0 ? "Immediate medium close-up or decisive subject-led opening." : "Purposeful variation with clear subject and readable depth.",
     motion: index === 0 ? "Subtle push-in or controlled reveal; establish movement immediately." : "One restrained motion cue that supports the narration.",
@@ -125,7 +129,12 @@ export function buildStoryboard({ script = "", hook = "", scenes = [], durationS
     transition: index === 0 ? "cut" : "purposeful editorial cut",
     theme: creativeBrief.theme,
     factualSources: [],
-    acceptance: ["topic-specific", "mobile-readable", "no accidental logos/watermarks", "meaningfully different from adjacent scene"],
+    acceptance: [
+      "topic-specific",
+      "mobile-readable",
+      "no accidental logos/watermarks",
+      "meaningfully different from adjacent scene",
+    ],
   }));
 }
 
