@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { selectSample, verifyBook, londonOccurrence, matchedPassage, scoreOpportunity, effectiveMode } from "../services/outreach/bookFeature/core.js";
-import { extractManuscript, assessThreeBooks } from "../services/outreach/bookFeature/assessment.js";
+import { extractManuscript, candidateReferences, assessBook, assessThreeBooks, validateExtraction } from "../services/outreach/bookFeature/assessment.js";
 import { statusUrlFor } from "../services/shared/utils/asyncServiceStatusUrl.js";
 import express from "express";
 import request from "supertest";
@@ -39,6 +39,23 @@ test("featured metadata, passage matching, scoring and dispatch mode fail closed
   assert.equal(effectiveMode("suspended", "production"), "suspended");
 });
 
+test("conditional Book Feature scores require enhanced validation and preserve mandatory gates", () => {
+  const gates = { evidence: true, identity: true, contact: true, lawfulBasis: true, suppression: true,
+    duplicate: true, qa: true, campaign: true, authorisation: true };
+  const components = { depth: 15, positiveContext: 12, mutualBenefit: 12, currentRelevance: 10, audienceAlignment: 6, relationshipPotential: 5 };
+  const conditional = scoreOpportunity(components, gates);
+  assert.equal(conditional.score, 60);
+  assert.equal(conditional.tier, "conditional");
+  assert.equal(conditional.eligible, false);
+  assert.ok(conditional.failedGates.includes("enhancedValidation"));
+  assert.equal(scoreOpportunity(components, { ...gates, enhancedValidation: true }).eligible, true);
+  const strong = scoreOpportunity({ ...components, depth: 25 }, gates);
+  assert.equal(strong.score, 70);
+  assert.equal(strong.tier, "strong");
+  assert.equal(strong.eligible, true);
+  assert.equal(scoreOpportunity({ ...components, depth: 25, positiveContext: 7 }, { ...gates, evidence: false }).eligible, false);
+});
+
 test("London 09:00 occurrences preserve wall time across BST and GMT", () => {
   assert.equal(londonOccurrence(new Date("2026-07-07T08:00:00Z"))?.day, "Tue");
   assert.equal(londonOccurrence(new Date("2026-12-08T09:00:00Z"))?.day, "Tue");
@@ -52,9 +69,53 @@ test("PDF extraction checks every page and blocks deficient coverage", async () 
   }), destroy: async () => {} }) });
   const result = await extractManuscript(Buffer.from("%PDF-" + "x".repeat(100)), { documentLoader });
   assert.equal(result.totalPages, 2);
-  assert.equal(result.pagesAnalysed, 1);
+  assert.equal(result.pagesProcessed, 2);
+  assert.equal(result.pagesAnalysed, 2);
+  assert.equal(result.readablePages, 1);
+  assert.deepEqual(result.coverageManifest.map((page) => page.status), ["readable", "no_text_content"]);
+  assert.equal(result.pages[0].textOffsetStart, 0);
+  assert.equal(result.pages[0].textOffsetEnd, result.pages[0].text.length);
+  assert.equal(result.pages[1].textOffsetStart, result.pages[0].text.length + 1);
+  assert.equal(result.pages[1].textOffsetEnd, result.pages[1].textOffsetStart);
   assert.deepEqual(result.deficientPages, [2]);
   assert.equal(result.complete, false);
+  assert.equal(validateExtraction(result), false);
+});
+
+test("read-only assessment rejects extraction whose checksum does not match the retrieved manuscript", async () => {
+  const buffer = Buffer.from("%PDF-" + "x".repeat(100));
+  const extraction = { sha256: "wrong-checksum", totalPages: 1, pagesProcessed: 1, pagesAnalysed: 1,
+    readablePages: 1, coverageComplete: true, complete: true,
+    pages: [{ pdfPage: 1, text: "A sufficiently long page with readable manuscript evidence.", characters: 56, readable: true }] };
+  await assert.rejects(assessBook(book(1), { readObject: async () => buffer, extract: async () => extraction }), /checksum/);
+});
+
+test("candidate passage offsets use the cumulative normalized manuscript text position", async () => {
+  const pagesText = [
+    "This first page contains enough readable introductory text for coverage.",
+    "Acme Group developed a useful product with independently verifiable benefits.",
+  ];
+  const result = await extractManuscript(Buffer.from("%PDF-" + "x".repeat(100)), { documentLoader: () => ({
+    destroy: async () => {}, promise: Promise.resolve({ numPages: pagesText.length,
+      getPage: async (index) => ({ getTextContent: async () => ({ items: [{ str: pagesText[index - 1] }] }), cleanup() {} }),
+    }),
+  }) });
+  const reference = candidateReferences(result).find((candidate) => candidate.name === "Acme Group");
+  assert.ok(reference);
+  assert.equal(reference.occurrences[0].pdfPage, 2);
+  assert.equal(reference.occurrences[0].offset, pagesText[0].length + 1);
+});
+
+test("extraction validation requires contiguous, readable page coverage", () => {
+  const valid = { totalPages: 2, pages: [
+    { pdfPage: 1, text: "A sufficiently long page with readable extracted content.", readable: true },
+    { pdfPage: 2, text: "Another sufficiently long page with readable extracted content.", readable: true },
+  ], coverageComplete: true, complete: true };
+  assert.equal(validateExtraction(valid), true);
+  assert.equal(validateExtraction({ ...valid, coverageComplete: false, complete: false }), false);
+  assert.equal(validateExtraction({ ...valid, pages: [valid.pages[0]] }), false);
+  assert.equal(validateExtraction({ ...valid, pages: [{ ...valid.pages[0], pdfPage: 2 }, valid.pages[1]] }), false);
+  assert.equal(validateExtraction({ ...valid, pages: [valid.pages[0], { ...valid.pages[1], readable: false }], complete: false }), false);
 });
 
 test("assessment job polling URL resolves to its registered route", async () => {

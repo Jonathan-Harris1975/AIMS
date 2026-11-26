@@ -20,15 +20,44 @@ export async function extractManuscript(buffer, { documentLoader = getDocument }
       const page = await document.getPage(index);
       const content = await page.getTextContent();
       const text = content.items.map((item) => item.str || "").join(" ").replace(/\s+/g, " ").trim();
-      pages.push({ pdfPage: index, text, characters: text.length, readable: text.length >= 30 });
+      // A page with no extractable text is not assumed to be genuinely blank:
+      // it may contain a scanned page that needs OCR. Keep it visible in the
+      // coverage manifest and fail the manuscript closed until it is reviewed.
+      let status = "insufficient_text";
+      if (text.length === 0) status = "no_text_content";
+      else if (text.length >= 30) status = "readable";
+      pages.push({ pdfPage: index, text, characters: text.length, readable: status === "readable", status });
       page.cleanup();
     }
   } finally {
     await task.destroy();
   }
   const deficient = pages.filter((page) => !page.readable).map((page) => page.pdfPage);
-  return { sha256, extractorVersion, pages, totalPages: pages.length, pagesAnalysed: pages.length - deficient.length,
-    deficientPages: deficient, complete: deficient.length === 0 };
+  const coverageComplete = pages.length === document.numPages &&
+    pages.every((page, index) => page.pdfPage === index + 1);
+  // Offsets index the normalized manuscript text with one newline between pages.
+  let textOffset = 0;
+  for (const [index, page] of pages.entries()) {
+    page.textOffsetStart = textOffset;
+    page.textOffsetEnd = textOffset + page.text.length;
+    textOffset = page.textOffsetEnd + (index < pages.length - 1 ? 1 : 0);
+  }
+  return { sha256, extractorVersion, pages, totalPages: document.numPages,
+    pagesProcessed: pages.length, pagesAnalysed: pages.length, readablePages: pages.length - deficient.length,
+    coverageComplete, deficientPages: deficient, complete: coverageComplete && deficient.length === 0,
+    coverageManifest: pages.map(({ pdfPage, characters, status }) => ({ pdfPage, characters, status })) };
+}
+
+export function validateExtraction(extraction, { sha256, configVersion } = {}) {
+  if (!extraction || !Number.isSafeInteger(extraction.totalPages) || extraction.totalPages < 1 ||
+      !Array.isArray(extraction.pages) || extraction.pages.length !== extraction.totalPages ||
+      extraction.coverageComplete !== true) return false;
+  if (sha256 && extraction.sha256 !== sha256) return false;
+  if (configVersion && extraction.configVersion !== configVersion) return false;
+  const indices = extraction.pages.map((page) => page?.pdfPage);
+  if (indices.some((page, index) => page !== index + 1)) return false;
+  const deficient = extraction.pages.some((page) => page?.readable !== true || typeof page?.text !== "string");
+  return extraction.complete === true && !deficient;
 }
 
 // Candidate enumeration is deliberately conservative: no unverified name or passage becomes an outreach claim.
@@ -42,7 +71,7 @@ export function candidateReferences(extraction) {
       const after = Math.min(page.text.length, match.index + name.length + 90);
       const passage = page.text.slice(before, after);
       const row = candidates.get(name) || { name, occurrences: [] };
-      row.occurrences.push({ pdfPage: page.pdfPage, offset: match.index, passage });
+      row.occurrences.push({ pdfPage: page.pdfPage, offset: (page.textOffsetStart || 0) + match.index, passage });
       candidates.set(name, row);
     }
   }
@@ -53,11 +82,15 @@ export async function assessBook(book, { readObject = getObjectAsBuffer, extract
   verifyBook({ title: book.title, bookUrl: book.bookUrl }, book);
   const buffer = await readObject("kdp", book.manuscriptR2Key, { maxBytes: MAX_BYTES });
   const extraction = await extract(buffer);
+  const expectedSha256 = createHash("sha256").update(buffer).digest("hex");
+  if (!validateExtraction(extraction, { sha256: expectedSha256 })) {
+    throw new Error("Manuscript assessment requires complete, readable extraction matching the retrieved PDF checksum.");
+  }
   return {
     ebookId: book.ebookId, title: book.title, published: book.publicationDate, manuscriptSha256: extraction.sha256,
     extractorVersion: extraction.extractorVersion, totalPages: extraction.totalPages,
     pagesAnalysed: extraction.pagesAnalysed, deficientPages: extraction.deficientPages,
-    status: extraction.complete ? "candidate_review_required" : "blocked_incomplete_extraction",
+    status: extraction.complete && validateExtraction(extraction) ? "candidate_review_required" : "blocked_incomplete_extraction",
     candidates: extraction.complete ? candidateReferences(extraction) : [],
     qualifiedOpportunities: 0, contactEligibleOpportunities: 0,
     limitations: ["Names are unverified text candidates; ownership, sentiment, score, contact and legal eligibility require independent validation.",

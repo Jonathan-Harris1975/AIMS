@@ -3,7 +3,7 @@ import getSponsor from "../../script/utils/getSponsor.js";
 import { listKdpEbooks } from "../../kdp/catalogue.js";
 import { getObjectAsBuffer, getObjectAsText, putPrivateJson } from "../../shared/utils/r2-client.js";
 import { BookFeatureRepository } from "./repository.js";
-import { candidateReferences, extractManuscript } from "./assessment.js";
+import { candidateReferences, extractManuscript, validateExtraction } from "./assessment.js";
 import { scheduledLondonOccurrence, verifyBook } from "./core.js";
 
 const EXTRACTION_CONFIG_VERSION = "book-feature-pdf-v1";
@@ -38,7 +38,7 @@ export async function analysePublishedBook(book, {
   try {
     const cached = JSON.parse(await readCache("kdp", key));
     if (cached.sha256 === sha256 && cached.configVersion === EXTRACTION_CONFIG_VERSION &&
-        cached.totalPages === cached.pages?.length) extraction = cached;
+        validateExtraction(cached, { sha256, configVersion: EXTRACTION_CONFIG_VERSION })) extraction = cached;
   } catch (error) {
     if (!["NoSuchKey", "NotFound"].includes(error?.name) && error?.$metadata?.httpStatusCode !== 404) throw error;
   }
@@ -46,10 +46,20 @@ export async function analysePublishedBook(book, {
     extraction = { ...(await extract(buffer)), configVersion: EXTRACTION_CONFIG_VERSION };
     await writeCache("kdp", key, extraction);
   }
-  if (!extraction.complete || extraction.pagesAnalysed !== extraction.totalPages) {
-    throw new Error(`Incomplete PDF extraction: ${extraction.pagesAnalysed}/${extraction.totalPages} pages.`);
+  if (!validateExtraction(extraction, { sha256, configVersion: EXTRACTION_CONFIG_VERSION })) {
+    const processed = Number(extraction?.pagesProcessed ?? extraction?.pagesAnalysed ?? extraction?.pages?.length ?? 0);
+    const total = Number(extraction?.totalPages || 0);
+    throw new Error(`Incomplete or invalid PDF extraction: ${processed}/${total} pages processed; unreadable or missing page evidence remains.`);
   }
   return { sha256, totalPages: extraction.totalPages, pagesAnalysed: extraction.pagesAnalysed,
+    pagesProcessed: extraction.pagesProcessed ?? extraction.pagesAnalysed,
+    readablePages: extraction.readablePages ?? extraction.pages.filter((page) => page.readable).length,
+    coverageManifest: extraction.coverageManifest ?? extraction.pages.map((page) => {
+      const characters = page.characters ?? page.text?.length ?? 0;
+      let status = page.status;
+      if (!status) status = characters === 0 ? "no_text_content" : page.readable ? "readable" : "insufficient_text";
+      return { pdfPage: page.pdfPage, characters, status };
+    }),
     candidates: candidateReferences(extraction), cacheKey: key };
 }
 
