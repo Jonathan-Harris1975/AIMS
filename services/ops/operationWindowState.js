@@ -12,9 +12,9 @@ const ACTIVE_STATUSES = new Set(["accepted", "running"]);
 // new receipt, so normal scheduler polling cannot turn it into a retry loop.
 export const OPERATION_RECOVERY_REVISION = "content-upstream-recovery-2026-11-03-v1";
 export const PODCAST_RECOVERY_REVISION = "podcast-section-validation-2026-10-30-v2";
-// One deployment-scoped recovery for a failed newsletter window after the
-// source/artwork continuity repair. Successful sibling tasks remain reusable.
-export const NEWSLETTER_RECOVERY_REVISION = "newsletter-evidence-weekend-repair-2026-11-13-v3";
+// One deployment-scoped recovery for a failed newsletter-containing content
+// window after the Blotato subscription renewal. Successful sibling tasks remain reusable.
+export const NEWSLETTER_RECOVERY_REVISION = "newsletter-blotato-renewal-2026-11-26-v1";
 
 function normalise(value = "") {
   return String(value || "").trim();
