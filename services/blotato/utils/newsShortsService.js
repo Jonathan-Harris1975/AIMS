@@ -4,6 +4,7 @@ import { resilientRequest } from "../../shared/utils/ai-service.js";
 import { createVisual } from "./blotatoClient.js";
 import { buildVisualCreationRequest, normaliseBlotatoVoiceName } from "./visualRequest.js";
 import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig } from "./shortLanes.js";
+import { buildCreativeDirection, formatCreativeDirection } from "./blotatoVisualThemes.js";
 import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
 import { buildCreativeBrief, buildStoryboard, buildHookCandidates } from "./creativeDirection.js";
@@ -194,6 +195,8 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
         },
       },
       visualDirection: { type: "string" },
+      theme: { type: "string" },
+      creativeBrief: { type: "string" },
       thumbnailText: { type: "string" },
       youtubeTitle: { type: "string" },
       youtubeDescription: { type: "string" },
@@ -213,6 +216,8 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       "visualContinuity",
       "scenes",
       "visualDirection",
+      "theme",
+      "creativeBrief",
       "thumbnailText",
       "youtubeTitle",
       "youtubeDescription",
@@ -392,9 +397,11 @@ export function buildNewsShortPrompt({
   priorDefects = [],
   editorialContext = "",
   requiredTopic = "",
+  visualHistory = [],
 }) {
   const laneConfig = requireShortLaneConfig(lane);
   const articleBlock = renderArticles({ article, articles });
+  const creativeDirection = buildCreativeDirection({ article, lane: laneConfig.slug, audience, history: visualHistory });
   const resolvedCta = ctaForLane(laneConfig.slug, cta);
   const targetDuration = Math.min(MAX_DURATION_SECONDS, Math.max(MIN_DURATION_SECONDS, Number(durationSeconds || DEFAULT_DURATION_SECONDS)));
   // Use the explicit production word target rather than assuming a fixed
@@ -429,6 +436,11 @@ the image generator does not render them reliably. When the preferred image mode
 should be visible, not long ban-lists of what should be excluded. Source relevance outranks decorative metaphor: show the actual industry, location, equipment, role and \
 consequence described by the article. Frame people from shoulders-up, behind objects, or with hands fully outside the crop. The narration carries the story. Every scene must \
 be visualisable without text overlays on generated imagery.
+
+# Approved visual direction
+Use only the approved primary theme Futuristic or Modern. The selected theme for this source is ${creativeDirection.theme}.
+${formatCreativeDirection(creativeDirection)}
+Theme choice is content-led, not a mechanical alternation. Preserve the source-specific subject, avoid recent visual concepts and keep the safe zones clear for captions.
 
 # Social Video Laws
 1. The first frame must show a human-readable situation, tension or reaction, not decorative AI wallpaper.
@@ -499,7 +511,7 @@ Lane label: ${laneConfig.label}
 Weekday slot: ${laneConfig.weekday}
 Lane focus: ${laneConfig.promptFocus}
 Source strategy: ${laneConfig.sourceStrategy}
-Theme: ${theme || laneConfig.theme}
+Theme: ${creativeDirection.theme} (requested label: ${theme || laneConfig.theme})
 Target duration: about ${targetDuration} seconds. Allowed finished range: ${MIN_DURATION_SECONDS}-${MAX_DURATION_SECONDS} seconds. Let the story earn its length rather than padding to the maximum.
 Audience: ${audience}
 CTA: ${resolvedCta}
@@ -534,6 +546,8 @@ consequence visible in the frame. Describe a distinct action and shot progressio
     }
   ],
   "visualDirection": "specific visual plan for a faceless AI/news short using the lane visual signature",
+  "theme": "Futuristic or Modern",
+  "creativeBrief": "the source-specific creative brief expressed in one concise sentence",
   "thumbnailText": "3 to 5 punchy words, concrete and curiosity-led, no clickbait",
   "youtubeTitle": "YouTube Shorts title, max 70 chars",
   "youtubeDescription": "short description with a light CTA and 3 to 5 hashtags, no emoji",
@@ -802,6 +816,8 @@ function normalisePack(pack = {}) {
     "narrativeArc",
     "visualContinuity",
     "visualDirection",
+    "theme",
+    "creativeBrief",
     "thumbnailText",
     "youtubeTitle",
     "youtubeDescription",
@@ -816,6 +832,8 @@ function normalisePack(pack = {}) {
   for (const key of required) {
     output[key] = cleanText(pack[key] || "", key === "script" ? 4000 : 1400);
   }
+  output.theme = ["futuristic", "modern"].includes(output.theme.toLowerCase()) ? output.theme.toLowerCase() : "modern";
+  output.creativeBrief = output.creativeBrief || `Source-specific ${output.theme} treatment for ${output.internalTitle || "the supplied story"}.`;
 
   if (!output.script || !output.hook) {
     const err = new Error("Model response did not include a usable hook and script");
@@ -906,6 +924,8 @@ export function buildBlotatoVisualPrompt(pack = {}) {
     `Narrative arc: ${pack.narrativeArc || "Hook to consequence to practical takeaway"}`,
     `Script: ${pack.script}`,
     `Visual continuity anchor: ${pack.visualContinuity || pack.visualDirection}`,
+    `Approved primary theme: ${pack.theme || "modern"}.`,
+    `Creative brief: ${pack.creativeBrief || "source-specific editorial composition"}`,
     `Visual direction: ${pack.visualDirection}`,
     `Cost guard: use the cheapest suitable generation settings available, preferably ${LOW_COST_IMAGE_MODEL_LABEL} for images and ${LOW_COST_VIDEO_MODEL_LABEL} for video. Do \
 not use premium video models.`,
@@ -940,7 +960,7 @@ export function buildBlotatoVideoInputs(pack = {}) {
     hook: cleanText(pack.hook || "", 180),
     title: cleanText(pack.youtubeTitle || pack.internalTitle || "", 90),
     thumbnailText: cleanText(pack.thumbnailText || pack.hook || pack.internalTitle || "", 60),
-    visualStyle: HUMAN_VISUALS_ENABLED ? "human-centred premium editorial AI short" : "premium editorial AI short",
+    visualStyle: `${pack.theme === "futuristic" ? "Futuristic" : "Modern"} ${HUMAN_VISUALS_ENABLED ? "human-centred premium editorial AI short" : "premium editorial AI short"}`,
   };
 }
 

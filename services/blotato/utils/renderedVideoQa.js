@@ -286,17 +286,15 @@ export function normaliseRenderedVideoQa(raw, {
 
 export function assessRenderedVideoQaPublication(result = {}, {
   blockSoftFailures = false,
-  blockHardFailures = false,
 } = {}) {
   const hardFailure = result?.technical?.pass === false
     || stringArray(result?.hardDefects).length > 0;
   const softFailure = result?.pass === false && !hardFailure;
   return {
-    // Rendered QA is an audit by default. It must not silently consume a paid
-    // render and stop before POST /v2/posts. Deployments that deliberately want
-    // fail-closed behaviour can opt in; strict soft-failure blocking also
-    // blocks hard failures as the stronger enforcement mode.
-    block: result?.pass === false && (Boolean(blockSoftFailures) || (hardFailure && Boolean(blockHardFailures))),
+    // Critical defects are never advisory. Configuration cannot turn a broken
+    // render into a publishable one. Soft findings remain configurable for the
+    // existing monthly-audit workflow.
+    block: result?.pass === false && (hardFailure || Boolean(blockSoftFailures)),
     hardFailure,
     softFailure,
   };
@@ -394,29 +392,29 @@ export async function reviewRenderedVideo({
 
     if (boolEnv("BLOTATO_RENDERED_QA_INFRASTRUCTURE_FALLBACK", true)) {
       return {
-        pass: true,
+        pass: false,
         skipped: true,
-        reason: "qa_infrastructure_fallback",
+        reason: "qa_infrastructure_unavailable",
         error: compact(lastQaError?.message || lastQaError, 500),
         score: null,
         threshold: DEFAULT_THRESHOLD,
         technical,
-        defects: [],
-        hardDefects: [],
+        defects: ["Rendered-video visual QA evidence was unavailable."],
+        hardDefects: ["missing_rendered_video_qa_evidence"],
       };
     }
     throw lastQaError || new Error("Rendered-video QA returned no valid structured result.");
   } catch (error) {
     if (boolEnv("BLOTATO_RENDERED_QA_INFRASTRUCTURE_FALLBACK", true)) {
       return {
-        pass: true,
+        pass: false,
         skipped: true,
-        reason: "qa_infrastructure_fallback",
+        reason: "qa_infrastructure_unavailable",
         error: compact(error?.message || error, 500),
         score: null,
         threshold: DEFAULT_THRESHOLD,
-        defects: [],
-        hardDefects: [],
+        defects: ["Rendered-video visual QA evidence was unavailable."],
+        hardDefects: ["missing_rendered_video_qa_evidence"],
       };
     }
     if (!boolEnv("BLOTATO_RENDERED_QA_REQUIRED", true)) {
