@@ -12,7 +12,7 @@ Terminal or guarded branches include `decline`, `opt_out`, `paid_placement_decli
 
 ## Trigger model
 
-MAST owns the twice-daily weekday `POST /outreach/batch/next` triggers at 09:00 and 16:00 Europe/London. `AIMS_OPERATION_OUTREACH_ENABLED=true` keeps the automation lane available while MAST remains the single clock. The route always requires the AIMS suite bearer token and retains idempotency, an overlap guard and a configurable minimum trigger interval.
+MAST owns exactly three `POST /outreach/batch/next` triggers at 09:00 Europe/London on Monday, Wednesday and Friday. Tuesday, Thursday and weekends are disabled/reserved for this campaign. `AIMS_OPERATION_OUTREACH_ENABLED=true` keeps the automation lane available while MAST remains the single clock. The route always requires the AIMS suite bearer token and retains idempotency, an overlap guard and a configurable minimum trigger interval.
 
 ## Recipient policy
 

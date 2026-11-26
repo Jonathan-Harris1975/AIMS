@@ -45,6 +45,14 @@ export class OutreachRepository {
     return rows(result)[0] || null;
   }
 
+  async getTargetByDomain(domain) {
+    const result = await this.d1.query(
+      `SELECT * FROM comms_hub_outreach_targets WHERE LOWER(domain) = LOWER(?) ORDER BY updated_at DESC LIMIT 1`,
+      [domain]
+    );
+    return rows(result)[0] || null;
+  }
+
   async getTargetByConversation(conversationId) {
     const result = await this.d1.query(
       `SELECT * FROM comms_hub_outreach_targets WHERE conversation_id = ? ORDER BY updated_at DESC LIMIT 1`,

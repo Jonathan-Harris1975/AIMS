@@ -14,11 +14,11 @@ AIMS Outreach is a guest-article acquisition pipeline. Discovery and qualificati
 
 ## External scheduler ownership
 
-`AIMS_OPERATION_OUTREACH_ENABLED=false` deliberately keeps the built-in weekday AIMS operations scheduler from running Outreach. An external scheduler such as Make.com may trigger `POST /outreach/batch/next` twice daily using the AIMS bearer token. A durable trigger cooldown, in-process overlap guard, per-batch send cap and per-day send cap reduce duplicate execution risk. Keep one permanent schedule owner; never leave both Make.com and AIMS scheduling the same batch.
+`AIMS_OPERATION_OUTREACH_ENABLED=true` keeps the authenticated Outreach lane available while MAST remains the single schedule owner. MAST invokes `POST /outreach/batch/next` exactly three times weekly at 09:00 Europe/London on Monday, Wednesday and Friday. Tuesday, Thursday, Saturday and Sunday are reserved or disabled for this campaign. A durable trigger cooldown, request idempotency, overlap guard, bounded concurrency and send caps reduce duplicate execution risk. There is no afternoon Outreach trigger.
 
 ## Discovery and contact eligibility
 
-SERP, OpenPageRank, URLScan, Hunter and ZeroBounce-style validation feed deterministic lead scoring. The ZeroBounce status is mapped into a real validation score rather than expecting a non-existent numeric score field.
+SERP contributor-intent discovery is followed by a bounded public editorial-page check before paid enrichment. OpenPageRank, URLScan, Hunter and ZeroBounce-style validation are supporting signals only. A blog or high search rank is never treated as proof of accepting contributions. Evidence is classified as confirmed, strong probable, unconfirmed or unsuitable and persisted with URL, excerpt, retrieval time and policy version. Only confirmed or strong probable evidence can reach contact selection.
 
 Cold email defaults are deliberately conservative:
 
@@ -26,11 +26,13 @@ Cold email defaults are deliberately conservative:
 - free-mail addresses are rejected;
 - ZeroBounce `valid` is required by default;
 - catch-all is disabled by default;
-- role/editorial business addresses are allowed by default;
+- role/editorial business addresses are allowed only when the verified editorial route supports them;
 - named business contacts are disabled until explicitly enabled;
 - suppression is durable and checked before every initial/follow-up send;
 - every cold email clearly identifies Jonathan and provides a simple reply-based opt-out;
 - only one automated follow-up is sent by default.
+
+Initial qualification uses the versioned `outreach-qualification-v1` rubric: contribution evidence 30, expertise relevance 25, editorial contact suitability 20, recent activity 10, credibility 10 and historical engagement 5. The initial automated threshold is 75/100, with mandatory evidence, recipient, validation, suppression and compliance gates overriding the score. Unknown historical engagement is neutral.
 
 ## Automated editorial workflow
 

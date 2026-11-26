@@ -12,6 +12,8 @@ import {
 } from "../../comms-hub/domain/promptSecurity.js";
 import { OutreachRepository } from "./outreachRepository.js";
 import { serpLookup } from "./outreachCore.js";
+import { isAuthorisedOutreachSession, OUTREACH_AUTHORISED_WEEKDAYS, OUTREACH_TIME_ZONE, OUTREACH_SESSION_WINDOW_MINUTES } from "../utils/schedule.js";
+import { OUTREACH_QUALIFICATION_POLICY_VERSION, OUTREACH_QUALIFICATION_THRESHOLD } from "../utils/qualification.js";
 
 const FREE_MAIL = new Set(["gmail.com","googlemail.com","hotmail.com","outlook.com","live.com","icloud.com","yahoo.com","yahoo.co.uk","aol.com","proton.me","protonmail.com"]);
 const ROLE_LOCAL_PARTS = new Set(["editor","editorial","content","contribute","contributors","guestpost","guestposts","submissions","submit","news","press","media","contact",
@@ -227,6 +229,9 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     if (!isWithinBusinessHours(new Date(), policy)) {
       return { enabled: true, sent: 0, queued: leads.length, skipped: 0, failed: 0, reason: "outside_business_hours", results: [] };
     }
+    if (!isAuthorisedOutreachSession(new Date())) {
+      return { enabled: true, sent: 0, queued: leads.length, skipped: leads.length, failed: 0, reason: "outside_authorised_morning_session", results: [] };
+    }
     const dayStart = new Date(); dayStart.setUTCHours(0,0,0,0);
     const alreadyToday = await this.repository.countInitialSendsSince(dayStart.toISOString());
     let remaining = Math.max(0, Math.min(cfg.maxBatch, cfg.maxDaily - alreadyToday));
@@ -239,6 +244,8 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
         if (await this.repository.isSuppressed(lead.email, lead.domain)) { results.push({ email: lead.email, status: "skipped", reason: "suppressed" }); continue; }
         const existing = await this.repository.getTargetByEmail(lead.email);
         if (existing?.last_sent_at) { results.push({ email: lead.email, status: "skipped", reason: "already_contacted" }); continue; }
+        const existingDomain = await this.repository.getTargetByDomain(lead.domain);
+        if (existingDomain?.last_sent_at) { results.push({ email: lead.email, status: "skipped", reason: "publication_already_contacted" }); continue; }
         const pitch = await this.generatePitch({ lead, keyword });
         const sent = await this.sendInitialPitch({ lead, keyword, pitch, recipientType: eligibility.recipientType });
         results.push({ email: lead.email, status: "sent", conversationId: sent.target.conversation_id, proposedTitle: pitch.proposedTitle });
@@ -264,6 +271,7 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     if (!target) return { skipped: true, reason: "target_missing" };
     const cfg = this.config();
     if (!cfg.followUpEnabled || Number(target.follow_up_count || 0) >= cfg.maxFollowUps || target.state !== "contacted") return { skipped: true, reason: "follow_up_not_needed" };
+    if (!isAuthorisedOutreachSession(new Date())) return { skipped: true, reason: "outside_authorised_morning_session" };
     if (await this.repository.isSuppressed(target.email, target.domain)) return { skipped: true, reason: "suppressed" };
     const body = `Hi,\n\nJust following up on the guest article idea I sent over. If it isn't a fit for your editorial plans, no problem at all. If it is potentially useful, \
 I'm happy to send a short outline or work to your contributor guidelines.${this.signatureAndOptOut()}`;
@@ -543,6 +551,8 @@ changes for house style, length or emphasis, send them over and I'll revise it.\
       articleAutoWriteEnabled: cfg.articleAutoWrite,
       articleAutoSendEnabled: cfg.articleAutoSend,
       articleQualityMinimum: cfg.minScore,
+      schedule: { timezone: OUTREACH_TIME_ZONE, days: [...OUTREACH_AUTHORISED_WEEKDAYS], time: "09:00", sessionWindowMinutes: OUTREACH_SESSION_WINDOW_MINUTES },
+      qualification: { policyVersion: OUTREACH_QUALIFICATION_POLICY_VERSION, automatedThreshold: OUTREACH_QUALIFICATION_THRESHOLD, evidenceFirst: true },
       models,
       modelChains,
     };
