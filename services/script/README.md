@@ -38,11 +38,11 @@ The service entry point, route modules and domain utilities are contained in thi
 
 ## Long-form source coverage and section recovery
 
-Friday PM explicitly requests 60 minutes. The existing duration planner also
+Friday PM explicitly requests 65 minutes. The existing duration planner also
 supports 30, 45 and 50 minutes for other callers; this repair preserves those
 profiles. `wordBudget.js` centralises the established 2.3 words/second planning
-rate and unchanged 105 words/minute validation floor. The 60-minute profile has
-3,415 main seconds and a main target of 7,855 words, plus intro and outro.
+rate and unchanged 105 words/minute validation floor. The 65-minute profile has
+3,705 main seconds and a main target of 8,522 words, plus intro and outro.
 
 Ingestion uses the existing seven-day news period, excludes future dates, takes
 the richest available RSS content field, and expands summaries below 300 words
