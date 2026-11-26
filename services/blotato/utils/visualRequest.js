@@ -113,6 +113,7 @@ export function buildVisualCreationRequest({
     throw error;
   }
 
+  // prompt,
   return {
     templateId,
     inputs: manualInputsConfigured ? buildAiStoryTemplateInputs(visualInputs) : {},
