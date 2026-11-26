@@ -32,4 +32,4 @@ The Friday operation window calls readiness first and blocks `/podcast/run` unle
 
 ## Duration policy
 
-The episode planner targets **50 minutes**. Finished audio may run beyond 60 minutes, but the absolute publication ceiling is **70 minutes**. If the mastered audio would exceed 70 minutes, AIMS automatically preserves the generated work and applies a calculated FFmpeg tempo fit before upload; no manual voice editing is required.
+The episode planner targets **65 minutes** so normal episodes finish just over one hour. Finished audio may run beyond 65 minutes, but the absolute publication ceiling is **70 minutes**. If the mastered audio would exceed 70 minutes, AIMS automatically preserves the generated work and applies a calculated FFmpeg tempo fit before upload; no manual voice editing is required.
