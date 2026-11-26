@@ -68,6 +68,52 @@ test('guest article sends fail closed when dispatch flags are absent', async () 
   assert.equal(providerCalls, 0);
 });
 
+test('follow-up settings enforce at least seven days and at most one message', () => {
+  const s = service({ OUTREACH_FOLLOW_UP_DAYS: '2', OUTREACH_MAX_FOLLOW_UPS: '3' });
+  assert.equal(s.config().followUpDays, 7);
+  assert.equal(s.config().maxFollowUps, 1);
+});
+
+test('follow-up provider path honours the global send switch', async () => {
+  const s = service({ OUTREACH_FOLLOW_UP_ENABLED: 'true' }, { now: () => new Date('2026-11-30T09:00:00.000Z') });
+  s.context.d1.query = async () => ({ results: [{ id: 'target-1', email: 'editor@example.com', domain: 'example.com',
+    conversation_id: 'conversation-1', state: 'contacted', follow_up_count: 0, last_sent_at: '2026-11-20T09:00:00.000Z' }] });
+  let providerCalls = 0;
+  s.context.emailService = { send: async () => { providerCalls += 1; } };
+  const result = await s.processFollowUp({ targetId: 'target-1' });
+  assert.deepEqual(result, { skipped: true, reason: 'dispatch_disabled' });
+  assert.equal(providerCalls, 0);
+});
+
+test('follow-up is deferred until at least seven full days have elapsed', async () => {
+  const s = service({ OUTREACH_SEND_ENABLED: 'true', OUTREACH_FOLLOW_UP_ENABLED: 'true' },
+    { now: () => new Date('2026-11-30T09:00:00.000Z') });
+  s.context.d1.query = async () => ({ results: [{ id: 'target-1', email: 'editor@example.com', domain: 'example.com',
+    conversation_id: 'conversation-1', state: 'contacted', follow_up_count: 0, last_sent_at: '2026-11-24T09:00:00.000Z' }] });
+  let providerCalls = 0;
+  s.context.emailService = { send: async () => { providerCalls += 1; } };
+  const result = await s.processFollowUp({ targetId: 'target-1' });
+  assert.equal(result.deferred, true);
+  assert.equal(result.reason, 'follow_up_not_due');
+  assert.equal(providerCalls, 0);
+});
+
+test('follow-up rechecks replies immediately before provider hand-off', async () => {
+  const s = service({ OUTREACH_SEND_ENABLED: 'true', OUTREACH_FOLLOW_UP_ENABLED: 'true' },
+    { now: () => new Date('2026-11-30T09:00:00.000Z') });
+  let reads = 0;
+  s.context.d1.query = async () => ({ results: [{ id: 'target-1', email: 'editor@example.com', domain: 'example.com',
+    conversation_id: 'conversation-1', state: 'contacted', follow_up_count: 0,
+    last_sent_at: '2026-11-23T09:00:00.000Z', last_reply_at: reads++ === 0 ? null : '2026-11-29T14:00:00.000Z' }] });
+  s.repository.isSuppressed = async () => null;
+  let providerCalls = 0;
+  s.context.emailService = { send: async () => { providerCalls += 1; } };
+  const result = await s.processFollowUp({ targetId: 'target-1' });
+  assert.deepEqual(result, { skipped: true, reason: 'follow_up_not_needed' });
+  assert.equal(reads, 2);
+  assert.equal(providerCalls, 0);
+});
+
 test('deterministic reply routing recognises opt-out, decline, paid placement and article request', () => {
   assert.equal(classifyOutreachReplyText('Please remove me from your list.'), 'opt_out');
   assert.equal(classifyOutreachReplyText('No thanks, this is not a fit.'), 'decline');
