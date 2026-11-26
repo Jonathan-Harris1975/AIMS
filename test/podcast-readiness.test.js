@@ -5,7 +5,7 @@ import { getPodcastReadiness, getPodcastRuntimeReadiness } from "../services/pod
 function completeEnv() {
   return {
     OPENROUTER_API_KEY: "openrouter-key",
-    OPENROUTER_CLAUDE_SONNET_5: "anthropic/claude-sonnet-5.5",
+    AI_MODEL_STANDARD: "openai/gpt-6.1-terra",
     AWS_ACCESS_KEY_ID: "aws-key",
     AWS_SECRET_ACCESS_KEY: "aws-secret",
     AWS_REGION: "eu-west-2",
@@ -29,14 +29,14 @@ function completeEnv() {
     R2_PUBLIC_BASE_URL_TRANSCRIPT_HTML: "https://transcripts.example.com",
     PODCAST_INTRO_URL: "https://example.com/intro.mp3",
     PODCAST_OUTRO_URL: "https://example.com/outro.mp3",
-    PODCAST_TARGET_MINUTES: "60",
+    PODCAST_TARGET_MINUTES: "65",
   };
 }
 
 test("podcast readiness accepts the complete Friday production contract", () => {
   const report = getPodcastReadiness({ env: completeEnv(), checkCommand: () => true });
   assert.equal(report.ready, true);
-  assert.equal(report.targetMinutes, 60);
+  assert.equal(report.targetMinutes, 65);
 });
 
 test("podcast readiness fails closed when a production dependency is missing", () => {
