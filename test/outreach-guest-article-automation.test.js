@@ -114,6 +114,35 @@ test('follow-up rechecks replies immediately before provider hand-off', async ()
   assert.equal(providerCalls, 0);
 });
 
+test('follow-up defers to the overlap between authorised sessions and configured business hours', async () => {
+  const s = service({ OUTREACH_SEND_ENABLED: 'true', OUTREACH_FOLLOW_UP_ENABLED: 'true' },
+    { now: () => new Date('2026-11-30T09:00:00.000Z') });
+  s.context.config.businessStartHour = 10;
+  s.context.d1.query = async () => ({ results: [{ id: 'target-1', email: 'editor@example.com', domain: 'example.com',
+    conversation_id: 'conversation-1', state: 'contacted', follow_up_count: 0,
+    last_sent_at: '2026-11-23T09:00:00.000Z' }] });
+  let providerCalls = 0;
+  s.context.emailService = { send: async () => { providerCalls += 1; } };
+  const result = await s.processFollowUp({ targetId: 'target-1' });
+  assert.equal(result.deferred, true);
+  assert.equal(result.dueAt, '2026-11-30T10:00:00.000Z');
+  assert.equal(providerCalls, 0);
+});
+
+test('follow-up is blocked when configured business hours do not overlap the authorised session', async () => {
+  const s = service({ OUTREACH_SEND_ENABLED: 'true', OUTREACH_FOLLOW_UP_ENABLED: 'true' },
+    { now: () => new Date('2026-11-30T09:00:00.000Z') });
+  s.context.config.businessStartHour = 11;
+  s.context.d1.query = async () => ({ results: [{ id: 'target-1', email: 'editor@example.com', domain: 'example.com',
+    conversation_id: 'conversation-1', state: 'contacted', follow_up_count: 0,
+    last_sent_at: '2026-11-23T09:00:00.000Z' }] });
+  let providerCalls = 0;
+  s.context.emailService = { send: async () => { providerCalls += 1; } };
+  const result = await s.processFollowUp({ targetId: 'target-1' });
+  assert.deepEqual(result, { skipped: true, reason: 'no_authorised_business_hours_overlap' });
+  assert.equal(providerCalls, 0);
+});
+
 test('deterministic reply routing recognises opt-out, decline, paid placement and article request', () => {
   assert.equal(classifyOutreachReplyText('Please remove me from your list.'), 'opt_out');
   assert.equal(classifyOutreachReplyText('No thanks, this is not a fit.'), 'decline');
