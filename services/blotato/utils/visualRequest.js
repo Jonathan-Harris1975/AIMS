@@ -96,7 +96,16 @@ export function buildVisualCreationRequest({
   const prompt = clean(visualPrompt);
   if (creativeBrief?.theme) assertApprovedBlotatoTheme(creativeBrief.theme);
   const creativeDirective = creativeBrief
-    ? `\nCREATIVE BRIEF: topic=${clean(creativeBrief.topic)}; angle=${clean(creativeBrief.editorialAngle)}; theme=${clean(creativeBrief.theme)}; message=${clean(creativeBrief.coreMessage)}; composition=${clean(creativeBrief.composition)}; safe-zones=${JSON.stringify(creativeBrief.safeZones || {})}; prohibited=${(creativeBrief.prohibited || []).map(clean).join(", ")}`
+    ? [
+      "CREATIVE BRIEF:",
+      `topic=${clean(creativeBrief.topic)}`,
+      `angle=${clean(creativeBrief.editorialAngle)}`,
+      `theme=${clean(creativeBrief.theme)}`,
+      `message=${clean(creativeBrief.coreMessage)}`,
+      `composition=${clean(creativeBrief.composition)}`,
+      `safe-zones=${JSON.stringify(creativeBrief.safeZones || {})}`,
+      `prohibited=${(creativeBrief.prohibited || []).map(clean).join(", ")}`,
+    ].join("; ")
     : "";
   if (!prompt) {
     const error = new Error("Blotato visual prompt is required before creating a visual");
