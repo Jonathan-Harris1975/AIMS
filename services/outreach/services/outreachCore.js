@@ -1,5 +1,8 @@
 import axios from "axios";
+import { lookup } from "node:dns/promises";
 import net from "node:net";
+import httpModule from "node:http";
+import httpsModule from "node:https";
 import { classifyEditorialEvidence } from "../utils/qualification.js";
 
 const http = axios.create({
@@ -30,13 +33,32 @@ const KEY_HUNTER = process.env.API_HUNTER_KEY || process.env.HUNTER_API_KEY;
 ============================================================ */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function safePublicUrl(value) {
+export function isPublicAddress(address) {
+  const value = String(address || "").replace(/^\\[|\\]$/g, "");
+  if (net.isIP(value) === 6) return /^[23][0-9a-f]{3}:/i.test(value) && !/^2001:(?:db8|0):/i.test(value);
+  if (net.isIP(value) !== 4) return false;
+  const [a, b] = value.split(".").map(Number);
+  return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && [0, 168].includes(b)) || (a === 198 && [18, 19, 51].includes(b)) || (a === 203 && b === 0));
+}
+
+async function safePublicUrl(value) {
   let url;
   try { url = new URL(String(value || "")); } catch { return null; }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.port) return null;
-  const hostname = url.hostname.toLowerCase();
-  if (net.isIP(hostname) || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname === "metadata.google.internal") return null;
-  return url;
+  const hostname = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")
+    || hostname.endsWith(".internal") || hostname.endsWith(".home.arpa") || hostname === "metadata.google.internal") return null;
+  const addresses = net.isIP(hostname)
+    ? [{ address: hostname, family: net.isIP(hostname) }]
+    : await lookup(hostname, { all: true });
+  if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) return null;
+  const pinnedLookup = (_host, options, callback) => options?.all
+    ? callback(null, addresses)
+    : callback(null, addresses[0].address, addresses[0].family);
+  const Agent = url.protocol === "https:" ? httpsModule.Agent : httpModule.Agent;
+  return { url, agent: new Agent({ lookup: pinnedLookup }) };
 }
 
 function stripMarkup(value) {
@@ -64,19 +86,26 @@ function stripMarkup(value) {
 
 export async function verifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", sourceSnippet = "" } = {}) {
   const retrievedAt = new Date().toISOString();
-  const url = safePublicUrl(sourceUrl);
-  if (!url) return classifyEditorialEvidence({ sourceUrl, sourceTitle, sourceSnippet, retrievedAt });
+  let target = null;
+  try { target = await safePublicUrl(sourceUrl); } catch { target = null; }
+  if (!target) return classifyEditorialEvidence({ sourceUrl, sourceTitle, sourceSnippet, retrievedAt });
   try {
-    const response = await editorialHttp.get(url.toString(), { headers: { "User-Agent": "Jonathan-Harris-Outreach/1.0" } });
+    const response = await editorialHttp.get(target.url.toString(), {
+      headers: { "User-Agent": "Jonathan-Harris-Outreach/1.0" },
+      httpAgent: target.agent,
+      httpsAgent: target.agent,
+    });
     return classifyEditorialEvidence({
-      sourceUrl: response.request?.res?.responseUrl || url.toString(),
+      sourceUrl: target.url.toString(),
       sourceTitle,
       sourceSnippet,
       pageText: stripMarkup(response.data),
       retrievedAt,
     });
   } catch {
-    return classifyEditorialEvidence({ sourceUrl: url.toString(), sourceTitle, sourceSnippet, retrievedAt });
+    return classifyEditorialEvidence({ sourceUrl: target.url.toString(), sourceTitle, sourceSnippet, retrievedAt });
+  } finally {
+    target.agent.destroy();
   }
 }
 
