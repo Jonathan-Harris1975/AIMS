@@ -2,6 +2,14 @@
 
 **Live route prefix:** `/outreach`
 
+## Book Feature Outreach assessment
+
+This is a separate service under `/outreach/book-feature`. It shares the Comms Hub D1 infrastructure and suppression domain but has its own campaigns, occurrence leases, evidence, opportunity, permission, outbox and audit tables in migration `0028_book_feature_outreach`. No sender or live pilot path is present. Mode defaults to `assessment`; the environment value `BOOK_FEATURE_OUTREACH_MODE=disabled` or `suspended` takes precedence over stored settings. An authenticated `PUT /outreach/book-feature/mode` accepts only `disabled`, `assessment`, `shadow` or `suspended`, with an expected configuration version. Live modes require a separate accepted implementation and cannot be enabled here.
+
+MAST owns the Tuesday/Thursday 09:00 Europe/London schedule. It remains manually registered until the AIMS migration and endpoint are deployed and the MAST deployment switch is enabled. `POST /outreach/book-feature/run` accepts the 09:00–11:00 local catch-up window, claims a durable per-date lease and returns an asynchronous job. Poll the returned URL, which must confirm a terminal result; HTTP 202 alone is not completion. Duplicate/overlapping runs do not dispatch. Tuesday and Thursday pin one exact weekly catalogue book, fail if the featured source changes or falls back, and read the private manuscript by its catalogue R2 key. Extracted pages are cached by PDF checksum and extractor configuration; the report remains private. These runs enumerate unverified textual candidates only and report **zero verified opportunities** until entity, contact, compliance and QA gates are implemented.
+
+`POST /outreach/book-feature/assessment/three-books` runs a reproducible read-only feasibility sample, retaining failures rather than replacing selected books. Both assessment endpoints are protected by the suite bearer token. Private R2 report keys must not be disclosed publicly. No outbound communications or endorsements are authorised by these routes. Production acceptance remains tracked in issue #498.
+
 AIMS Outreach is a guest-article acquisition pipeline. Discovery and qualification remain deterministic; qualified business editorial contacts can then move through an automated cold pitch, one restrained follow-up, inbound-reply classification, article research, premium drafting, independent editorial review, bounded repair, revision handling and threaded delivery.
 
 ## HTTP contract

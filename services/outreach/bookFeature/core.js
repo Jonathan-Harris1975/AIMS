@@ -29,6 +29,18 @@ export function londonOccurrence(date) {
   return { id: `book-feature:${localDate}`, day: parts.weekday, localDate, week: isoWeek(new Date(`${localDate}T12:00:00Z`)) };
 }
 
+export function scheduledLondonOccurrence(date, catchUpMinutes = 120) {
+  if (!Number.isFinite(date.getTime()) || !Number.isInteger(catchUpMinutes) || catchUpMinutes < 0 || catchUpMinutes > 120) return null;
+  const format = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", year: "numeric",
+    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const parts = Object.fromEntries(format.formatToParts(date).map(({ type, value }) => [type, value]));
+  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+  if (!["Tue", "Thu"].includes(parts.weekday) || minuteOfDay < 540 || minuteOfDay > 540 + catchUpMinutes) return null;
+  const localDate = `${parts.year}-${parts.month}-${parts.day}`;
+  return { id: `book-feature:${localDate}`, day: parts.weekday, localDate,
+    week: isoWeek(new Date(`${localDate}T12:00:00Z`)) };
+}
+
 export function selectSample(books, seed, count = 3) {
   const eligible = books.filter((book) => Number.isSafeInteger(book.ebookId) && book.ebookId > 0 &&
     book.storageBucket === "kdp" && /^Manuscripts pdf format\/.+\.pdf$/i.test(book.manuscriptR2Key) && book.publicationDate);
