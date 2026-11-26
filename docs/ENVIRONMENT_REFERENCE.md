@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **540**
-- Present in curated templates: **407**
+- Runtime variables referenced in production code: **542**
+- Present in curated templates: **409**
 - Not present in curated templates: **133**
 
 | Variable | Curated template | Production references |
@@ -439,7 +439,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `SITE_SHELL_ALLOWED_HOSTS` | Yes | services/shared/utils/siteShell.js:30 |
 | `SITE_SHELL_MANIFEST_URL` | Yes | services/shared/utils/siteShell.js:120 |
 | `SITE_SHELL_SYNC_SHARED_SECRET` | Yes | services/shared/middleware/suiteAuth.js:72 |
-| `SOCIAL_ARTWORK_PROVIDER_ATTEMPTS` | No | services/artwork/utils/openrouterImagePayload.js:165 |
+| `SOCIAL_IMAGE_QA_THRESHOLD` | Yes | services/blotato/utils/imageQualityGovernance.js:89 |\n| `SOCIAL_ARTWORK_PROVIDER_ATTEMPTS` | No | services/artwork/utils/openrouterImagePayload.js:165 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_RELEVANCE` | Yes | services/artwork/artwork.js:240<br>services/artwork/utils/artwork.js:269 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_SCORE` | Yes | services/artwork/artwork.js:239<br>services/artwork/utils/artwork.js:268 |
 | `SOCIAL_ARTWORK_VISUAL_QA_ADVISORY_MIN_TEXT_SAFETY` | Yes | services/artwork/artwork.js:241<br>services/artwork/utils/artwork.js:270 |
@@ -554,4 +554,4 @@ This inventory makes the runtime configuration contract auditable without duplic
 ## Governance
 
 CI runs `npm run env:reference:check`. Any new, removed or renamed production environment dependency changes this generated file and fails verification until the reference is deliberately regenerated and reviewed. Secrets must never be written into this document.
-
+| `APPROVED_IMAGE_MODELS` | Yes | services/blotato/utils/imageQualityGovernance.js:9 |\n
