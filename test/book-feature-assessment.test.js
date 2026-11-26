@@ -39,6 +39,23 @@ test("featured metadata, passage matching, scoring and dispatch mode fail closed
   assert.equal(effectiveMode("suspended", "production"), "suspended");
 });
 
+test("conditional Book Feature scores require enhanced validation and preserve mandatory gates", () => {
+  const gates = { evidence: true, identity: true, contact: true, lawfulBasis: true, suppression: true,
+    duplicate: true, qa: true, campaign: true, authorisation: true };
+  const components = { depth: 15, positiveContext: 12, mutualBenefit: 12, currentRelevance: 10, audienceAlignment: 6, relationshipPotential: 5 };
+  const conditional = scoreOpportunity(components, gates);
+  assert.equal(conditional.score, 60);
+  assert.equal(conditional.tier, "conditional");
+  assert.equal(conditional.eligible, false);
+  assert.ok(conditional.failedGates.includes("enhancedValidation"));
+  assert.equal(scoreOpportunity(components, { ...gates, enhancedValidation: true }).eligible, true);
+  const strong = scoreOpportunity({ ...components, depth: 25 }, gates);
+  assert.equal(strong.score, 70);
+  assert.equal(strong.tier, "strong");
+  assert.equal(strong.eligible, true);
+  assert.equal(scoreOpportunity({ ...components, depth: 25, positiveContext: 7 }, { ...gates, evidence: false }).eligible, false);
+});
+
 test("London 09:00 occurrences preserve wall time across BST and GMT", () => {
   assert.equal(londonOccurrence(new Date("2026-07-07T08:00:00Z"))?.day, "Tue");
   assert.equal(londonOccurrence(new Date("2026-12-08T09:00:00Z"))?.day, "Tue");
