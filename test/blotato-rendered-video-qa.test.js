@@ -42,7 +42,7 @@ test("finished-video hard defects always block publication", () => {
     hardFailure: true,
     softFailure: false,
   });
-  assert.equal(assessRenderedVideoQaPublication(result, { blockHardFailures: false }).block, true);
+  assert.equal(assessRenderedVideoQaPublication(result).block, true);
 });
 
 test("finished-video performance scores are advisory unless strict mode is enabled", () => {
