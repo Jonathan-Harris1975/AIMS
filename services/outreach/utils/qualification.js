@@ -16,7 +16,7 @@ export const CONTRIBUTOR_INTENT_PHRASES = Object.freeze([
 ]);
 
 const PAID_ONLY_RE = /\b(?:paid placement|sponsored post(?:s)? only|advertorial(?:s)? only|pay(?:ment)? to publish|link insertion fee|guest post fee)\b/i;
-const EXPLICIT_REFUSAL_RE = /\b(?:we|our|this (?:site|publication)|the site)\s+(?:do not|don't|does not|doesn't|no longer|are not|aren't)\s+(?:accept|take|consider)\b[\s\S]{0,120}\b(?:guest|contribut|external|article|pitch|submission|opinion)\b|\b(?:guest posts?|contributions?|submissions?|pitches?|contributed articles?)\s+(?:are|is)\s+(?:currently\s+)?(?:closed|not accepted|not being accepted)\b|\bnot accepting\b[\s\S]{0,80}\b(?:guest|contribut|article|pitch|submission)\b/i;
+const EXPLICIT_REFUSAL_RE = /\b(?:we|our|this (?:site|publication)|the site)\s+(?:do not|don't|does not|doesn't|no longer|are not|aren't)\s+(?:accept|take|consider)\s+(?:any\s+)?(?:guest\s+(?:posts?|articles?|contributions?)|contributed\s+articles?|external\s+(?:authors?|contributions?)|(?:articles?|pitches?|submissions?)\s+from\s+(?:guest|external)\s+authors?)\b|\b(?:guest\s+(?:posts?|articles?|contributions?)|contributed\s+articles?|external\s+(?:authors?|contributions?))\s+(?:are|is)\s+(?:currently\s+)?(?:closed|not accepted|not being accepted)\b|\bnot accepting\s+(?:guest\s+(?:posts?|articles?|contributions?)|contributed\s+articles?|external\s+(?:authors?|contributions?)|(?:articles?|pitches?|submissions?)\s+from\s+external\s+authors?)\b/i;
 const EXPLICIT_ACCEPTANCE_RE = new RegExp(
   "\\b(?:write for us|contributor guidelines|guest contributors?|submit (?:an )?(?:article|pitch)|"
   + "editorial submissions?|opinion submissions?|expert commentary|practitioner perspectives|"
