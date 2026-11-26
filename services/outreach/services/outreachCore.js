@@ -1,8 +1,6 @@
 import axios from "axios";
-import { lookup } from "node:dns/promises";
+import dns from "node:dns/promises";
 import net from "node:net";
-import httpModule from "node:http";
-import httpsModule from "node:https";
 import { classifyEditorialEvidence } from "../utils/qualification.js";
 
 const http = axios.create({
@@ -33,35 +31,48 @@ const KEY_HUNTER = process.env.API_HUNTER_KEY || process.env.HUNTER_API_KEY;
 ============================================================ */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function isPublicAddress(address) {
-  const value = String(address || "").replace(/^\[|\]$/g, "");
-  if (net.isIP(value) === 6) return /^[23][0-9a-f]{3}:/i.test(value) && !/^2001:(?:db8|0):/i.test(value);
-  if (net.isIP(value) !== 4) return false;
-  const [a, b] = value.split(".").map(Number);
-  return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127)
-    || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
-    || (a === 192 && ((b === 0 && [0, 2].includes(Number(value.split(".")[2]))) || b === 168))
-    || (a === 198 && [18, 19].includes(b))
-    || (a === 198 && b === 51 && Number(value.split(".")[2]) === 100)
-    || (a === 203 && b === 0 && Number(value.split(".")[2]) === 113));
-}
-
-async function safePublicUrl(value) {
+function safePublicUrl(value) {
   let url;
   try { url = new URL(String(value || "")); } catch { return null; }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.port) return null;
-  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")
-    || hostname.endsWith(".internal") || hostname.endsWith(".home.arpa") || hostname === "metadata.google.internal") return null;
-  const addresses = net.isIP(hostname)
-    ? [{ address: hostname, family: net.isIP(hostname) }]
-    : await lookup(hostname, { all: true });
-  if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) return null;
-  const pinnedLookup = (_host, options, callback) => options?.all
-    ? callback(null, addresses)
-    : callback(null, addresses[0].address, addresses[0].family);
-  const Agent = url.protocol === "https:" ? httpsModule.Agent : httpModule.Agent;
-  return { url, agent: new Agent({ lookup: pinnedLookup }) };
+  const hostname = url.hostname.toLowerCase();
+  if (net.isIP(hostname.replace(/^\[|\]$/g, "")) || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname === "metadata.google.internal") return null;
+  return url;
+}
+
+export function isPublicAddress(address) {
+  const value = String(address || "").toLowerCase().replace(/^\[|\]$/g, "");
+  const family = net.isIP(value);
+  if (family === 4) {
+    const octets = value.split(".").map(Number);
+    const [first, second] = octets;
+    const third = octets[2];
+    return first !== 0 && first < 224
+      && first !== 10 && first !== 127 && !(first === 169 && second === 254)
+      && !(first === 172 && second >= 16 && second <= 31)
+      && !(first === 192 && ((second === 0 && [0, 2].includes(third)) || second === 168))
+      && !(first === 192 && second === 168)
+      && !(first === 198 && (second === 18 || second === 19))
+      && !(first === 198 && second === 51 && third === 100)
+      && !(first === 203 && second === 0 && third === 113)
+      && !(first === 100 && second >= 64 && second <= 127);
+  }
+  if (family === 6) {
+    if (value === "::" || value === "::1" || value.startsWith("fc") || value.startsWith("fd")
+      || /^(?:fe[89ab]|ff)/.test(value) || value.startsWith("2001:db8:")) return false;
+    if (value.startsWith("::ffff:")) return isPublicAddress(value.slice(7));
+    return true;
+  }
+  return false;
+}
+
+async function resolvePublicAddress(url) {
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const family = net.isIP(hostname);
+  const records = family ? [{ address: hostname, family }] : await dns.lookup(hostname, { all: true, verbatim: true });
+  const publicRecords = records.filter((record) => isPublicAddress(record.address));
+  if (!publicRecords.length || publicRecords.length !== records.length) return null;
+  return publicRecords[0];
 }
 
 function stripMarkup(value) {
@@ -89,26 +100,27 @@ function stripMarkup(value) {
 
 export async function verifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", sourceSnippet = "" } = {}) {
   const retrievedAt = new Date().toISOString();
-  let target = null;
-  try { target = await safePublicUrl(sourceUrl); } catch { target = null; }
-  if (!target) return classifyEditorialEvidence({ sourceUrl, sourceTitle, sourceSnippet, retrievedAt });
+  const url = safePublicUrl(sourceUrl);
+  if (!url) return classifyEditorialEvidence({ sourceUrl, sourceTitle, sourceSnippet, retrievedAt });
   try {
-    const response = await editorialHttp.get(target.url.toString(), {
+    const resolved = await resolvePublicAddress(url);
+    if (!resolved) return classifyEditorialEvidence({ sourceUrl: url.toString(), sourceTitle, sourceSnippet, retrievedAt });
+    const response = await editorialHttp.get(url.toString(), {
       headers: { "User-Agent": "Jonathan-Harris-Outreach/1.0" },
-      httpAgent: target.agent,
-      httpsAgent: target.agent,
+      lookup: (hostname, options, callback) => {
+        if (hostname !== url.hostname) return callback(new Error("editorial hostname changed during request"));
+        return callback(null, resolved.address, resolved.family);
+      },
     });
     return classifyEditorialEvidence({
-      sourceUrl: target.url.toString(),
+      sourceUrl: response.request?.res?.responseUrl || url.toString(),
       sourceTitle,
       sourceSnippet,
       pageText: stripMarkup(response.data),
       retrievedAt,
     });
   } catch {
-    return classifyEditorialEvidence({ sourceUrl: target.url.toString(), sourceTitle, sourceSnippet, retrievedAt });
-  } finally {
-    target.agent.destroy();
+    return classifyEditorialEvidence({ sourceUrl: url.toString(), sourceTitle, sourceSnippet, retrievedAt });
   }
 }
 
