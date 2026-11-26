@@ -77,7 +77,6 @@ export function relevanceScore(keyword = "", evidence = {}) {
   const meaningfulTopicMatch = matchingTerms.length > 0
     && matchingTerms.length >= Math.max(1, Math.ceil(topicTerms.length / 2));
   if (directTopicMatch || meaningfulTopicMatch) return 25;
-  if (directTopicMatch || meaningfulTopicMatch || (topicSignal.test(topic) && topicSignal.test(evidenceText))) return 15;
   if (topicSignal.test(topic)) return 15;
   return 0;
 }
