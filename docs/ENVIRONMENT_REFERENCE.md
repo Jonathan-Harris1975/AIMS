@@ -34,12 +34,12 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1330<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
 | `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:269 |
 | `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:186<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:76 |
-| `API_HUNTER_KEY` | Yes | services/outreach/services/outreachCore.js:26 |
+| `API_HUNTER_KEY` | Yes | services/outreach/services/outreachCore.js:27 |
 | `API_KEY_PODCAST_INDEX` | Yes | services/shared/utils/podcastIndexClient.js:31 |
-| `API_OPENPAGERANK_KEY` | Yes | services/outreach/services/outreachCore.js:23 |
+| `API_OPENPAGERANK_KEY` | Yes | services/outreach/services/outreachCore.js:24 |
 | `API_SECRET_PODCAST_INDEX` | Yes | services/shared/utils/podcastIndexClient.js:32 |
-| `API_SERP_KEY` | Yes | services/outreach/services/outreachCore.js:22 |
-| `API_URLSCAN_KEY` | Yes | services/outreach/services/outreachCore.js:25 |
+| `API_SERP_KEY` | Yes | services/outreach/services/outreachCore.js:23 |
+| `API_URLSCAN_KEY` | Yes | services/outreach/services/outreachCore.js:26 |
 | `API_ZERO_KEY` | Yes | services/outreach/services/zeroBounceBatch.js:21 |
 | `APP_ENV` | No | scripts/performanceGate.js:6<br>server.js:400 |
 | `APP_STATE_DIR` | Yes | services/shared/utils/stateFile.js:10 |
@@ -267,7 +267,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `HEADROOM_ROUTES` | Yes | services/shared/utils/headroom.js:96 |
 | `HEADROOM_TARGET_RATIO` | Yes | services/shared/utils/headroom.js:288 |
 | `HEADROOM_TIMEOUT_MS` | Yes | services/shared/utils/headroom.js:287 |
-| `HUNTER_API_KEY` | Yes | services/outreach/services/outreachCore.js:26 |
+| `HUNTER_API_KEY` | Yes | services/outreach/services/outreachCore.js:27 |
 | `HUNTER_DELAY_MS` | Yes | services/outreach/services/zeroBounceBatch.js:18 |
 | `INTERNAL_BASE_HOST` | Yes | routes/podcast-pipeline.js:15 |
 | `INTERNAL_BASE_PROTO` | Yes | routes/podcast-pipeline.js:16 |
@@ -308,7 +308,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:14 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:15 |
 | `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:551<br>audits/utils/onBrandAudit.js:566<br>audits/utils/onBrandAudit.js:605 |
-| `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:199 |
+| `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:240 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |
 | `OPENROUTER_APP_NAME` | Yes | ai-config.js:382<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:374 |
@@ -328,7 +328,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_SITE_URL` | Yes | ai-config.js:381<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:373 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:186 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
-| `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:86 |
+| `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:88 |
 | `OUTREACH_BATCH_CYCLE` | Yes | services/outreach/services/batchService.js:151 |
 | `OUTREACH_BATCH_SIZE` | Yes | services/outreach/services/batchService.js:147<br>services/outreach/utils/r2ProgressStore.js:7 |
 | `OUTREACH_KEYWORDS_FILE` | No | services/outreach/utils/keywordLoader.js:27<br>services/outreach/utils/keywordLoader.js:32 |
@@ -453,7 +453,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `STATE_REMOTE_PREFIX` | Yes | services/shared/utils/stateFile.js:13 |
 | `TRUST_PROXY` | Yes | server.js:113 |
 | `URLENCODED_BODY_LIMIT` | Yes | server.js:388 |
-| `URLSCAN_API_KEY` | Yes | services/outreach/services/outreachCore.js:25 |
+| `URLSCAN_API_KEY` | Yes | services/outreach/services/outreachCore.js:26 |
 | `WEBHOOK_TIMEOUT_MS` | Yes | services/podcast/runPodcastPipeline.js:21 |
 | `WEBSITE_AUDIT_CHILD_RECONCILE_AFTER_MS` | No | audits/utils/websiteAuditPipeline.js:47 |
 | `WEBSITE_AUDIT_CHILD_RECONCILE_INTERVAL_MS` | No | audits/utils/websiteAuditPipeline.js:48 |
