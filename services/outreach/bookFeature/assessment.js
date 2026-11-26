@@ -42,13 +42,14 @@ export async function extractManuscript(buffer, { documentLoader = getDocument }
 
 export function validateExtraction(extraction, { sha256, configVersion } = {}) {
   if (!extraction || !Number.isSafeInteger(extraction.totalPages) || extraction.totalPages < 1 ||
-      !Array.isArray(extraction.pages) || extraction.pages.length !== extraction.totalPages) return false;
+      !Array.isArray(extraction.pages) || extraction.pages.length !== extraction.totalPages ||
+      extraction.coverageComplete !== true) return false;
   if (sha256 && extraction.sha256 !== sha256) return false;
   if (configVersion && extraction.configVersion !== configVersion) return false;
   const indices = extraction.pages.map((page) => page?.pdfPage);
   if (indices.some((page, index) => page !== index + 1)) return false;
   const deficient = extraction.pages.some((page) => page?.readable !== true || typeof page?.text !== "string");
-  return extraction.complete === (extraction.coverageComplete !== false && !deficient) && !deficient;
+  return extraction.complete === true && !deficient;
 }
 
 // Candidate enumeration is deliberately conservative: no unverified name or passage becomes an outreach claim.
