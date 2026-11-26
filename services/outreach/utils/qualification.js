@@ -17,7 +17,8 @@ export const CONTRIBUTOR_INTENT_PHRASES = Object.freeze([
 
 const PAID_ONLY_RE = /\b(?:paid placement|sponsored post(?:s)? only|advertorial(?:s)? only|pay(?:ment)? to publish|link insertion fee|guest post fee)\b/i;
 const EXPLICIT_REFUSAL_RE = new RegExp(
-  "\\b(?:do not|don't|does not|doesn't|not currently|no longer|not accepting|closed to|not open to)\\b"
+  "\\b(?:(?:do not|don't|does not|doesn't)\\s+(?:currently\\s+)?(?:accept|take|welcome|consider|allow)|"
+  + "(?:not|no longer)\\s+(?:currently\\s+)?accept(?:ing|ed)?|closed\\s+to|not\\s+open\\s+to)\\b"
   + "[^.!?]{0,160}\\b(?:contribut(?:e|ed|or|ors|ion)|guest(?: post| author| article| contribution)?s?|"
   + "external author(?:s)?|article submissions?|pitches?|opinion submissions?|outside authors?)\\b",
   "i"
@@ -68,10 +69,11 @@ export function relevanceScore(keyword = "", evidence = {}) {
   const topic = cleanText(keyword).toLowerCase();
   const evidenceText = cleanText(`${evidence.supportingExcerpt || ""} ${evidence.evidenceUrl || ""}`).toLowerCase();
   const topicSignal = /\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech)\b/i;
-  const topicTerms = topic.match(/[a-z0-9]+/g)?.filter((term) => term.length > 2) || [];
+  const topicTerms = topic.match(/[a-z0-9]+/g)?.filter((term) => term.length > 2 || ["ai", "ml"].includes(term)) || [];
   const evidenceTerms = new Set(evidenceText.match(/[a-z0-9]+/g) || []);
   const matchingTerms = topicTerms.filter((term) => evidenceTerms.has(term));
-  const directTopicMatch = topic.length >= 4 && evidenceText.includes(topic);
+  const escapedTopic = topic.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const directTopicMatch = topic.length >= 2 && new RegExp(`\\b${escapedTopic}\\b`, "i").test(evidenceText);
   const meaningfulTopicMatch = matchingTerms.length > 0
     && matchingTerms.length >= Math.max(1, Math.ceil(topicTerms.length / 2));
   if (directTopicMatch || meaningfulTopicMatch) return 25;
