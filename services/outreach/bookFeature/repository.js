@@ -90,7 +90,7 @@ export class BookFeatureRepository {
         const passage = String(occurrence?.passage || "").trim();
         if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(offset) || offset < 0 ||
             passage.length < 20 || passage.length > 2000 || !passage.toLowerCase().includes(name.toLowerCase())) continue;
-        const id = createHash("sha256").update([campaignId, manuscriptSha256.toLowerCase(), page, offset, name.toLocaleLowerCase()].join("\u001f")).digest("hex");
+        const id = createHash("sha256").update([campaignId, manuscriptSha256.toLowerCase(), page, offset, name.toLowerCase()].join("\u001f")).digest("hex");
         statements.push({ sql: `INSERT OR IGNORE INTO book_feature_evidence
           (id,campaign_id,organisation_id,manuscript_sha256,pdf_page,text_offset,passage,validation,evidence_class,created_at)
           VALUES (?,?,NULL,?,?,?,?, 'candidate','direct',?)`,
