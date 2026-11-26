@@ -1,4 +1,5 @@
 import axios from "axios";
+import dns from "node:dns/promises";
 import net from "node:net";
 import { classifyEditorialEvidence } from "../utils/qualification.js";
 
@@ -35,8 +36,40 @@ function safePublicUrl(value) {
   try { url = new URL(String(value || "")); } catch { return null; }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.port) return null;
   const hostname = url.hostname.toLowerCase();
-  if (net.isIP(hostname) || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname === "metadata.google.internal") return null;
+  if (net.isIP(hostname.replace(/^\[|\]$/g, "")) || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname === "metadata.google.internal") return null;
   return url;
+}
+
+function isPublicAddress(address) {
+  const value = String(address || "").toLowerCase().replace(/^\[|\]$/g, "");
+  const family = net.isIP(value);
+  if (family === 4) {
+    const octets = value.split(".").map(Number);
+    const [first, second] = octets;
+    return first !== 0 && first < 224
+      && first !== 10 && first !== 127 && first !== 169
+      && !(first === 172 && second >= 16 && second <= 31)
+      && !(first === 192 && second === 0)
+      && !(first === 192 && second === 168)
+      && !(first === 198 && (second === 18 || second === 19))
+      && !(first === 100 && second >= 64 && second <= 127);
+  }
+  if (family === 6) {
+    if (value === "::" || value === "::1" || value.startsWith("fc") || value.startsWith("fd")
+      || /^(?:fe[89ab]|ff)/.test(value) || value.startsWith("2001:db8:")) return false;
+    if (value.startsWith("::ffff:")) return isPublicAddress(value.slice(7));
+    return true;
+  }
+  return false;
+}
+
+async function resolvePublicAddress(url) {
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const family = net.isIP(hostname);
+  const records = family ? [{ address: hostname, family }] : await dns.lookup(hostname, { all: true, verbatim: true });
+  const publicRecords = records.filter((record) => isPublicAddress(record.address));
+  if (!publicRecords.length || publicRecords.length !== records.length) return null;
+  return publicRecords[0];
 }
 
 function stripMarkup(value) {
@@ -67,7 +100,15 @@ export async function verifyEditorialEvidence({ sourceUrl = "", sourceTitle = ""
   const url = safePublicUrl(sourceUrl);
   if (!url) return classifyEditorialEvidence({ sourceUrl, sourceTitle, sourceSnippet, retrievedAt });
   try {
-    const response = await editorialHttp.get(url.toString(), { headers: { "User-Agent": "Jonathan-Harris-Outreach/1.0" } });
+    const resolved = await resolvePublicAddress(url);
+    if (!resolved) return classifyEditorialEvidence({ sourceUrl: url.toString(), sourceTitle, sourceSnippet, retrievedAt });
+    const response = await editorialHttp.get(url.toString(), {
+      headers: { "User-Agent": "Jonathan-Harris-Outreach/1.0" },
+      lookup: (hostname, options, callback) => {
+        if (hostname !== url.hostname) return callback(new Error("editorial hostname changed during request"));
+        return callback(null, resolved.address, resolved.family);
+      },
+    });
     return classifyEditorialEvidence({
       sourceUrl: response.request?.res?.responseUrl || url.toString(),
       sourceTitle,
