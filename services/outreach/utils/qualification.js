@@ -16,7 +16,21 @@ export const CONTRIBUTOR_INTENT_PHRASES = Object.freeze([
 ]);
 
 const PAID_ONLY_RE = /\b(?:paid placement|sponsored post(?:s)? only|advertorial(?:s)? only|pay(?:ment)? to publish|link insertion fee|guest post fee)\b/i;
-const EXPLICIT_REFUSAL_RE = /\b(?:we|our|this (?:site|publication)|the site)\s+(?:do not|don't|does not|doesn't|no longer|are not|aren't)\s+(?:accept|take|consider)\s+(?:any\s+)?(?:guest\s+(?:posts?|articles?|contributions?)|contributed\s+articles?|external\s+(?:authors?|contributions?)|(?:articles?|pitches?|submissions?)\s+from\s+(?:guest|external)\s+authors?)\b|\b(?:guest\s+(?:posts?|articles?|contributions?)|contributed\s+articles?|external\s+(?:authors?|contributions?))\s+(?:are|is)\s+(?:currently\s+)?(?:closed|not accepted|not being accepted)\b|\bnot accepting\s+(?:guest\s+(?:posts?|articles?|contributions?)|contributed\s+articles?|external\s+(?:authors?|contributions?)|(?:articles?|pitches?|submissions?)\s+from\s+external\s+authors?)\b/i;
+const EXPLICIT_REFUSAL_RE = new RegExp(
+  "\\b(?:we|our|this (?:site|publication)|the site)\\s+"
+  + "(?:do not|don't|does not|doesn't|no longer|are not|aren't)\\s+"
+  + "(?:accept|take|consider)\\s+(?:any\\s+)?"
+  + "(?:guest\\s+(?:posts?|articles?|contributions?)|contributed\\s+articles?|"
+  + "external\\s+(?:authors?|contributions?)|(?:articles?|pitches?|submissions?)\\s+"
+  + "from\\s+(?:guest|external)\\s+authors?)\\b"
+  + "|\\b(?:guest\\s+(?:posts?|articles?|contributions?)|contributed\\s+articles?|"
+  + "external\\s+(?:authors?|contributions?))\\s+(?:are|is)\\s+"
+  + "(?:currently\\s+)?(?:closed|not accepted|not being accepted)\\b"
+  + "|\\bnot accepting\\s+(?:guest\\s+(?:posts?|articles?|contributions?)|"
+  + "contributed\\s+articles?|external\\s+(?:authors?|contributions?)|"
+  + "(?:articles?|pitches?|submissions?)\\s+from\\s+external\\s+authors?)\\b",
+  "i"
+);
 const EXPLICIT_ACCEPTANCE_RE = new RegExp(
   "\\b(?:write for us|contributor guidelines|guest contributors?|submit (?:an )?(?:article|pitch)|"
   + "editorial submissions?|opinion submissions?|expert commentary|practitioner perspectives|"
@@ -26,7 +40,14 @@ const EXPLICIT_ACCEPTANCE_RE = new RegExp(
 const EXTERNAL_AUTHOR_RE = /\b(?:guest authors?|contributors?|external authors?|opinion writer|expert commentary|practitioner perspective|contributed articles?)\b/i;
 const EDITORIAL_ROUTE_RE = /\b(?:editor(?:ial)?|submissions?|contribute|pitch|author|writer|contact)\b/i;
 const RECENT_ACTIVITY_RE = /\b(?:202[4-9]|202[0-9]|updated|recent|latest|this month|this year)\b/i;
-const TOPIC_SIGNAL_RE = /\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech|predictive|decision|systems|model|monitoring|production|workflow|agent|agents|operations|governance|risk|compliance|security|software|cloud|robotics|strategy|leadership|marketing|content|creator|author)\b/i;
+const TOPIC_SIGNAL_RE = new RegExp(
+  "\\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|"
+  + "cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech|"
+  + "predictive|decision|systems|model|monitoring|production|workflow|agent|agents|"
+  + "operations|governance|risk|compliance|security|software|cloud|robotics|strategy|"
+  + "leadership|marketing|content|creator|author)\\b",
+  "i"
+);
 const TOPIC_STOP_WORDS = new Set(["the", "and", "for", "with", "from", "into", "about", "this", "that", "your", "our", "how", "why", "what"]);
 
 function cleanText(value, limit = 6000) {
