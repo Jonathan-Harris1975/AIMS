@@ -90,7 +90,9 @@ export class BookFeatureRepository {
         const page = Number(occurrence?.pdfPage);
         const offset = Number(occurrence?.offset);
         const nameOffset = Number(occurrence?.nameOffsetInPassage);
-        const passage = String(occurrence?.passage || "").trim();
+        // Preserve the passage byte-for-byte: nameOffsetInPassage is relative to
+        // the original slice and trimming leading whitespace would shift it.
+        const passage = String(occurrence?.passage || "");
         if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(offset) || offset < 0 ||
             !Number.isSafeInteger(nameOffset) || nameOffset < 0 || nameOffset > passage.length - name.length ||
             passage.length < 20 || passage.length > 2000 ||
