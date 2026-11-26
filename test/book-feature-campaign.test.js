@@ -88,6 +88,7 @@ test("scheduled run holds the same weekly book and never dispatches", async (t) 
   const first = await runBookFeatureAssessment(base);
   assert.equal(first.status, "completed_zero");
   assert.equal(first.dispatched, 0);
+  assert.equal(Object.hasOwn(first, "privateReportKey"), false);
   assert.equal(writes.length, 1);
   assert.equal((await runBookFeatureAssessment(base)).status, "already_completed");
   const thursday = await runBookFeatureAssessment({ ...base, now: new Date("2026-07-09T08:00:00Z") });
