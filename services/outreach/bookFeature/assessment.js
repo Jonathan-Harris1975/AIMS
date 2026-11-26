@@ -20,15 +20,35 @@ export async function extractManuscript(buffer, { documentLoader = getDocument }
       const page = await document.getPage(index);
       const content = await page.getTextContent();
       const text = content.items.map((item) => item.str || "").join(" ").replace(/\s+/g, " ").trim();
-      pages.push({ pdfPage: index, text, characters: text.length, readable: text.length >= 30 });
+      // A page with no extractable text is not assumed to be genuinely blank:
+      // it may contain a scanned page that needs OCR. Keep it visible in the
+      // coverage manifest and fail the manuscript closed until it is reviewed.
+      const status = text.length >= 30 ? "readable" : text.length === 0 ? "no_text_content" : "insufficient_text";
+      pages.push({ pdfPage: index, text, characters: text.length, readable: status === "readable", status,
+        textOffsetStart: 0, textOffsetEnd: text.length });
       page.cleanup();
     }
   } finally {
     await task.destroy();
   }
   const deficient = pages.filter((page) => !page.readable).map((page) => page.pdfPage);
-  return { sha256, extractorVersion, pages, totalPages: pages.length, pagesAnalysed: pages.length - deficient.length,
-    deficientPages: deficient, complete: deficient.length === 0 };
+  const coverageComplete = pages.length === document.numPages &&
+    pages.every((page, index) => page.pdfPage === index + 1);
+  return { sha256, extractorVersion, pages, totalPages: document.numPages,
+    pagesProcessed: pages.length, pagesAnalysed: pages.length, readablePages: pages.length - deficient.length,
+    coverageComplete, deficientPages: deficient, complete: coverageComplete && deficient.length === 0,
+    coverageManifest: pages.map(({ pdfPage, characters, status }) => ({ pdfPage, characters, status })) };
+}
+
+export function validateExtraction(extraction, { sha256, configVersion } = {}) {
+  if (!extraction || !Number.isSafeInteger(extraction.totalPages) || extraction.totalPages < 1 ||
+      !Array.isArray(extraction.pages) || extraction.pages.length !== extraction.totalPages) return false;
+  if (sha256 && extraction.sha256 !== sha256) return false;
+  if (configVersion && extraction.configVersion !== configVersion) return false;
+  const indices = extraction.pages.map((page) => page?.pdfPage);
+  if (indices.some((page, index) => page !== index + 1)) return false;
+  const deficient = extraction.pages.some((page) => page?.readable !== true || typeof page?.text !== "string");
+  return extraction.complete === (extraction.coverageComplete !== false && !deficient) && !deficient;
 }
 
 // Candidate enumeration is deliberately conservative: no unverified name or passage becomes an outreach claim.
@@ -57,7 +77,7 @@ export async function assessBook(book, { readObject = getObjectAsBuffer, extract
     ebookId: book.ebookId, title: book.title, published: book.publicationDate, manuscriptSha256: extraction.sha256,
     extractorVersion: extraction.extractorVersion, totalPages: extraction.totalPages,
     pagesAnalysed: extraction.pagesAnalysed, deficientPages: extraction.deficientPages,
-    status: extraction.complete ? "candidate_review_required" : "blocked_incomplete_extraction",
+    status: extraction.complete && validateExtraction(extraction) ? "candidate_review_required" : "blocked_incomplete_extraction",
     candidates: extraction.complete ? candidateReferences(extraction) : [],
     qualifiedOpportunities: 0, contactEligibleOpportunities: 0,
     limitations: ["Names are unverified text candidates; ownership, sentiment, score, contact and legal eligibility require independent validation.",
