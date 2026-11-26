@@ -34,7 +34,7 @@ const KEY_HUNTER = process.env.API_HUNTER_KEY || process.env.HUNTER_API_KEY;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function isPublicAddress(address) {
-  const value = String(address || "").replace(/^\\[|\\]$/g, "");
+  const value = String(address || "").replace(/^\[|\]$/g, "");
   if (net.isIP(value) === 6) return /^[23][0-9a-f]{3}:/i.test(value) && !/^2001:(?:db8|0):/i.test(value);
   if (net.isIP(value) !== 4) return false;
   const [a, b] = value.split(".").map(Number);
@@ -47,7 +47,7 @@ async function safePublicUrl(value) {
   let url;
   try { url = new URL(String(value || "")); } catch { return null; }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.port) return null;
-  const hostname = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")
     || hostname.endsWith(".internal") || hostname.endsWith(".home.arpa") || hostname === "metadata.google.internal") return null;
   const addresses = net.isIP(hostname)
