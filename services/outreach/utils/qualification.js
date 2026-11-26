@@ -17,18 +17,10 @@ export const CONTRIBUTOR_INTENT_PHRASES = Object.freeze([
 
 const PAID_ONLY_RE = /\b(?:paid placement|sponsored post(?:s)? only|advertorial(?:s)? only|pay(?:ment)? to publish|link insertion fee|guest post fee)\b/i;
 const EXPLICIT_REFUSAL_RE = new RegExp(
-  "\\b(?:we|our|this (?:site|publication)|the site)\\s+"
-  + "(?:do not|don't|does not|doesn't|no longer|are not|aren't)\\s+"
-  + "(?:accept|take|consider)\\s+(?:any\\s+)?"
-  + "(?:guest\\s+(?:posts?|articles?|contributions?)|contributed\\s+articles?|"
-  + "external\\s+(?:authors?|contributions?)|(?:articles?|pitches?|submissions?)\\s+"
-  + "from\\s+(?:guest|external)\\s+authors?)\\b"
-  + "|\\b(?:guest\\s+(?:posts?|articles?|contributions?)|contributed\\s+articles?|"
-  + "external\\s+(?:authors?|contributions?))\\s+(?:are|is)\\s+"
-  + "(?:currently\\s+)?(?:closed|not accepted|not being accepted)\\b"
-  + "|\\bnot accepting\\s+(?:guest\\s+(?:posts?|articles?|contributions?)|"
-  + "contributed\\s+articles?|external\\s+(?:authors?|contributions?)|"
-  + "(?:articles?|pitches?|submissions?)\\s+from\\s+external\\s+authors?)\\b",
+  "\\b(?:(?:do not|don't|does not|doesn't)\\s+(?:currently\\s+)?(?:accept|take|welcome|consider|allow)|"
+  + "(?:not|no longer)\\s+(?:currently\\s+)?accept(?:ing|ed)?|closed\\s+to|not\\s+open\\s+to)\\b"
+  + "[^.!?]{0,160}\\b(?:contribut(?:e|ed|or|ors|ion)|guest(?: post| author| article| contribution)?s?|"
+  + "external author(?:s)?|article submissions?|pitches?|opinion submissions?|outside authors?)\\b",
   "i"
 );
 const EXPLICIT_ACCEPTANCE_RE = new RegExp(
@@ -40,37 +32,21 @@ const EXPLICIT_ACCEPTANCE_RE = new RegExp(
 const EXTERNAL_AUTHOR_RE = /\b(?:guest authors?|contributors?|external authors?|opinion writer|expert commentary|practitioner perspective|contributed articles?)\b/i;
 const EDITORIAL_ROUTE_RE = /\b(?:editor(?:ial)?|submissions?|contribute|pitch|author|writer|contact)\b/i;
 const RECENT_ACTIVITY_RE = /\b(?:202[4-9]|202[0-9]|updated|recent|latest|this month|this year)\b/i;
-const TOPIC_SIGNAL_RE = new RegExp(
-  "\\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|"
-  + "cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech|"
-  + "predictive|decision|systems|model|monitoring|production|workflow|agent|agents|"
-  + "operations|governance|risk|compliance|security|software|cloud|robotics|strategy|"
-  + "leadership|marketing|content|creator|author)\\b",
-  "i"
-);
-const TOPIC_STOP_WORDS = new Set(["the", "and", "for", "with", "from", "into", "about", "this", "that", "your", "our", "how", "why", "what"]);
 
 function cleanText(value, limit = 6000) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, limit);
 }
 
-function meaningfulTokens(value) {
-  return new Set(
-    String(value || "").toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => token.length > 2 && !TOPIC_STOP_WORDS.has(token)) || []
-  );
-}
-
 export function classifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", sourceSnippet = "", pageText = "", retrievedAt = new Date().toISOString() } = {}) {
   const text = cleanText(`${sourceTitle} ${sourceSnippet} ${pageText}`).toLowerCase();
-  const explicitRefusal = EXPLICIT_REFUSAL_RE.test(text);
   const paidOnly = PAID_ONLY_RE.test(text);
-  const explicitAcceptance = !explicitRefusal && EXPLICIT_ACCEPTANCE_RE.test(text);
+  const explicitAcceptance = EXPLICIT_ACCEPTANCE_RE.test(text);
+  const explicitRefusal = EXPLICIT_REFUSAL_RE.test(text);
   const externalAuthors = EXTERNAL_AUTHOR_RE.test(text);
   const editorialRoute = EDITORIAL_ROUTE_RE.test(text) || /\/(?:write|contribut|submit|pitch|editorial|author)/i.test(String(sourceUrl));
   const recentActivity = RECENT_ACTIVITY_RE.test(text);
   let classification = "unconfirmed";
-  if (explicitRefusal) classification = "unsuitable";
-  else if (paidOnly && !explicitAcceptance) classification = "unsuitable";
+  if (explicitRefusal || (paidOnly && !explicitAcceptance)) classification = "unsuitable";
   else if (explicitAcceptance) classification = "confirmed";
   else if (externalAuthors && editorialRoute) classification = "strong_probable";
 
@@ -93,10 +69,24 @@ export function classifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", so
 export function relevanceScore(keyword = "", evidence = {}) {
   const topic = cleanText(keyword).toLowerCase();
   const evidenceText = cleanText(`${evidence.supportingExcerpt || ""} ${evidence.evidenceUrl || ""}`).toLowerCase();
-  if (!TOPIC_SIGNAL_RE.test(topic)) return 0;
-  const overlap = [...meaningfulTokens(topic)].filter((token) => meaningfulTokens(evidenceText).has(token));
-  if (overlap.length) return 25;
-  return 15;
+  const topicSignal = new RegExp(
+    "\\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|"
+    + "cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech|"
+    + "predictive|decision|systems|model|monitoring|production|workflow|agent|agents|"
+    + "operations|governance|risk|compliance|security|software|cloud|robotics|strategy|"
+    + "leadership|marketing|content|creator|author)\\b",
+    "i"
+  );
+  const topicTerms = topic.match(/[a-z0-9]+/g)?.filter((term) => term.length > 2 || ["ai", "ml"].includes(term)) || [];
+  const evidenceTerms = new Set(evidenceText.match(/[a-z0-9]+/g) || []);
+  const matchingTerms = topicTerms.filter((term) => evidenceTerms.has(term));
+  const escapedTopic = topic.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const directTopicMatch = topic.length >= 2 && new RegExp(`\\b${escapedTopic}\\b`, "i").test(evidenceText);
+  const meaningfulTopicMatch = matchingTerms.length > 0
+    && matchingTerms.length >= Math.max(1, Math.ceil(topicTerms.length / 2));
+  if (directTopicMatch || meaningfulTopicMatch) return 25;
+  if (topicSignal.test(topic)) return 15;
+  return 0;
 }
 
 export function scoreOpportunity({ keyword = "", evidence = {}, contact = {}, validation = {}, authority = {}, historicalEngagement = null } = {}) {
