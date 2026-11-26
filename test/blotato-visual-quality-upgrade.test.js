@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { assertApprovedBlotatoTheme, buildCreativeBrief, buildHookCandidates, buildStoryboard, selectBlotatoTheme } from "../services/blotato/utils/creativeDirection.js";
-import { chooseImageModel, imageQualityScore, validateImageGovernance } from "../services/blotato/utils/imageQualityGovernance.js";
+import { chooseImageModel, imageQualityScore, resolveImageProviderPlan, validateImageGovernance } from "../services/blotato/utils/imageQualityGovernance.js";
 
 test("theme selection uses subject and only approved Blotato themes", () => {
   assert.equal(selectBlotatoTheme({ topic: "AI inference infrastructure costs" }).theme, "futuristic");
@@ -32,8 +32,27 @@ test("hooks are bounded and scored without extra model calls", () => {
 
 test("image governance rejects unauthorised and circular fallbacks", () => {
   assert.throws(() => validateImageGovernance({ model: "bad/model", allowedModels: ["good/model"] }), /Unauthorised/);
+  assert.throws(() => validateImageGovernance({ model: "good/model" }), /allowlist/i);
   assert.throws(() => validateImageGovernance({ model: "good/model", fallback: "good/model", allowedModels: ["good/model"] }), /CIRCULAR|differ/);
   assert.equal(chooseImageModel({ primary: "good/model", fallback: "fallback/model", attempt: 2, fallbackEnabled: true, allowedModels: ["good/model", "fallback/model"] }), "fallback/model");
+});
+
+test("image-provider plans stay inside the central route and bound fallback attempts", () => {
+  const providers = [
+    { model: "route/primary", id: "p" },
+    { model: "route/quality", id: "q" },
+    { model: "route/backup", id: "b" },
+  ];
+  const standard = resolveImageProviderPlan({ providers, maxAttempts: 2 });
+  assert.deepEqual(standard.models, ["route/primary", "route/quality"]);
+  const qualityFirst = resolveImageProviderPlan({
+    providers, primary: "route/primary", qualityTier: "route/quality", strategy: "quality-first", maxAttempts: 2,
+  });
+  assert.deepEqual(qualityFirst.models, ["route/quality", "route/primary"]);
+  const existingOnly = resolveImageProviderPlan({ providers, strategy: "existing-only" });
+  assert.deepEqual(existingOnly.models, ["route/primary"]);
+  assert.throws(() => resolveImageProviderPlan({ providers, fallback: "unapproved/model" }), /central artwork route/);
+  assert.throws(() => resolveImageProviderPlan({ providers: [] }), /No centrally configured image models/);
 });
 
 test("image score weights are calibrated to the requested 100-point framework", () => {

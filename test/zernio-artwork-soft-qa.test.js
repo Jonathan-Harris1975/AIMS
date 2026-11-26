@@ -43,15 +43,13 @@ const observedBackup = {
   },
 };
 
-test("Zernio uses the best generated image from the observed soft-QA results instead of a static fallback", () => {
+test("Zernio never selects an image that failed the complete visual-QA gate", () => {
   const selected = selectPublishableSocialArtworkCandidate([observedPrimary, observedBackup], {
     enabled: true,
     floors: { minScore: 55, minRelevance: 60, minTextSafety: 60 },
   });
 
-  assert.equal(selected?.base64, "primary-generated-image");
-  assert.equal(selected?.provider?.id, "image");
-  assert.deepEqual(selected?.qa?.hardDefects, []);
+  assert.equal(selected, null);
 });
 
 test("Tuesday's 66/72, relevance-68 near-miss receives one repair opportunity, not an unsafe publication", () => {
@@ -119,19 +117,23 @@ test("evergreen QA receives one bounded repair despite the zero shared regenerat
   }
 });
 
-test("evergreen candidate cannot be merely generic AI or low in text safety", () => {
-  const good = selectPublishableSocialArtworkCandidate([observedPrimary], { enabled: true });
+test("evergreen selector requires a passing QA result and enforces relevance and text-safety floors", () => {
+  const passingCandidate = {
+    ...observedPrimary,
+    qa: { ...observedPrimary.qa, pass: true, score: 82, relevance: 82, textSafety: 88 },
+  };
+  const good = selectPublishableSocialArtworkCandidate([passingCandidate], { enabled: true });
   assert.equal(good?.base64, "primary-generated-image");
 
   const generic = {
-    ...observedPrimary,
-    qa: { ...observedPrimary.qa, relevance: 65 },
+    ...passingCandidate,
+    qa: { ...passingCandidate.qa, relevance: 65 },
   };
   assert.equal(selectPublishableSocialArtworkCandidate([generic], { enabled: true }), null);
 
   const textRisk = {
-    ...observedPrimary,
-    qa: { ...observedPrimary.qa, textSafety: 65 },
+    ...passingCandidate,
+    qa: { ...passingCandidate.qa, textSafety: 65 },
   };
   assert.equal(selectPublishableSocialArtworkCandidate([textRisk], { enabled: true }), null);
 });

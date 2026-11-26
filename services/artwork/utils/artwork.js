@@ -15,6 +15,7 @@ import { applyArtworkPromptPolicy } from "./artworkPromptPolicy.js";
 import { buildModelAwareArtworkPrompt } from "./artworkModelPrompt.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { auditArtworkBase64 } from "./artworkVisualQa.js";
+import { resolveImageProviderPlan } from "../../blotato/utils/imageQualityGovernance.js";
 import { filterImagePayloadByCapabilities, getImageSupportedParameters } from "./openrouterImageCapabilities.js";
 import {
   artworkRetryDelayMs,
@@ -211,15 +212,10 @@ function createArtworkSeed(...parts) {
   return digest.readUInt32BE(0) & 0x7fffffff;
 }
 
-function visualQaModes() {
-  return new Set(String(process.env.ARTWORK_VISUAL_QA_MODES || "podcast,blog,newsletter,social,social-blog,quiz")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean));
-}
-
 function shouldAuditArtwork(mode) {
-  return parseBoolean(process.env.ARTWORK_VISUAL_QA_ENABLED, true) && visualQaModes().has(String(mode || "").toLowerCase());
+  // All generated artwork is publication-facing. Environment mode lists and
+  // enable flags must not create a path that publishes unaudited images.
+  return Boolean(String(mode || "").trim());
 }
 
 function shouldUseShortPromptRetry(mode = "podcast") {
@@ -300,19 +296,34 @@ function candidateRank(candidate = {}) {
  * Both configured image providers may return a good, relevant social image
  * that misses only subjective composition/brand scoring. Keep hard pixel
  * defects blocking, but after all providers have been tried prefer the best
- * hard-defect-free generated candidate over a static lane fallback.
+ * candidate that has already passed the complete QA gate.
  */
 export function selectPublishableSocialArtworkCandidate(candidates = [], options = {}) {
-  const enabled = options.enabled ?? parseBoolean(process.env.SOCIAL_ARTWORK_VISUAL_QA_ALLOW_SOFT_FAILURES, true);
+  const enabled = options.enabled ?? false;
   if (!enabled) return null;
   const floors = { ...socialAdvisoryFloors(), ...(options.floors || {}) };
   return (Array.isArray(candidates) ? candidates : [])
     .filter((candidate) => candidate?.base64 && candidate?.qa)
+    .filter((candidate) => candidate.qa.pass === true)
     .filter((candidate) => (candidate.qa.hardDefects || []).length === 0)
     .filter((candidate) => Number(candidate.qa.score || 0) >= floors.minScore)
     .filter((candidate) => Number(candidate.qa.relevance || 0) >= floors.minRelevance)
     .filter((candidate) => Number(candidate.qa.textSafety || 0) >= floors.minTextSafety)
     .sort((left, right) => candidateRank(right) - candidateRank(left))[0] || null;
+}
+
+function imageProviderPlan() {
+  return resolveImageProviderPlan({
+    providers,
+    primary: process.env.ARTWORK_IMAGE_MODEL_PRIMARY,
+    qualityTier: process.env.ARTWORK_IMAGE_MODEL_QUALITY_TIER,
+    fallback: process.env.ARTWORK_IMAGE_MODEL_FALLBACK,
+    strategy: process.env.ARTWORK_IMAGE_MODEL_STRATEGY || "existing-first",
+    escalationEnabled: process.env.ARTWORK_IMAGE_MODEL_ESCALATION_ENABLED,
+    fallbackEnabled: process.env.ARTWORK_IMAGE_MODEL_FALLBACK_ENABLED,
+    maxAttempts: process.env.ARTWORK_IMAGE_MODEL_MAX_ATTEMPTS,
+    maxEscalations: process.env.ARTWORK_IMAGE_MODEL_MAX_ESCALATIONS,
+  });
 }
 
 /**
@@ -414,7 +425,6 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, {
       }
 
       if (shouldAuditArtwork(mode)) {
-        const qaRequired = parseBoolean(process.env.ARTWORK_VISUAL_QA_REQUIRED, true);
         const maxRegenerations = maxQaRegenerations ?? artworkQaRegenerationLimit(mode);
         let qa;
         let qaPrompt = prompt;
@@ -428,10 +438,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, {
               signal,
             });
           } catch (qaError) {
-            if (!qaRequired) {
-              warn("artwork.visual_qa.unavailable", { mode, provider: provider.id, error: qaError?.message || String(qaError) });
-              return image;
-            }
+            warn("artwork.visual_qa.unavailable", { mode, provider: provider.id, error: qaError?.message || String(qaError) });
             throw qaError;
           }
 
@@ -448,13 +455,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, {
             hardDefects: qa.hardDefects,
           });
           if (qa.pass) return image;
-          // If this image misses only advisory targets, save the extra
-          // generation cost: compare it with the other provider's candidate.
-          // Re-render only when the image has a real relevance/safety defect.
-          const softCandidateUsable = mode === "social" && Boolean(selectPublishableSocialArtworkCandidate([
-            { base64: image, qa },
-          ]));
-          if (qaAttempt >= maxRegenerations || softCandidateUsable) {
+          if (qaAttempt >= maxRegenerations) {
             const err = new Error(`Generated ${mode} artwork failed visual QA (${qa.score}/${qa.threshold}): ${[...(qa.hardDefects || []), ...(qa.defects || [])].join(" | ") || qa.summary}`);
             err.statusCode = 422;
             err.artworkVisualQa = qa;
@@ -530,12 +531,22 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
   if (providers.length === 0) {
     throw new Error("Artwork generation disabled: missing OpenRouter artwork env vars.");
   }
+  const providerPlan = imageProviderPlan();
+  const selectedProviders = providerPlan.providers;
+  info("artwork.image_model.plan", {
+    mode,
+    strategy: providerPlan.strategy,
+    models: providerPlan.models,
+    escalationEnabled: providerPlan.escalationEnabled,
+    fallbackEnabled: providerPlan.fallbackEnabled,
+    maxAttempts: providerPlan.maxAttempts,
+  });
 
   let lastError;
   const qaCandidates = [];
   let nextPrompt = prompt;
 
-  for (const provider of providers) {
+  for (const provider of selectedProviders) {
     if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
     try {
       const image = await requestArtworkFromProvider(provider, nextPrompt, mode, date, { signal, generationKey: stableGenerationKey, variation: "full", originalBrief: prompt });
@@ -571,7 +582,7 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
   // length/complexity contributed to the failures. OB-004 / BSC-OB-005.
   if (shouldUseShortPromptRetry(mode)) {
     warn("🎨 All artwork providers failed with full prompt; retrying with shortened prompt", { mode });
-    for (const provider of providers) {
+    for (const provider of selectedProviders) {
       if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("Artwork generation aborted");
       try {
         const image = await requestArtworkFromProvider(provider, prompt, mode, date, { useShortInstruction: true, signal, generationKey: stableGenerationKey, variation: "short" });
@@ -593,25 +604,6 @@ async function generateArtworkBase64(prompt, { mode = "podcast", date, signal, g
           mode,
         });
       }
-    }
-  }
-
-  if (String(mode || "").toLowerCase() === "social") {
-    const selected = selectPublishableSocialArtworkCandidate(qaCandidates);
-    if (selected) {
-      info("artwork.visual_qa.soft_candidate_accepted", {
-        mode,
-        provider: selected.provider?.id || null,
-        model: selected.provider?.model || null,
-        score: selected.qa.score,
-        threshold: selected.qa.threshold,
-        relevance: selected.qa.relevance,
-        textSafety: selected.qa.textSafety,
-        composition: selected.qa.composition,
-        brandFit: selected.qa.brandFit,
-        hardDefects: selected.qa.hardDefects || [],
-      });
-      return selected.base64;
     }
   }
 

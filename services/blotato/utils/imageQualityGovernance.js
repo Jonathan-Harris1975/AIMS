@@ -22,7 +22,13 @@ export function validateImageGovernance({ model = "", primary = "", fallback = "
   const allowed = new Set([...APPROVED_MODELS, ...allowedModels].map(String).filter(Boolean));
   const selected = String(model || primary || "").trim();
   if (!selected) throw new Error("Image model is required");
-  if (allowed.size && !allowed.has(selected)) {
+  if (!allowed.size) {
+    const error = new Error("Approved image model allowlist is required");
+    error.code = "IMAGE_MODEL_ALLOWLIST_REQUIRED";
+    error.statusCode = 503;
+    throw error;
+  }
+  if (!allowed.has(selected)) {
     const error = new Error(`Unauthorised image model rejected: ${selected}`);
     error.code = "UNAUTHORISED_IMAGE_MODEL";
     error.statusCode = 422;
@@ -34,6 +40,97 @@ export function validateImageGovernance({ model = "", primary = "", fallback = "
     throw error;
   }
   return selected;
+}
+
+/**
+ * Order only image providers already resolved through AIMS' central artwork
+ * route. Explicit model selections outside that route fail closed. With no
+ * new policy settings, the existing central route order is preserved.
+ */
+export function resolveImageProviderPlan({
+  providers = [],
+  primary,
+  qualityTier,
+  fallback,
+  strategy = "existing-first",
+  escalationEnabled = false,
+  fallbackEnabled = true,
+  maxAttempts,
+  maxEscalations = DEFAULT_MAX_ESCALATIONS,
+} = {}) {
+  const available = Array.isArray(providers) ? providers.filter((provider) => provider?.model) : [];
+  const models = [...new Set(available.map((provider) => String(provider.model).trim()).filter(Boolean))];
+  if (!models.length) {
+    const error = new Error("No centrally configured image models are available");
+    error.code = "IMAGE_MODEL_ROUTE_EMPTY";
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const findConfigured = (requested, label) => {
+    const model = String(requested || "").trim();
+    if (!model) return undefined;
+    if (!models.includes(model)) {
+      const error = new Error(`${label} image model is not in the central artwork route: ${model}`);
+      error.code = "UNAUTHORISED_IMAGE_MODEL";
+      error.statusCode = 422;
+      throw error;
+    }
+    return model;
+  };
+
+  const primaryModel = findConfigured(primary, "Primary") || models[0];
+  const qualityModel = findConfigured(qualityTier, "Quality tier");
+  const safeStrategy = ["existing-first", "quality-first", "existing-only"].includes(String(strategy))
+    ? String(strategy)
+    : "existing-first";
+  const configuredFallback = findConfigured(fallback, "Fallback");
+  const fallbackModel = configuredFallback || models.find((model) =>
+    model !== primaryModel && (safeStrategy !== "quality-first" || model !== qualityModel));
+  if (fallbackModel && fallbackModel === primaryModel) {
+    const error = new Error("Image fallback must differ from the primary model");
+    error.code = "CIRCULAR_IMAGE_FALLBACK";
+    error.statusCode = 422;
+    throw error;
+  }
+  if (qualityModel && qualityModel === primaryModel && bool(escalationEnabled)) {
+    const error = new Error("Image quality-tier model must differ from the primary model");
+    error.code = "DUPLICATE_IMAGE_QUALITY_TIER";
+    error.statusCode = 422;
+    throw error;
+  }
+  const allowFallback = safeStrategy !== "existing-only" && bool(fallbackEnabled, true);
+  const allowEscalation = safeStrategy !== "existing-only" && bool(escalationEnabled);
+  const escalationLimit = Math.max(0, Math.min(2, Number(maxEscalations) || 0));
+
+  let sequence;
+  if (safeStrategy === "quality-first") {
+    if (!qualityModel) {
+      const error = new Error("Quality-first image strategy requires a centrally configured quality-tier model");
+      error.code = "IMAGE_QUALITY_TIER_REQUIRED";
+      error.statusCode = 503;
+      throw error;
+    }
+    sequence = [qualityModel, primaryModel];
+  } else {
+    sequence = [primaryModel];
+    if (allowEscalation && escalationLimit > 0 && qualityModel) sequence.push(qualityModel);
+  }
+  if (allowFallback && fallbackModel) sequence.push(fallbackModel);
+
+  const orderedModels = [...new Set(sequence)].slice(0, Math.max(1, Math.min(3, Number(maxAttempts) || 3)));
+  return {
+    strategy: safeStrategy,
+    models: orderedModels,
+    providers: orderedModels.map((model) => available.find((provider) => provider.model === model)),
+    primaryModel,
+    qualityTierModel: qualityModel || null,
+    fallbackModel: allowFallback ? fallbackModel || null : null,
+    escalationEnabled: allowEscalation && Boolean(qualityModel),
+    fallbackEnabled: allowFallback,
+    maxAttempts: orderedModels.length,
+    maxEscalations: allowEscalation && qualityModel ? Math.min(1, escalationLimit) : 0,
+  };
 }
 
 export function chooseImageModel({
@@ -113,6 +210,7 @@ export function buildTargetedRepairPrompt({ basePrompt = "", defects = [] } = {}
 export default {
   imageFingerprint,
   validateImageGovernance,
+  resolveImageProviderPlan,
   chooseImageModel,
   imageQualityScore,
   boundedImageAttempts,

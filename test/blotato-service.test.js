@@ -13,7 +13,7 @@ const videoFixtureDir = mkdtempSync(path.join(os.tmpdir(), "blotato-test-"));
 // CI runners do not provide FFmpeg. Stub only the local probe/frame commands;
 // the integration still exercises download, QA response and provider handoff.
 writeFileSync(path.join(videoFixtureDir, "ffprobe"), `#!${process.execPath}
-process.stdout.write(JSON.stringify({streams:[{codec_type:"video",duration:"40",width:1080,height:1920,r_frame_rate:"30/1"}]}));
+process.stdout.write(JSON.stringify({streams:[{codec_type:"video",duration:"40",width:1080,height:1920,r_frame_rate:"30/1"},{codec_type:"audio",duration:"40",codec_name:"aac"}]}));
 `, { mode: 0o755 });
 writeFileSync(path.join(videoFixtureDir, "ffmpeg"), `#!${process.execPath}
 require("node:fs").writeFileSync(process.argv.at(-1), Buffer.from("fixture-image"));

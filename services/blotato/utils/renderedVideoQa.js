@@ -100,6 +100,26 @@ export function evaluateRenderedVideoTechnical(metadata = {}, {
   };
 }
 
+export function evaluateRenderedVideoAudioTechnical(metadata = {}) {
+  const durationSeconds = Number(metadata.durationSeconds || 0);
+  const audioDurationSeconds = Number(metadata.audioDurationSeconds || 0);
+  const defects = [];
+  if (!(Number(metadata.audioStreamCount) > 0)) {
+    defects.push("Finished render has no audio stream.");
+  } else if (!audioDurationSeconds) {
+    defects.push("Finished render audio duration could not be verified.");
+  } else if (!durationSeconds || Math.abs(audioDurationSeconds - durationSeconds) > 1.5) {
+    defects.push(`Finished audio/video duration mismatch (${audioDurationSeconds.toFixed(2)}s audio, ${durationSeconds.toFixed(2)}s video).`);
+  }
+  return {
+    pass: defects.length === 0,
+    audioStreamCount: Math.max(0, Number(metadata.audioStreamCount) || 0),
+    audioDurationSeconds,
+    audioIntegrityScore: defects.length ? 0 : 100,
+    defects,
+  };
+}
+
 export async function probeRenderedVideo(filePath) {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "error",
@@ -110,6 +130,11 @@ export async function probeRenderedVideo(filePath) {
   ], { maxBuffer: 5_000_000 });
   const payload = JSON.parse(stdout);
   const video = (payload.streams || []).find((stream) => stream.codec_type === "video") || {};
+  const audioStreams = (payload.streams || []).filter((stream) => stream.codec_type === "audio");
+  const audio = audioStreams[0] || {};
+  const audioTimeBase = parseRate(audio.time_base || "0");
+  const audioDurationSeconds = Number(audio.duration || 0)
+    || (Number(audio.duration_ts || 0) && audioTimeBase ? Number(audio.duration_ts) * audioTimeBase : 0);
   return {
     durationSeconds: Number(video.duration || payload.format?.duration || 0),
     width: Number(video.width || 0),
@@ -118,6 +143,9 @@ export async function probeRenderedVideo(filePath) {
     codec: compact(video.codec_name || "", 80),
     format: compact(payload.format?.format_name || "", 120),
     sizeBytes: Number(payload.format?.size || 0),
+    audioStreamCount: audioStreams.length,
+    audioDurationSeconds,
+    audioCodec: compact(audio.codec_name || "", 80),
   };
 }
 
@@ -208,6 +236,8 @@ export function buildRenderedVideoQaPrompt({ pack = {}, article = {}, technical 
     "This is post-render quality control. Judge the actual frames, not the script plan or prompt compliance.",
     "The video must finish within 35-55 seconds and normally targets roughly 45 seconds. Ordinary subtitle captions are expected; do not fail legitimate readable captions. Do \
 fail gibberish, cropped/unreadable captions, accidental logos or image-generated pseudo-text.",
+    "Audio is checked separately for stream presence and duration integrity. This contact sheet cannot establish spoken-word accuracy, pronunciation, voice quality or caption sync.",
+    "Do not claim those audio qualities were audited.",
     "The first three cells are deliberately sampled from the opening three seconds. Give the hook/scroll-stopper at least 40% of the overall judgement: movement, specificity, \
 visual tension, immediate source relevance and whether it stops a rapid scroll.",
     "Give special weight to source relevance, scene-to-narration fit, visual progression and whether the sequence tells one coherent story.",
@@ -228,16 +258,16 @@ watermarks, or a sequence that does not match the source story.",
   ].join("\n");
 }
 
-function calibratedVideoScore(parsed = {}) {
+function calibratedVideoScore(parsed = {}, technical = {}) {
   const weighted = [
-    [parsed.hookPerformance, 0.15],
+    [parsed.hookPerformance, 0.18],
     [parsed.visualQuality, 0.20],
-    [parsed.sourceRelevance, 0.15],
-    [parsed.sceneAlignment, 0.15],
+    [parsed.sourceRelevance, 0.16],
+    [parsed.sceneAlignment, 0.16],
     [parsed.continuity, 0.10],
-    [parsed.voiceAudio ?? parsed.continuity, 0.10],
-    [parsed.captionLegibility, 0.10],
-    [parsed.brandConsistency ?? parsed.visualQuality, 0.05],
+    [technical.audioIntegrityScore, 0.10],
+    [parsed.visualProgression, 0.05],
+    [parsed.captionLegibility, 0.05],
   ];
   const values = weighted.map(([value]) => Number(value)).filter(Number.isFinite);
   if (values.length < 6) return score(parsed.score);
@@ -253,7 +283,7 @@ export function normaliseRenderedVideoQa(raw, {
   const hardDefects = stringArray(parsed?.hardDefects);
   const result = {
     score: score(parsed?.score),
-    calibratedScore: calibratedVideoScore(parsed),
+    calibratedScore: calibratedVideoScore(parsed, technical),
     reportedScore: score(parsed?.score),
     threshold: Math.max(1, Math.min(100, Number(threshold || DEFAULT_THRESHOLD))),
     hookPerformance: score(parsed?.hookPerformance),
@@ -263,8 +293,7 @@ export function normaliseRenderedVideoQa(raw, {
     visualProgression: score(parsed?.visualProgression),
     visualQuality: score(parsed?.visualQuality),
     captionLegibility: score(parsed?.captionLegibility),
-    voiceAudio: score(parsed?.voiceAudio ?? parsed?.continuity),
-    brandConsistency: score(parsed?.brandConsistency ?? parsed?.visualQuality),
+    voiceAudio: score(technical?.audioIntegrityScore),
     defects,
     hardDefects,
     summary: compact(parsed?.summary, 900),
@@ -331,6 +360,11 @@ export async function reviewRenderedVideo({
     const downloadedBytes = await downloadVideo(mediaUrl, videoPath);
     const metadata = await probeRenderedVideo(videoPath);
     const technical = evaluateRenderedVideoTechnical(metadata);
+    const audioTechnical = evaluateRenderedVideoAudioTechnical(metadata);
+    technical.audio = audioTechnical;
+    technical.audioIntegrityScore = audioTechnical.audioIntegrityScore;
+    technical.pass = technical.pass && audioTechnical.pass;
+    technical.defects.push(...audioTechnical.defects);
     technical.downloadedBytes = downloadedBytes;
     if (!technical.pass) {
       return {

@@ -36,6 +36,8 @@ const NUMERIC_ENVS = new Set([
   "BLOTATO_RENDERED_MAX_SECONDS",
   "BLOTATO_RENDERED_QA_MAX_BYTES",
   "BLOTATO_RENDERED_QA_DOWNLOAD_TIMEOUT_MS",
+  "ARTWORK_IMAGE_MODEL_MAX_ESCALATIONS",
+  "ARTWORK_IMAGE_MODEL_MAX_ATTEMPTS",
   "AI_MAX_RETRIES",
   "AI_MAX_TOKENS",
   "AI_RETRY_BASE_MS",
@@ -153,8 +155,8 @@ const BOOLEAN_ENVS = new Set([
   "BLOTATO_NEWS_JSON_RESPONSE_FORMAT",
   "BLOTATO_RENDERED_QA_ENABLED",
   "BLOTATO_RENDERED_QA_REQUIRED",
-  "BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES",
-  "BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES",
+  "ARTWORK_IMAGE_MODEL_ESCALATION_ENABLED",
+  "ARTWORK_IMAGE_MODEL_FALLBACK_ENABLED",
   "ARTWORK_VISUAL_QA_ENABLED",
   "ARTWORK_VISUAL_QA_REQUIRED",
   "ARTWORK_IMAGE_CONFIG_ENABLED",
@@ -372,6 +374,13 @@ function validateNumber({ key, value, line }, errors) {
     errors.push({ line, key, message: `${key} must be between 1 and 100` });
   }
 
+  if (key === "ARTWORK_IMAGE_MODEL_MAX_ATTEMPTS" && (number < 1 || number > 3)) {
+    errors.push({ line, key, message: `${key} must be between 1 and 3` });
+  }
+  if (key === "ARTWORK_IMAGE_MODEL_MAX_ESCALATIONS" && (number < 0 || number > 2)) {
+    errors.push({ line, key, message: `${key} must be between 0 and 2` });
+  }
+
   if (key === "BLOTATO_RENDERED_QA_FRAMES" && (number < 4 || number > 12)) {
     errors.push({ line, key, message: `${key} must be between 4 and 12` });
   }
@@ -389,6 +398,13 @@ function validateBoolean({ key, value, line }, errors) {
   if (!BOOLEAN_ENVS.has(key)) return;
   if (!VALID_BOOLEAN_VALUES.has(clean(value).toLowerCase())) {
     errors.push({ line, key, message: `${key} must be a boolean-like value` });
+  }
+}
+
+function validateImageModelStrategy({ key, value, line }, errors) {
+  if (key !== "ARTWORK_IMAGE_MODEL_STRATEGY") return;
+  if (!["existing-first", "quality-first", "existing-only"].includes(clean(value).toLowerCase())) {
+    errors.push({ line, key, message: `${key} must be existing-first, quality-first, or existing-only` });
   }
 }
 
@@ -484,6 +500,7 @@ export function validateEnvEntries(entries) {
     validateSecretReference(entry, errors);
     validateNumber(entry, errors);
     validateBoolean(entry, errors);
+    validateImageModelStrategy(entry, errors);
     validateUrl(entry, errors);
     validateTemplate(entry, errors);
     validateEnum(entry, errors);
