@@ -82,7 +82,7 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
     await repository.finishOccurrence(lease, "completed_zero", { reportKey });
     return { ok: true, status: "completed_zero", campaignId: campaign.id, occurrenceId: occurrence.id,
       pagesAnalysed: analysis.pagesAnalysed, totalPages: analysis.totalPages, candidatePhrases: analysis.candidates.length,
-      verifiedOrganisations: 0, qualifiedOpportunities: 0, dispatched: 0, privateReportKey: reportKey };
+      verifiedOrganisations: 0, qualifiedOpportunities: 0, dispatched: 0 };
   } catch (error) {
     try {
       await repository.finishOccurrence(lease, "blocked", { errorCode: String(error?.code || "assessment_failed").slice(0, 100) });
