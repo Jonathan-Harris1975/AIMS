@@ -26,6 +26,8 @@ test("seeded three-book selection is reproducible, records exclusions, and does 
 test("featured metadata, passage matching, scoring and dispatch mode fail closed", () => {
   assert.throws(() => verifyBook({ title: "Different" }, book(1)));
   assert.throws(() => verifyBook({ title: "Book 1", bookUrl: "https://other.example" }, book(1)));
+  assert.throws(() => verifyBook({ title: "Book 1" }, { ...book(1), publicationDate: "2099-01-01" }));
+  assert.throws(() => verifyBook({ title: "Book 1" }, { ...book(1), titleAlignmentStatus: "Mismatch" }));
   assert.equal(matchedPassage("The Acme Group developed reliable services.", "Acme Group developed reliable services."), true);
   assert.equal(matchedPassage("The Acme Group developed reliable services.", "Acme Group recommends my book."), false);
   const components = { depth: 25, positiveContext: 20, mutualBenefit: 20, currentRelevance: 15, audienceAlignment: 10, relationshipPotential: 10 };
