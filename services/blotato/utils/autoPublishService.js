@@ -66,6 +66,20 @@ const POST_FAILED_STATUSES = new Set(["failed", "error", "insufficient-credits",
 // matching time is acknowledged by POST /posts or the /schedules collection.
 const POST_SCHEDULE_ACCEPTED_STATUSES = new Set(["scheduled"]);
 const DEFAULT_AI_STORY_TEMPLATE_UUID = "5903fe43-514d-40ee-a060-0d6628c5f8fd";
+function getRecentBlotatoVisualHistory(limit = 8) {
+  return getShortLaneJobTypes()
+    .flatMap((type) => getJobsByType(type))
+    .filter((job) => job?.result?.ok === true && job?.result?.pack?.theme)
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))
+    .slice(0, Math.max(1, limit))
+    .map((job) => ({
+      theme: job.result.pack.theme,
+      concept: job.result.pack.creativeBrief?.visualConcept || job.result.pack.visualConcept || job.result.pack.internalTitle || "",
+      lane: job.result.lane || job.result.pack.lane || job.type,
+      publishedAt: job.updatedAt || job.createdAt || null,
+    }))
+    .reverse();
+}
 const MODEL_CREDIT_HINTS = Object.freeze({
   image: {
     "flux schnell": 1,
@@ -1818,6 +1832,7 @@ async function runPublishJobImpl({
       cta: trim(process.env.BLOTATO_NEWS_CTA, ""),
       editorialContext: [editorialContext, failedRenderReplacement?.repairContext].filter(Boolean).join("\n"),
       requiredTopic,
+      visualHistory: getRecentBlotatoVisualHistory(),
     };
     const maxQualityAttempts = positiveIntEnv("BLOTATO_QUALITY_RETRY_ATTEMPTS", 3, 5);
     const qualityAttempts = [];
@@ -2192,12 +2207,8 @@ async function runPublishJobImpl({
       const blockSoftQaFailures = scheduledTime
         ? false
         : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_SOFT_FAILURES, false);
-      const blockHardQaFailures = scheduledTime
-        ? true
-        : parseBoolean(process.env.BLOTATO_RENDERED_QA_BLOCK_HARD_FAILURES, false);
       const qaPublication = assessRenderedVideoQaPublication(renderedVideoQa, {
         blockSoftFailures: blockSoftQaFailures,
-        blockHardFailures: blockHardQaFailures,
       });
       const hardQaFailure = qaPublication.hardFailure;
       updateJob(lane.jobType, sessionId, {
@@ -2226,7 +2237,6 @@ async function runPublishJobImpl({
         technical: renderedVideoQa.technical,
         hardQaFailure,
         blockSoftQaFailures,
-        blockHardQaFailures,
       });
       if (qaPublication.block) {
         throw buildRenderedVideoQaError(renderedVideoQa);
