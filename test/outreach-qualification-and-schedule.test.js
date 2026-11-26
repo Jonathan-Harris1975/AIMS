@@ -14,6 +14,7 @@ test("editorial evidence is classified conservatively", () => {
   assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com/insights", pageText: "Recent guest authors and an editorial contact route." }).classification, "strong_probable");
   assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com", pageText: "Sponsored post only. Pay to publish." }).classification, "unsuitable");
   assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com/write-for-us", pageText: "We do not accept contributed articles or guest posts." }).classification, "unsuitable");
+  assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com/write-for-us", pageText: "We do not charge fees for guest posts. Submit an article." }).classification, "confirmed");
   assert.equal(classifyEditorialEvidence({ sourceUrl: "https://example.com/blog", pageText: "Our blog publishes company news." }).classification, "unconfirmed");
 });
 
@@ -65,6 +66,7 @@ test("relevance uses the configured campaign topic rather than only a fixed word
   assert.equal(relevanceScore("model monitoring in production", {
     supportingExcerpt: "We publish practical guidance on model monitoring in production operations.",
   }), 25);
+  assert.equal(relevanceScore("AI", { supportingExcerpt: "We publish practical AI guidance for editors." }), 25);
 });
 
 test("authorised outreach sessions use Europe/London and only Monday, Wednesday and Friday mornings", () => {
