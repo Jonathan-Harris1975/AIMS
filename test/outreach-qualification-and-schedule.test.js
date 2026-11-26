@@ -4,6 +4,7 @@ import test from "node:test";
 import { bestEmail } from "../services/outreach/services/outreachService.js";
 import { classifyEditorialEvidence, scoreOpportunity, relevanceScore } from "../services/outreach/utils/qualification.js";
 import { isAuthorisedOutreachSession, londonParts, nextAuthorisedOutreachSession } from "../services/outreach/utils/schedule.js";
+import { isPublicAddress } from "../services/outreach/services/outreachCore.js";
 
 test("editorial evidence is classified conservatively", () => {
   const confirmed = classifyEditorialEvidence({
@@ -77,5 +78,18 @@ test("authorised outreach sessions use Europe/London and only Monday, Wednesday 
   assert.equal(isAuthorisedOutreachSession(new Date("2026-07-07T09:00:00.000Z")), false);
   assert.equal(isAuthorisedOutreachSession(new Date("2026-07-06T11:00:00.000Z")), false);
   assert.equal(nextAuthorisedOutreachSession(new Date("2026-07-07T09:00:00.000Z")).toISOString(), "2026-07-08T08:00:00.000Z");
+});
+
+test("evidence retrieval rejects private and reserved addresses without blocking adjacent public ranges", () => {
+  assert.equal(isPublicAddress("[::1]"), false);
+  assert.equal(isPublicAddress("10.0.0.1"), false);
+  assert.equal(isPublicAddress("169.254.169.254"), false);
+  assert.equal(isPublicAddress("198.51.100.1"), false);
+  assert.equal(isPublicAddress("203.0.113.1"), false);
+  assert.equal(isPublicAddress("198.51.101.1"), true);
+  assert.equal(isPublicAddress("203.0.114.1"), true);
+  assert.equal(isPublicAddress("192.0.2.1"), false);
+  assert.equal(isPublicAddress("192.0.3.1"), true);
+  assert.equal(isPublicAddress("8.8.8.8"), true);
 });
 

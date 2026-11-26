@@ -227,6 +227,15 @@ export class CommsHubDelayedActionWorker {
         return { id: item.id, status: 'deferred_outreach_session', dueAt };
       }
       const result = await this.execute(item);
+      if (result?.deferred && result.dueAt) {
+        await this.context.operationsRepository.deferDelayedAction({
+          id: item.id,
+          workerId: this.workerId,
+          dueAt: new Date(result.dueAt).toISOString(),
+          at: new Date().toISOString(),
+        });
+        return { id: item.id, status: 'deferred', dueAt: result.dueAt, result };
+      }
       await this.context.operationsRepository.completeDelayedAction({
         id: item.id,
         workerId: this.workerId,

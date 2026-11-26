@@ -308,7 +308,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `ON_BRAND_AUDIT_MAX_TOKENS` | No | audits/utils/onBrandAudit.js:14 |
 | `ON_BRAND_AUDIT_TEMPERATURE` | No | audits/utils/onBrandAudit.js:15 |
 | `ON_BRAND_AUDIT_TIMEOUT_MS` | No | audits/utils/onBrandAudit.js:551<br>audits/utils/onBrandAudit.js:566<br>audits/utils/onBrandAudit.js:605 |
-| `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:240 |
+| `OPENPAGERANK_API_BASE` | No | services/outreach/services/outreachCore.js:243 |
 | `OPENROUTER_API_BASE` | Yes | services/artwork/artwork.js:30<br>services/artwork/utils/artwork.js:39<br>services/shared/utils/ai-service.js:16 |
 | `OPENROUTER_API_KEY` | Yes | server.js:188 |
 | `OPENROUTER_APP_NAME` | Yes | ai-config.js:382<br>services/artwork/artwork.js:294<br>services/artwork/utils/artwork.js:374 |

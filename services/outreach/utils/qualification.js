@@ -58,6 +58,7 @@ export function classifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", so
     retrievedAt,
     explicitAcceptance,
     explicitRefusal,
+    submissionOpen: !explicitRefusal && (explicitAcceptance || (externalAuthors && editorialRoute)),
     externalAuthors,
     editorialRoute,
     recentActivity,
@@ -68,7 +69,14 @@ export function classifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", so
 export function relevanceScore(keyword = "", evidence = {}) {
   const topic = cleanText(keyword).toLowerCase();
   const evidenceText = cleanText(`${evidence.supportingExcerpt || ""} ${evidence.evidenceUrl || ""}`).toLowerCase();
-  const topicSignal = /\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech)\b/i;
+  const topicSignal = new RegExp(
+    "\\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|"
+    + "cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech|"
+    + "predictive|decision|systems|model|monitoring|production|workflow|agent|agents|"
+    + "operations|governance|risk|compliance|security|software|cloud|robotics|strategy|"
+    + "leadership|marketing|content|creator|author)\\b",
+    "i"
+  );
   const topicTerms = topic.match(/[a-z0-9]+/g)?.filter((term) => term.length > 2 || ["ai", "ml"].includes(term)) || [];
   const evidenceTerms = new Set(evidenceText.match(/[a-z0-9]+/g) || []);
   const matchingTerms = topicTerms.filter((term) => evidenceTerms.has(term));
