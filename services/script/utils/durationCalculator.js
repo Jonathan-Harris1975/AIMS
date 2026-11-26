@@ -4,18 +4,19 @@
 //
 // Single source of truth for planned podcast length. The script
 // prompts, episode metadata, and RSS duration fallback all read from
-// this deterministic plan so 30/45/50/60 minute episode plans do not drift.
+// this deterministic plan so 30/45/50/60/65 minute episode plans do not drift.
 // ============================================================
 
 import { rotateDurations } from "./durationRotator.js";
 
-const DURATION_SEQUENCE_MINS = [30, 45, 50, 60];
+const DURATION_SEQUENCE_MINS = [30, 45, 50, 60, 65];
 
 const DURATION_PROFILES = {
   30: { introSeconds: 70, outroSeconds: 75 },
   45: { introSeconds: 80, outroSeconds: 85 },
   50: { introSeconds: 85, outroSeconds: 90 },
   60: { introSeconds: 90, outroSeconds: 95 },
+  65: { introSeconds: 95, outroSeconds: 100 },
 };
 
 function normalizeSessionId(input) {
