@@ -61,8 +61,13 @@ export function verifyBook(featured, book) {
   if (!Number.isFinite(publishedAt) || publishedAt > Date.now() || !book.bookUrl) {
     throw new Error("Published metadata or canonical link is missing or not yet live.");
   }
-  if (book.titleAlignmentStatus && book.titleAlignmentStatus.toLowerCase() !== "aligned") {
-    throw new Error("Catalogue manuscript title alignment is unresolved.");
+  const alignmentStatus = String(book.titleAlignmentStatus || "").trim().toLowerCase();
+  if (alignmentStatus && alignmentStatus !== "aligned") {
+    const observedTitle = String(book.manuscriptTitleObserved || "").normalize("NFKC").trim().toLowerCase();
+    const canonicalTitle = book.title.normalize("NFKC").trim().toLowerCase();
+    const documentedCaseDrift = alignmentStatus === "minor punctuation/casing drift; workbook retained as canonical" &&
+      observedTitle === canonicalTitle;
+    if (!documentedCaseDrift) throw new Error("Catalogue manuscript title alignment is unresolved.");
   }
   if (book.manuscriptTitleObserved &&
       book.manuscriptTitleObserved.trim().toLowerCase() !== book.title.trim().toLowerCase()) {
