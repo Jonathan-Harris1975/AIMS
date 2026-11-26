@@ -32,10 +32,12 @@ export function bestEmail(entry, env = process.env) {
         `${item?.hunter?.position || ""} ${item?.hunter?.department || ""}`
       )
     );
+    const namedEditorial = editorialContact && named;
+    const eligibleEditorialContact = editorialContact && (!namedEditorial || allowNamed);
     const eligible = Boolean(email && email.includes("@") && emailDomain === domain && !FREE_MAIL.has(emailDomain)
       && !EXCLUDED_LOCAL_PARTS.test(local)
       && (validationStatus === "valid" || (allowCatchAll && ["catch-all", "catch_all"].includes(validationStatus)))
-      && (editorialContact || (allowNamed && named)));
+      && (eligibleEditorialContact || (allowNamed && named && !editorialContact)));
     const score = (validationStatus === "valid" ? 100 : 65)
       + (editorialContact ? 20 : 0) + (editorialLocal ? 20 : 0) + (role ? 5 : 0)
       + (named ? 5 : 0) + Math.min(10, Number(item?.hunter?.confidence || 0) / 10);

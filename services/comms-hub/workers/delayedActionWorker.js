@@ -6,6 +6,7 @@ import { businessHoursPolicy, isWithinBusinessHours, nextBusinessOpening } from 
 import { sendReplyDraft } from '../replyDraftService.js';
 import { runInboundConversationAutomation } from '../inboundAutomationService.js';
 import { handleSocialDmHumanContact } from '../socialService.js';
+import { isAuthorisedOutreachSession, nextAuthorisedOutreachSession } from '../../outreach/utils/schedule.js';
 
 function parse(value) {
   try { return JSON.parse(value || '{}'); } catch { return {}; }
@@ -218,6 +219,12 @@ export class CommsHubDelayedActionWorker {
           await this.context.operationsRepository.deferDelayedAction({ id: item.id, workerId: this.workerId, dueAt, at: now.toISOString() });
           return { id: item.id, status: 'deferred_business_hours', dueAt };
         }
+      }
+      if (item.action_type === 'outreach_follow_up' && !isAuthorisedOutreachSession(new Date())) {
+        const now = new Date();
+        const dueAt = nextAuthorisedOutreachSession(now).toISOString();
+        await this.context.operationsRepository.deferDelayedAction({ id: item.id, workerId: this.workerId, dueAt, at: now.toISOString() });
+        return { id: item.id, status: 'deferred_outreach_session', dueAt };
       }
       const result = await this.execute(item);
       await this.context.operationsRepository.completeDelayedAction({

@@ -16,6 +16,13 @@ export const CONTRIBUTOR_INTENT_PHRASES = Object.freeze([
 ]);
 
 const PAID_ONLY_RE = /\b(?:paid placement|sponsored post(?:s)? only|advertorial(?:s)? only|pay(?:ment)? to publish|link insertion fee|guest post fee)\b/i;
+const EXPLICIT_REFUSAL_RE = new RegExp(
+  "\\b(?:(?:do not|don't|does not|doesn't)\\s+(?:currently\\s+)?(?:accept|take|welcome|consider|allow)|"
+  + "(?:not|no longer)\\s+(?:currently\\s+)?accept(?:ing|ed)?|closed\\s+to|not\\s+open\\s+to)\\b"
+  + "[^.!?]{0,160}\\b(?:contribut(?:e|ed|or|ors|ion)|guest(?: post| author| article| contribution)?s?|"
+  + "external author(?:s)?|article submissions?|pitches?|opinion submissions?|outside authors?)\\b",
+  "i"
+);
 const EXPLICIT_ACCEPTANCE_RE = new RegExp(
   "\\b(?:write for us|contributor guidelines|guest contributors?|submit (?:an )?(?:article|pitch)|"
   + "editorial submissions?|opinion submissions?|expert commentary|practitioner perspectives|"
@@ -34,11 +41,12 @@ export function classifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", so
   const text = cleanText(`${sourceTitle} ${sourceSnippet} ${pageText}`).toLowerCase();
   const paidOnly = PAID_ONLY_RE.test(text);
   const explicitAcceptance = EXPLICIT_ACCEPTANCE_RE.test(text);
+  const explicitRefusal = EXPLICIT_REFUSAL_RE.test(text);
   const externalAuthors = EXTERNAL_AUTHOR_RE.test(text);
   const editorialRoute = EDITORIAL_ROUTE_RE.test(text) || /\/(?:write|contribut|submit|pitch|editorial|author)/i.test(String(sourceUrl));
   const recentActivity = RECENT_ACTIVITY_RE.test(text);
   let classification = "unconfirmed";
-  if (paidOnly && !explicitAcceptance) classification = "unsuitable";
+  if (explicitRefusal || (paidOnly && !explicitAcceptance)) classification = "unsuitable";
   else if (explicitAcceptance) classification = "confirmed";
   else if (externalAuthors && editorialRoute) classification = "strong_probable";
 
@@ -49,6 +57,7 @@ export function classifyEditorialEvidence({ sourceUrl = "", sourceTitle = "", so
     supportingExcerpt: cleanText(pageText || sourceSnippet || sourceTitle, 320),
     retrievedAt,
     explicitAcceptance,
+    explicitRefusal,
     externalAuthors,
     editorialRoute,
     recentActivity,
@@ -60,7 +69,14 @@ export function relevanceScore(keyword = "", evidence = {}) {
   const topic = cleanText(keyword).toLowerCase();
   const evidenceText = cleanText(`${evidence.supportingExcerpt || ""} ${evidence.evidenceUrl || ""}`).toLowerCase();
   const topicSignal = /\b(?:ai|artificial intelligence|automation|machine learning|mlops|technology|digital|data|cybersecurity|business|enterprise|publishing|media|education|healthcare|fintech)\b/i;
-  if (topicSignal.test(topic) && topicSignal.test(evidenceText)) return 25;
+  const topicTerms = topic.match(/[a-z0-9]+/g)?.filter((term) => term.length > 2 || ["ai", "ml"].includes(term)) || [];
+  const evidenceTerms = new Set(evidenceText.match(/[a-z0-9]+/g) || []);
+  const matchingTerms = topicTerms.filter((term) => evidenceTerms.has(term));
+  const escapedTopic = topic.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const directTopicMatch = topic.length >= 2 && new RegExp(`\\b${escapedTopic}\\b`, "i").test(evidenceText);
+  const meaningfulTopicMatch = matchingTerms.length > 0
+    && matchingTerms.length >= Math.max(1, Math.ceil(topicTerms.length / 2));
+  if (directTopicMatch || meaningfulTopicMatch) return 25;
   if (topicSignal.test(topic)) return 15;
   return 0;
 }
