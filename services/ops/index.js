@@ -520,7 +520,7 @@ async function runInternalTask([name, path, body = {}, feature = null, addWeekSt
   const idempotencyKey = `ops:${job?.executionId || job?.id || "run"}:${name}`;
   const payload = { ...body, sessionId };
   if (name === "podcast") {
-    payload.targetMinutes = 60;
+    payload.targetMinutes = 65;
     payload.date = sessionId.replace(/^TT-/, "");
   }
   // Delivery resolves the latest durable issue for the day. The generator
