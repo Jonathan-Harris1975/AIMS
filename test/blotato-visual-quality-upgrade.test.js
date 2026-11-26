@@ -12,7 +12,14 @@ test("theme selection uses subject and only approved Blotato themes", () => {
 test("creative brief and storyboard are topic-specific and safe-zone aware", () => {
   const brief = buildCreativeBrief({ topic: "AI inference costs", angle: "Compute economics", audience: "operators" });
   assert.equal(brief.theme, "futuristic");
-  const storyboard = buildStoryboard({ hook: "The cost is hidden in the infrastructure.", scenes: [{ script: "The cost is hidden.", mediaSource: "Inference servers under load" }], creativeBrief: brief });
+  const storyboard = buildStoryboard({
+    hook: "The cost is hidden in the infrastructure.",
+    scenes: [{
+      script: "The cost is hidden.",
+      mediaSource: "Inference servers under load",
+    }],
+    creativeBrief: brief,
+  });
   assert.equal(storyboard[0].theme, "futuristic");
   assert.match(storyboard[0].imagePrompt, /Inference servers/);
 });
