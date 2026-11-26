@@ -6,12 +6,12 @@ import { OutreachAutomationService, classifyOutreachReplyText, emailValidationSc
 import { aiConfig } from '../services/shared/utils/ai-config.js';
 import { COMMS_HUB_REQUIRED_MIGRATIONS } from '../services/comms-hub/migrations/manifest.js';
 
-function service(env = {}) {
+function service(env = {}, options = {}) {
   const context = {
     d1: { query: async () => ({ results: [] }), batch: async () => [] },
     config: { badLanguageBlockEnabled: true },
   };
-  return new OutreachAutomationService({ context, env, aiRequest: async () => '{"body":"ok"}' });
+  return new OutreachAutomationService({ context, env, aiRequest: async () => '{"body":"ok"}', ...options });
 }
 
 test('ZeroBounce status is translated into a meaningful lead score', () => {
@@ -27,6 +27,32 @@ test('recipient eligibility defaults to validated role/business addresses only',
   assert.equal(s.recipientEligibility({ domain: 'example.com', email: 'jane@example.com', validation: { status: 'valid' }, contact: { type: 'personal' } }).reason, 'named_contact_disabled');
   assert.equal(s.recipientEligibility({ domain: 'example.com', email: 'editor@gmail.com', validation: { status: 'valid' } }).eligible, false);
   assert.equal(s.recipientEligibility({ domain: 'example.com', email: 'editor@example.com', validation: { status: 'invalid' } }).eligible, false);
+});
+
+test('initial pitch rechecks suppression at the provider dispatch boundary', async () => {
+  const s = service({ OUTREACH_SEND_ENABLED: 'true' }, { now: () => new Date('2026-11-30T09:00:00.000Z') });
+  let providerCalls = 0;
+  s.repository.createOutboundConversation = async () => ({ conversationId: 'conversation-1' });
+  s.repository.isSuppressed = async () => ({ reason: 'opt_out' });
+  s.repository.getTargetByEmail = async () => null;
+  s.repository.getTargetByDomain = async () => null;
+  s.repository.countInitialSendsSince = async () => 0;
+  s.context.emailService = { send: async () => { providerCalls += 1; return { providerMessageId: 'msg-1' }; } };
+  const lead = { email: 'editor@example.com', domain: 'example.com', validation: { status: 'valid' } };
+  await assert.rejects(s.sendInitialPitch({ lead, keyword: 'AI governance', pitch: { subject: 'Pitch', body: 'Body' }, recipientType: 'role' }),
+    (error) => error.code === 'OUTREACH_SUPPRESSED');
+  assert.equal(providerCalls, 0);
+});
+
+test('initial pitch refuses dispatch if send mode is disabled after draft creation', async () => {
+  const s = service({ OUTREACH_SEND_ENABLED: 'false' }, { now: () => new Date('2026-11-30T09:00:00.000Z') });
+  let providerCalls = 0;
+  s.repository.createOutboundConversation = async () => ({ conversationId: 'conversation-1' });
+  s.context.emailService = { send: async () => { providerCalls += 1; } };
+  const lead = { email: 'editor@example.com', domain: 'example.com', validation: { status: 'valid' } };
+  await assert.rejects(s.sendInitialPitch({ lead, keyword: 'AI governance', pitch: { subject: 'Pitch', body: 'Body' }, recipientType: 'role' }),
+    (error) => error.code === 'OUTREACH_DISPATCH_DISABLED');
+  assert.equal(providerCalls, 0);
 });
 
 test('deterministic reply routing recognises opt-out, decline, paid placement and article request', () => {
