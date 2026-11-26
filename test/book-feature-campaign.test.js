@@ -146,6 +146,9 @@ test("scheduled run holds the same weekly book and never dispatches", async (t) 
   const repository = new BookFeatureRepository(d1, { now: () => new Date("2026-07-07T08:00:00Z"), leaseId: () => "lease2" });
   const writes = [];
   const base = { repository, now: new Date("2026-07-07T08:00:00Z"), resolveBook: async () => ({ book, selection: {} }),
+    analyseEntities: async (items) => ({ entities: items.map((candidate) => ({
+      name: candidate.name, validation: "candidate_unverified",
+    })), classification: "context_classified_identity_unverified", batches: 1 }),
     analyse: async () => ({ sha256: "a".repeat(64), totalPages: 10, pagesAnalysed: 10,
       candidates: [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120,
         nameOffsetInPassage: 0,
@@ -158,6 +161,7 @@ test("scheduled run holds the same weekly book and never dispatches", async (t) 
   assert.equal(first.status, "completed_zero");
   assert.equal(first.dispatched, 0);
   assert.equal(first.candidateEvidenceRecorded, 1);
+  assert.equal(first.contextClassifiedCandidates, 1);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM book_feature_evidence WHERE validation='candidate'").get().n, 1);
   assert.equal(Object.hasOwn(first, "privateReportKey"), false);
   assert.equal(writes.length, 1);

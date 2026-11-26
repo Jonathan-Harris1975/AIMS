@@ -62,6 +62,7 @@ const DEFAULT_ROUTES = Object.freeze([
   "commsHubOutreachReply",
   "commsHubOutreachArticle",
   "commsHubOutreachArticleReview",
+  "commsHubBookFeatureResearch",
 ]);
 
 // KDP draft grounding uses exact quotations from the supplied book and source text.
