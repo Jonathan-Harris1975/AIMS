@@ -12,7 +12,7 @@ import {
 } from "../../comms-hub/domain/promptSecurity.js";
 import { OutreachRepository } from "./outreachRepository.js";
 import { serpLookup } from "./outreachCore.js";
-import { isAuthorisedOutreachSession, OUTREACH_AUTHORISED_WEEKDAYS, OUTREACH_TIME_ZONE, OUTREACH_SESSION_WINDOW_MINUTES } from "../utils/schedule.js";
+import { isAuthorisedOutreachSession, nextAuthorisedOutreachSession, OUTREACH_AUTHORISED_WEEKDAYS, OUTREACH_TIME_ZONE, OUTREACH_SESSION_WINDOW_MINUTES } from "../utils/schedule.js";
 import { OUTREACH_QUALIFICATION_POLICY_VERSION, OUTREACH_QUALIFICATION_THRESHOLD } from "../utils/qualification.js";
 
 const FREE_MAIL = new Set(["gmail.com","googlemail.com","hotmail.com","outlook.com","live.com","icloud.com","yahoo.com","yahoo.co.uk","aol.com","proton.me","protonmail.com"]);
@@ -271,7 +271,13 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     if (!target) return { skipped: true, reason: "target_missing" };
     const cfg = this.config();
     if (!cfg.followUpEnabled || Number(target.follow_up_count || 0) >= cfg.maxFollowUps || target.state !== "contacted") return { skipped: true, reason: "follow_up_not_needed" };
-    if (!isAuthorisedOutreachSession(new Date())) return { skipped: true, reason: "outside_authorised_morning_session" };
+    if (!isAuthorisedOutreachSession(new Date())) {
+      return {
+        deferred: true,
+        reason: "outside_authorised_morning_session",
+        dueAt: nextAuthorisedOutreachSession(new Date()).toISOString(),
+      };
+    }
     if (await this.repository.isSuppressed(target.email, target.domain)) return { skipped: true, reason: "suppressed" };
     const body = `Hi,\n\nJust following up on the guest article idea I sent over. If it isn't a fit for your editorial plans, no problem at all. If it is potentially useful, \
 I'm happy to send a short outline or work to your contributor guidelines.${this.signatureAndOptOut()}`;
