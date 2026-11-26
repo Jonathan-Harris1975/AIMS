@@ -1,0 +1,52 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { selectSample, verifyBook, londonOccurrence, matchedPassage, scoreOpportunity, effectiveMode } from "../services/outreach/bookFeature/core.js";
+import { extractManuscript, assessThreeBooks } from "../services/outreach/bookFeature/assessment.js";
+
+const book = (id) => ({ ebookId: id, title: `Book ${id}`, bookUrl: `https://example.org/${id}`, storageBucket: "kdp",
+  manuscriptR2Key: `Manuscripts pdf format/${id}.pdf`, publicationDate: "2025-01-01" });
+
+test("seeded three-book selection is reproducible, records exclusions, and does not replace failed titles", async () => {
+  const books = [book(7), book(3), book(11), book(5), { ...book(9), publicationDate: null }];
+  const first = selectSample(books, "acceptance-2026");
+  assert.deepEqual(first, selectSample(books.reverse(), "acceptance-2026"));
+  assert.equal(first.exclusions, 1);
+  const report = await assessThreeBooks("acceptance-2026", { listBooks: async () => books,
+    assess: async (b) => { if (b.ebookId === first.selected[1]) throw new Error("missing object"); return { ebookId: b.ebookId, status: "candidate_review_required" }; },
+    persist: async (_bucket, _key, result) => assert.equal(result.books.length, 3) });
+  assert.equal(report.completeAnalyses, 2);
+  assert.deepEqual(report.books.map((b) => b.ebookId), first.selected);
+  assert.equal(report.dispatched, 0);
+});
+
+test("featured metadata, passage matching, scoring and dispatch mode fail closed", () => {
+  assert.throws(() => verifyBook({ title: "Different" }, book(1)));
+  assert.throws(() => verifyBook({ title: "Book 1", bookUrl: "https://other.example" }, book(1)));
+  assert.equal(matchedPassage("The Acme Group developed reliable services.", "Acme Group developed reliable services."), true);
+  assert.equal(matchedPassage("The Acme Group developed reliable services.", "Acme Group recommends my book."), false);
+  const components = { depth: 25, positiveContext: 20, mutualBenefit: 20, currentRelevance: 15, audienceAlignment: 10, relationshipPotential: 10 };
+  const score = scoreOpportunity(components, { evidence: true });
+  assert.equal(score.score, 100);
+  assert.equal(score.eligible, false);
+  assert.ok(score.failedGates.includes("authorisation"));
+  assert.equal(effectiveMode("production", "production"), "shadow");
+  assert.equal(effectiveMode("suspended", "production"), "suspended");
+});
+
+test("London 09:00 occurrences preserve wall time across BST and GMT", () => {
+  assert.equal(londonOccurrence(new Date("2026-07-07T08:00:00Z"))?.day, "Tue");
+  assert.equal(londonOccurrence(new Date("2026-12-08T09:00:00Z"))?.day, "Tue");
+  assert.equal(londonOccurrence(new Date("2026-07-07T09:00:00Z")), null);
+  assert.equal(londonOccurrence(new Date("2026-07-09T08:00:00Z"))?.day, "Thu");
+});
+
+test("PDF extraction checks every page and blocks deficient coverage", async () => {
+  const documentLoader = () => ({ destroy: async () => {}, promise: Promise.resolve({ numPages: 2, getPage: async (index) => ({
+    getTextContent: async () => ({ items: index === 1 ? [{ str: "Acme Group developed a useful tool with verified benefits." }] : [] }), cleanup() {},
+  }), destroy: async () => {} }) });
+  const result = await extractManuscript(Buffer.from("%PDF-" + "x".repeat(100)), { documentLoader });
+  assert.equal(result.totalPages, 2);
+  assert.equal(result.pagesAnalysed, 1);
+  assert.deepEqual(result.deficientPages, [2]);
+  assert.equal(result.complete, false);
+});
