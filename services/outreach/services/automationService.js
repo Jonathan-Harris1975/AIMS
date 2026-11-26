@@ -93,8 +93,8 @@ export class OutreachAutomationService {
     const env = this.env;
     return {
       enabled: bool(env.OUTREACH_AUTOMATION_ENABLED, true),
-      sendEnabled: bool(env.OUTREACH_SEND_ENABLED, true),
-      followUpEnabled: bool(env.OUTREACH_FOLLOW_UP_ENABLED, true),
+      sendEnabled: bool(env.OUTREACH_SEND_ENABLED, false),
+      followUpEnabled: bool(env.OUTREACH_FOLLOW_UP_ENABLED, false),
       followUpDays: int(env.OUTREACH_FOLLOW_UP_DAYS, 5, 2, 30),
       maxFollowUps: int(env.OUTREACH_MAX_FOLLOW_UPS, 1, 0, 3),
       maxBatch: int(env.OUTREACH_MAX_SENDS_PER_BATCH, 5, 1, 50),
@@ -106,7 +106,7 @@ export class OutreachAutomationService {
       authorSite: String(env.OUTREACH_AUTHOR_SITE || "https://jonathan-harris.online").replace(/\/+$/, ""),
       privacyUrl: String(env.OUTREACH_PRIVACY_URL || "https://jonathan-harris.online/privacy-policy").trim(),
       articleAutoWrite: bool(env.OUTREACH_ARTICLE_AUTO_WRITE_ENABLED, true),
-      articleAutoSend: bool(env.OUTREACH_ARTICLE_AUTO_SEND_ENABLED, true),
+      articleAutoSend: bool(env.OUTREACH_ARTICLE_AUTO_SEND_ENABLED, false),
       wordsMin: int(env.OUTREACH_ARTICLE_WORDS_MIN, 1200, 700, 3000),
       wordsMax: int(env.OUTREACH_ARTICLE_WORDS_MAX, 1600, 800, 4000),
       minScore: num(env.OUTREACH_ARTICLE_MIN_SCORE, 9.1, 0, 10),
@@ -350,6 +350,10 @@ enthusiasm that is not present.` },
   }
 
   async sendThreadReply(target, body, { idempotencyKey, subject = "" } = {}) {
+    const cfg = this.config();
+    if (!cfg.enabled || !cfg.sendEnabled) {
+      throw Object.assign(new Error("Guest Article reply dispatch is disabled."), { code: "OUTREACH_DISPATCH_DISABLED" });
+    }
     this.assertOutbound(body, { allowedUrls: [this.config().authorSite, this.config().privacyUrl] });
     return this.context.emailService.send({ conversationId: target.conversation_id, bodyText: body, subject, idempotencyKey, scheduledDelivery: true });
   }
