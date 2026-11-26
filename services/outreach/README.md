@@ -40,7 +40,8 @@ Cold email defaults are deliberately conservative:
 - named business contacts are disabled until explicitly enabled;
 - suppression is durable and checked before every initial/follow-up send;
 - every cold email clearly identifies Jonathan and provides a simple reply-based opt-out;
-- only one automated follow-up is sent by default.
+- automated follow-up is disabled unless explicitly enabled, is never scheduled earlier than seven full days after the last send, and is capped at one message;
+- the follow-up handler rechecks the global send switch, current reply/suppression state and elapsed time immediately before dispatch.
 
 Initial qualification uses the versioned `outreach-qualification-v1` rubric: contribution evidence 30, expertise relevance 25, editorial contact suitability 20, recent activity 10, credibility 10 and historical engagement 5. The initial automated threshold is 75/100, with mandatory evidence, recipient, validation, suppression and compliance gates overriding the score. Unknown historical engagement is neutral.
 
