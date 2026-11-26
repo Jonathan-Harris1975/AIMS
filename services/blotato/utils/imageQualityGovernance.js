@@ -82,8 +82,26 @@ export function boundedImageAttempts({ maxAttempts = DEFAULT_MAX_ATTEMPTS, maxEs
 }
 
 export function buildTargetedRepairPrompt({ basePrompt = "", defects = [] } = {}) {
-  const unique = [...new Set((Array.isArray(defects) ? defects : []).map(String).map((v) => v.trim()).filter(Boolean))].slice(0, 5);
-  return `${String(basePrompt).trim()} Targeted correction only: ${unique.join("; ") || "improve topic relevance and mobile composition"}. Preserve successful subject, theme and brand constraints. Do not repeat the rejected defect.`;
+  const unique = [...new Set(
+    (Array.isArray(defects) ? defects : [])
+      .map(String)
+      .map((v) => v.trim())
+      .filter(Boolean),
+  )].slice(0, 5);
+  const correction = unique.join("; ") || "improve topic relevance and mobile composition";
+  return [
+    String(basePrompt).trim(),
+    `Targeted correction only: ${correction}.`,
+    "Preserve successful subject, theme and brand constraints.",
+    "Do not repeat the rejected defect.",
+  ].join(" ");
 }
 
-export default { imageFingerprint, validateImageGovernance, chooseImageModel, imageQualityScore, boundedImageAttempts, buildTargetedRepairPrompt };
+export default {
+  imageFingerprint,
+  validateImageGovernance,
+  chooseImageModel,
+  imageQualityScore,
+  boundedImageAttempts,
+  buildTargetedRepairPrompt,
+};
