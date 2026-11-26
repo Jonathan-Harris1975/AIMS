@@ -40,7 +40,10 @@ export function isPublicAddress(address) {
   const [a, b] = value.split(".").map(Number);
   return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127)
     || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
-    || (a === 192 && [0, 168].includes(b)) || (a === 198 && [18, 19, 51].includes(b)) || (a === 203 && b === 0));
+    || (a === 192 && ((b === 0 && [0, 2].includes(Number(value.split(".")[2]))) || b === 168))
+    || (a === 198 && [18, 19].includes(b))
+    || (a === 198 && b === 51 && Number(value.split(".")[2]) === 100)
+    || (a === 203 && b === 0 && Number(value.split(".")[2]) === 113));
 }
 
 async function safePublicUrl(value) {
