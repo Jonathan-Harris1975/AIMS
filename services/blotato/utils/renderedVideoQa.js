@@ -11,7 +11,7 @@ import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/util
 const execFileAsync = promisify(execFile);
 const DEFAULT_MIN_SECONDS = Number(process.env.BLOTATO_RENDERED_MIN_SECONDS || 35);
 const DEFAULT_MAX_SECONDS = Number(process.env.BLOTATO_RENDERED_MAX_SECONDS || 55);
-const DEFAULT_THRESHOLD = Number(process.env.BLOTATO_RENDERED_QA_THRESHOLD || 70);
+const DEFAULT_THRESHOLD = Number(process.env.BLOTATO_RENDERED_QA_THRESHOLD || 80);
 const DEFAULT_FRAME_COUNT = Math.max(4, Math.min(12, Number(process.env.BLOTATO_RENDERED_QA_FRAMES || 8)));
 const DEFAULT_MAX_BYTES = Math.max(10_000_000, Number(process.env.BLOTATO_RENDERED_QA_MAX_BYTES || 120_000_000));
 const RENDERED_VIDEO_QA_SCHEMA = Object.freeze({
@@ -228,6 +228,22 @@ watermarks, or a sequence that does not match the source story.",
   ].join("\n");
 }
 
+function calibratedVideoScore(parsed = {}) {
+  const weighted = [
+    [parsed.hookPerformance, 0.15],
+    [parsed.visualQuality, 0.20],
+    [parsed.sourceRelevance, 0.15],
+    [parsed.sceneAlignment, 0.15],
+    [parsed.continuity, 0.10],
+    [parsed.voiceAudio ?? parsed.continuity, 0.10],
+    [parsed.captionLegibility, 0.10],
+    [parsed.brandConsistency ?? parsed.visualQuality, 0.05],
+  ];
+  const values = weighted.map(([value]) => Number(value)).filter(Number.isFinite);
+  if (values.length < 6) return score(parsed.score);
+  return score(weighted.reduce((sum, [value, weight]) => sum + score(value) * weight, 0));
+}
+
 export function normaliseRenderedVideoQa(raw, {
   threshold = DEFAULT_THRESHOLD,
   technical = {},
@@ -237,6 +253,8 @@ export function normaliseRenderedVideoQa(raw, {
   const hardDefects = stringArray(parsed?.hardDefects);
   const result = {
     score: score(parsed?.score),
+    calibratedScore: calibratedVideoScore(parsed),
+    reportedScore: score(parsed?.score),
     threshold: Math.max(1, Math.min(100, Number(threshold || DEFAULT_THRESHOLD))),
     hookPerformance: score(parsed?.hookPerformance),
     sourceRelevance: score(parsed?.sourceRelevance),
@@ -245,6 +263,8 @@ export function normaliseRenderedVideoQa(raw, {
     visualProgression: score(parsed?.visualProgression),
     visualQuality: score(parsed?.visualQuality),
     captionLegibility: score(parsed?.captionLegibility),
+    voiceAudio: score(parsed?.voiceAudio ?? parsed?.continuity),
+    brandConsistency: score(parsed?.brandConsistency ?? parsed?.visualQuality),
     defects,
     hardDefects,
     summary: compact(parsed?.summary, 900),
@@ -254,7 +274,7 @@ export function normaliseRenderedVideoQa(raw, {
   result.pass = Boolean(
     technical?.pass !== false
       && hardDefects.length === 0
-      && result.score >= result.threshold
+      && result.calibratedScore >= result.threshold
       && result.hookPerformance >= 65
       && result.sourceRelevance >= 70
       && result.sceneAlignment >= 65

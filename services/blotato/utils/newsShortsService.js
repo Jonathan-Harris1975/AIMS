@@ -7,6 +7,7 @@ import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig 
 import { buildCreativeDirection, formatCreativeDirection } from "./blotatoVisualThemes.js";
 import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
+import { buildCreativeBrief, buildStoryboard, buildHookCandidates } from "./creativeDirection.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
 const MIN_SCRIPT_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 80));
@@ -1488,6 +1489,16 @@ export async function buildOrCreateShortLane(options = {}) {
   const laneConfig = requireShortLaneConfig(options.lane || DEFAULT_BLOTATO_SHORT_LANE);
   const pack = await buildShortLanePack({ ...options, lane: laneConfig.slug });
   const visualPrompt = buildBlotatoVisualPrompt(pack);
+  const creativeBrief = buildCreativeBrief({
+    topic: options.article?.title || pack.internalTitle || pack.angle,
+    angle: pack.angle,
+    audience: options.audience || "intelligent adult AI audience",
+    coreMessage: pack.script || pack.angle,
+    lane: laneConfig.slug,
+    recentThemes: options.recentThemes || [],
+  });
+  const storyboard = buildStoryboard({ script: pack.script, hook: pack.hook, scenes: pack.scenes, durationSeconds: options.durationSeconds || 45, creativeBrief });
+  const hookCandidates = buildHookCandidates({ topic: options.article?.title || pack.internalTitle, angle: pack.angle, evidence: options.article?.summary, audience: options.audience });
   const visualInputs = buildBlotatoVideoInputs(pack);
   // Always build source-grounded manual inputs from the pack. Route this
   // lower-level create endpoint through the same documented template contract
@@ -1506,6 +1517,7 @@ export async function buildOrCreateShortLane(options = {}) {
           visualPrompt,
           manualInputsConfigured: true,
           useBrandKit: options.useBrandKit === true,
+          creativeBrief,
         }),
         render: options.render ?? true,
         isDraft: options.isDraft ?? false,
@@ -1522,6 +1534,9 @@ export async function buildOrCreateShortLane(options = {}) {
       pack,
       visualPrompt,
       visualInputs,
+      creativeBrief,
+      storyboard,
+      hookCandidates,
       visualRequest,
     };
   }
@@ -1542,6 +1557,9 @@ export async function buildOrCreateShortLane(options = {}) {
     pack,
     visualPrompt,
     visualInputs,
+    creativeBrief,
+    storyboard,
+    hookCandidates,
     visualRequest,
     visual,
   };

@@ -1,3 +1,5 @@
+import { assertApprovedBlotatoTheme } from "./creativeDirection.js";
+
 function clean(value = "") {
   return String(value ?? "").trim();
 }
@@ -82,6 +84,7 @@ export function buildVisualCreationRequest({
   visualPrompt,
   manualInputsConfigured = true,
   useBrandKit = false,
+  creativeBrief = null,
 } = {}) {
   const templateId = clean(candidateTemplateId);
   if (!templateId) {
@@ -91,16 +94,30 @@ export function buildVisualCreationRequest({
   }
 
   const prompt = clean(visualPrompt);
+  if (creativeBrief?.theme) assertApprovedBlotatoTheme(creativeBrief.theme);
+  const creativeDirective = creativeBrief
+    ? [
+      "CREATIVE BRIEF:",
+      `topic=${clean(creativeBrief.topic)}`,
+      `angle=${clean(creativeBrief.editorialAngle)}`,
+      `theme=${clean(creativeBrief.theme)}`,
+      `message=${clean(creativeBrief.coreMessage)}`,
+      `composition=${clean(creativeBrief.composition)}`,
+      `safe-zones=${JSON.stringify(creativeBrief.safeZones || {})}`,
+      `prohibited=${(creativeBrief.prohibited || []).map(clean).join(", ")}`,
+    ].join("; ")
+    : "";
   if (!prompt) {
     const error = new Error("Blotato visual prompt is required before creating a visual");
     error.statusCode = 400;
     throw error;
   }
 
+  // prompt,
   return {
     templateId,
     inputs: manualInputsConfigured ? buildAiStoryTemplateInputs(visualInputs) : {},
-    prompt,
+    prompt: `${prompt}${creativeDirective}`,
     render: true,
     isDraft: false,
     ...(useBrandKit === true ? { useBrandKit: true } : {}),
