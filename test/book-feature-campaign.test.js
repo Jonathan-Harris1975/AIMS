@@ -49,23 +49,30 @@ test("a selected campaign cannot silently change and occurrences cannot overlap"
   await assert.rejects(repository.campaign(occurrence.week, { ...book, author: "Other author" }, { method: "weekly" }));
   await assert.rejects(repository.campaign(occurrence.week, { ...book, coverArtUrl: "https://example.com/new-cover" }, { method: "weekly" }));
   await assert.rejects(repository.campaign(occurrence.week, book, { method: "reselected" }));
-  const passage = "Acme Group delivered a useful platform with meaningful practical outcomes for its customers.";
-  const candidates = [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, passage }] }];
+  const passage = " Acme Group delivered a useful platform with meaningful practical outcomes for its customers.";
+  const candidates = [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, nameOffsetInPassage: 1, passage }] }];
+  const sourcePages = [{ pdfPage: 4, text: `${" ".repeat(119)}${passage}`, textOffsetStart: 0 }];
   const checksum = "b".repeat(64);
-  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates), { attempted: 1, recorded: 1 });
-  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates), { attempted: 1, recorded: 0 });
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates, sourcePages), { attempted: 1, recorded: 1 });
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates, sourcePages), { attempted: 1, recorded: 0 });
   assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, [
     { name: "Invented Org", occurrences: [{ pdfPage: 5, offset: 0, passage }] },
-  ]), { attempted: 0, recorded: 0 });
-  await assert.rejects(repository.recordCandidateEvidence(campaign.id, "not-a-checksum", candidates), /SHA-256/);
+  ], sourcePages), { attempted: 0, recorded: 0 });
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, candidates), { attempted: 0, recorded: 0 });
+  const forged = [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, nameOffsetInPassage: 0, passage: "Acme Group made a completely different claim with enough characters." }] }];
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, forged, sourcePages), { attempted: 0, recorded: 0 });
+  await assert.rejects(repository.recordCandidateEvidence(campaign.id, "not-a-checksum", candidates, sourcePages), /SHA-256/);
   const batchSizes = [];
   const originalBatch = d1.batch;
   d1.batch = async (statements) => { batchSizes.push(statements.length); return originalBatch(statements); };
   const manyCandidates = Array.from({ length: 205 }, (_, index) => ({
     name: `Organisation ${index}`,
-    occurrences: [{ pdfPage: 5, offset: 1_000 + index, passage: `Organisation ${index} produced a useful product with documented practical results.` }],
+    occurrences: [{ pdfPage: index + 1, offset: 0, nameOffsetInPassage: 0, passage: `Organisation ${index} produced a useful product with documented practical results.` }],
   }));
+  const manyPages = manyCandidates.map((candidate, index) => ({ pdfPage: index + 1, text: candidate.occurrences[0].passage, textOffsetStart: 0 }));
   assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, manyCandidates),
+    { attempted: 0, recorded: 0 });
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, manyCandidates, manyPages),
     { attempted: 205, recorded: 205 });
   assert.deepEqual(batchSizes, [100, 100, 5]);
   const lease = await repository.claimOccurrence(occurrence, campaign.id);
@@ -102,9 +109,13 @@ test("scheduled run holds the same weekly book and never dispatches", async (t) 
   const repository = new BookFeatureRepository(d1, { now: () => new Date("2026-07-07T08:00:00Z"), leaseId: () => "lease2" });
   const writes = [];
   const base = { repository, now: new Date("2026-07-07T08:00:00Z"), resolveBook: async () => ({ book, selection: {} }),
-    analyse: async () => ({ sha256: "a".repeat(64), totalPages: 10, pagesAnalysed: 10, candidates: [
-      { name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120, passage: "Acme Group delivered a useful platform with meaningful practical outcomes for its customers." }] },
-    ], cacheKey: "private/extract" }),
+    analyse: async () => ({ sha256: "a".repeat(64), totalPages: 10, pagesAnalysed: 10,
+      candidates: [{ name: "Acme Group", occurrences: [{ pdfPage: 4, offset: 120,
+        nameOffsetInPassage: 0,
+        passage: "Acme Group delivered a useful platform with meaningful practical outcomes for its customers." }] }],
+      sourcePages: [{ pdfPage: 4,
+        text: `${" ".repeat(120)}Acme Group delivered a useful platform with meaningful practical outcomes for its customers.`,
+        textOffsetStart: 0 }], cacheKey: "private/extract" }),
     persist: async (...args) => writes.push(args) };
   const first = await runBookFeatureAssessment(base);
   assert.equal(first.status, "completed_zero");

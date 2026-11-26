@@ -2,6 +2,7 @@ import { info } from "../../../logger.js";
 import { serpLookup, enrichDomain, shouldBlockDomain } from "./outreachCore.js";
 import { batchValidateEmails } from "./zeroBounceBatch.js";
 import { resolveOutreachThresholds } from "../config.js";
+import { relevanceScore } from "../utils/qualification.js";
 
 /* ============================================================
    🧠 REPLY-RATE–AWARE SCORING
@@ -16,6 +17,18 @@ function classifyTier(score) {
 
 function normaliseHost(host) {
   return String(host || "").toLowerCase().replace(/^www\./, "").trim();
+}
+
+export function sortEditorialOpportunities(domains = []) {
+  const tierWeight = { A: 1, B: 2, C: 3, D: 4 };
+  return [...domains].sort((a, b) =>
+    (Number(b.editorialRelevanceScore || 0) - Number(a.editorialRelevanceScore || 0)) ||
+    (Number(b.editorialEvidence?.classification === "confirmed") - Number(a.editorialEvidence?.classification === "confirmed")) ||
+    (Number(b.editorialEvidence?.recentActivity === true) - Number(a.editorialEvidence?.recentActivity === true)) ||
+    ((b.emails?.length || 0) - (a.emails?.length || 0)) ||
+    ((tierWeight[b.authority?.tier] || 0) - (tierWeight[a.authority?.tier] || 0)) ||
+    (Number(b.authority?.totalScore || 0) - Number(a.authority?.totalScore || 0))
+  );
 }
 
 async function mapWithConcurrency(items, limit, worker) {
@@ -105,6 +118,7 @@ export async function serpOutreach(keyword) {
   ------------------------------ */
   enriched.forEach((e) => {
     e.authority.tier = classifyTier(e.authority.totalScore);
+    e.editorialRelevanceScore = relevanceScore(keyword, e.editorialEvidence);
   });
 
   /* ------------------------------
@@ -118,15 +132,7 @@ export async function serpOutreach(keyword) {
   /* ------------------------------
      📈 PRIORITISE FOR REPLIES
   ------------------------------ */
-  accepted.sort((a, b) => {
-    const tierWeight = { A: 1, B: 2, C: 3 };
-    return (
-      (b.editorialEvidence?.classification === "confirmed" ? 1 : 0) - (a.editorialEvidence?.classification === "confirmed" ? 1 : 0) ||
-      tierWeight[b.authority.tier] - tierWeight[a.authority.tier] ||
-      b.emails.length - a.emails.length ||
-      b.authority.totalScore - a.authority.totalScore
-    );
-  });
+  const prioritised = sortEditorialOpportunities(accepted);
 
   /* ------------------------------
      📊 VISIBILITY
@@ -143,9 +149,9 @@ export async function serpOutreach(keyword) {
 
   info("outreach.serp.accepted", {
     keyword,
-    acceptedDomains: accepted.length,
-    emails: accepted.reduce((a, b) => a + b.emails.length, 0),
-    evidenceQualifiedDomains: accepted.length,
+    acceptedDomains: prioritised.length,
+    emails: prioritised.reduce((a, b) => a + b.emails.length, 0),
+    evidenceQualifiedDomains: prioritised.length,
     testMode: thresholds.testMode,
     policy: "evidence-first",
   });
@@ -153,6 +159,6 @@ export async function serpOutreach(keyword) {
   return {
     keyword,
     domains: enriched,
-    acceptedDomains: accepted,
+    acceptedDomains: prioritised,
   };
        }
