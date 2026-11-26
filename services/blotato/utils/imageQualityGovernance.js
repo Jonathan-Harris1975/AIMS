@@ -39,16 +39,40 @@ export function validateImageGovernance({ model = "", primary = "", fallback = "
   return selected;
 }
 
-export function chooseImageModel({ primary, fallback, escalationModel, escalationEnabled = false, fallbackEnabled = true, attempt = 1, escalationCount = 0, maxEscalations = DEFAULT_MAX_ESCALATIONS, allowedModels = [] } = {}) {
+export function chooseImageModel({
+  primary,
+  fallback,
+  escalationModel,
+  escalationEnabled = false,
+  fallbackEnabled = true,
+  attempt = 1,
+  escalationCount = 0,
+  maxEscalations = DEFAULT_MAX_ESCALATIONS,
+  allowedModels = [],
+} = {}) {
   const base = validateImageGovernance({ model: primary, fallback, allowedModels });
-  if (bool(escalationEnabled) && attempt > 1 && escalationCount < Number(maxEscalations) && escalationModel) {
+  if (
+    bool(escalationEnabled)
+    && attempt > 1
+    && escalationCount < Number(maxEscalations)
+    && escalationModel
+  ) {
     return validateImageGovernance({ model: escalationModel, primary: escalationModel, fallback, allowedModels });
   }
   if (attempt > 1 && bool(fallbackEnabled) && fallback) return validateImageGovernance({ model: fallback, primary: fallback, allowedModels });
   return base;
 }
 
-export function imageQualityScore({ relevance = 0, visualQuality = 0, composition = 0, brand = 0, originality = 0, platform = 0, technical = 0, criticalDefects = [] } = {}) {
+export function imageQualityScore({
+  relevance = 0,
+  visualQuality = 0,
+  composition = 0,
+  brand = 0,
+  originality = 0,
+  platform = 0,
+  technical = 0,
+  criticalDefects = [],
+} = {}) {
   const score = Math.round(relevance * 0.25 + visualQuality * 0.2 + composition * 0.15 + brand * 0.15 + originality * 0.1 + platform * 0.1 + technical * 0.05);
   return { score: Math.max(0, Math.min(100, score)), criticalDefects: Array.isArray(criticalDefects) ? criticalDefects : [], pass: (!criticalDefects?.length && score >= Number(process.env.SOCIAL_IMAGE_QA_THRESHOLD || 75)) };
 }
