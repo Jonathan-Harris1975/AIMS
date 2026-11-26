@@ -5,10 +5,7 @@
  */
 import { createHash } from "node:crypto";
 
-const APPROVED_MODELS = new Set(
-  String(process.env.APPROVED_IMAGE_MODELS || "")
-    .split(",").map((v) => v.trim()).filter(Boolean)
-);
+const APPROVED_MODELS = new Set();
 const DEFAULT_MAX_ATTEMPTS = 2;
 const DEFAULT_MAX_ESCALATIONS = 1;
 
@@ -86,7 +83,7 @@ export function imageQualityScore({
   return {
     score: Math.max(0, Math.min(100, score)),
     criticalDefects: defects,
-    pass: !defects.length && score >= Number(process.env.SOCIAL_IMAGE_QA_THRESHOLD || 75),
+    pass: !defects.length && score >= 75,
   };
 }
 
