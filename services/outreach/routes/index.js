@@ -26,7 +26,7 @@ router.post("/book-feature/assessment/three-books", asyncRoute(async (req, res) 
   const seed = String(req.body?.seed || "");
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(seed)) return res.status(400).json({ ok: false, error: "Provide a short reproducible alphanumeric seed." });
   const job = await startAsyncServiceRouteJob({ service: "book-feature", lane: "assessment", payload: { seed, sessionId: `three-books-${seed}` }, req,
-    statusBasePath: "/outreach/book-feature/assessment/jobs", reuseTerminal: true,
+    statusBasePath: "/outreach/book-feature/jobs", reuseTerminal: true,
     runner: async () => {
       const report = await assessThreeBooks(seed);
       return { ok: report.completeAnalyses === 3, partialFailure: report.completeAnalyses !== 3,
@@ -37,7 +37,7 @@ router.post("/book-feature/assessment/three-books", asyncRoute(async (req, res) 
   res.status(202).json(job);
 }));
 
-router.get("/book-feature/assessment/jobs/:sessionId", asyncRoute(async (req, res) => {
+router.get("/book-feature/jobs/assessment/:sessionId", asyncRoute(async (req, res) => {
   res.set("Cache-Control", "no-store");
   const job = await getAsyncServiceRouteJobFresh("book-feature", "assessment", req.params.sessionId, req);
   res.status(job ? 200 : 404).json(job || { ok: false, error: "Assessment job not found." });

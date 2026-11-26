@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { selectSample, verifyBook, londonOccurrence, matchedPassage, scoreOpportunity, effectiveMode } from "../services/outreach/bookFeature/core.js";
 import { extractManuscript, assessThreeBooks } from "../services/outreach/bookFeature/assessment.js";
+import { statusUrlFor } from "../services/shared/utils/asyncServiceStatusUrl.js";
+import express from "express";
+import request from "supertest";
+import outreachRouter from "../services/outreach/routes/index.js";
 
 const book = (id) => ({ ebookId: id, title: `Book ${id}`, bookUrl: `https://example.org/${id}`, storageBucket: "kdp",
   manuscriptR2Key: `Manuscripts pdf format/${id}.pdf`, publicationDate: "2025-01-01" });
@@ -49,4 +53,14 @@ test("PDF extraction checks every page and blocks deficient coverage", async () 
   assert.equal(result.pagesAnalysed, 1);
   assert.deepEqual(result.deficientPages, [2]);
   assert.equal(result.complete, false);
+});
+
+test("assessment job polling URL resolves to its registered route", async () => {
+  const url = statusUrlFor(null, "book-feature", "assessment", "three-books-seed", "/outreach/book-feature/jobs");
+  assert.equal(url, "/outreach/book-feature/jobs/assessment/three-books-seed");
+  const app = express();
+  app.use("/outreach", outreachRouter);
+  const response = await request(app).get(url);
+  assert.equal(response.status, 404);
+  assert.deepEqual(response.body, { ok: false, error: "Assessment job not found." });
 });
