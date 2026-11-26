@@ -5,6 +5,8 @@ import { wait } from "../../shared/utils/wait.js";
 import { loadOutreachKeywords } from "../utils/keywordLoader.js";
 import { durableStateEnvHint, hasDurableStateEnv } from "../../shared/utils/durableStateEnv.js";
 import { info, warn } from "../../../logger.js";
+import { isAuthorisedOutreachSession, londonParts } from "../utils/schedule.js";
+import { GuestArticleRunRepository } from "./guestArticleRunRepository.js";
 
 import { runKeyword } from "./outreachService.js";
 import {
@@ -120,7 +122,7 @@ function positiveInt(name, fallback, min = 1, max = 1440) {
   return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
-export async function runNextBatch({ triggerRunKey = "" } = {}) {
+async function runBatchWork({ triggerRunKey = "", recovering = false, clock = () => Date.now(), assertLease = async () => {} } = {}) {
   if (batchRunning) return { processed: 0, skipped: true, reason: "OUTREACH_BATCH_ALREADY_RUNNING" };
   batchRunning = true;
   try {
@@ -133,10 +135,10 @@ export async function runNextBatch({ triggerRunKey = "" } = {}) {
     }
 
     const progress = await loadProgress();
-    const now = Date.now();
+    const now = clock();
     const minIntervalMs = positiveInt("OUTREACH_TRIGGER_MIN_INTERVAL_MINUTES", 300, 1, 1440) * 60_000;
     const lastTriggeredAt = Date.parse(progress.lastTriggeredAt || "");
-    if (Number.isFinite(lastTriggeredAt) && now - lastTriggeredAt < minIntervalMs) {
+    if (!recovering && Number.isFinite(lastTriggeredAt) && now - lastTriggeredAt < minIntervalMs) {
       return {
         processed: 0, skipped: true, reason: "OUTREACH_TRIGGER_COOLDOWN",
         nextAllowedAt: new Date(lastTriggeredAt + minIntervalMs).toISOString(),
@@ -154,6 +156,7 @@ export async function runNextBatch({ triggerRunKey = "" } = {}) {
     if (index >= keywords.length) return { processed: 0, done: true, skipped: true, reason: "OUTREACH_KEYWORDS_COMPLETE", lastProcessedIndex: index, keywordCount: keywords.length };
 
     const trigger = String(triggerRunKey || "").trim().slice(0, 200);
+    await assertLease();
     await saveProgress({
       ...progress,
       lastProcessedIndex: index,
@@ -165,17 +168,19 @@ export async function runNextBatch({ triggerRunKey = "" } = {}) {
     const automation = { sent: 0, queued: 0, skipped: 0, failed: 0 };
     const results = [];
     while (processed < batchSize && keywords.length) {
+      await assertLease();
       if (index >= keywords.length) {
         if (!cycle) break;
         index = 0;
       }
       const keyword = keywords[index];
       info("outreach.batch.keyword", { index, keyword });
-      const result = await runKeyword(keyword);
+      const result = await runKeyword(keyword, { assertLease });
       results.push({ keyword, savedLeads: result.savedLeads, automation: result.automation || null });
       for (const key of Object.keys(automation)) automation[key] += Number(result?.automation?.[key] || 0);
       index += 1;
       processed += 1;
+      await assertLease();
       await saveProgress({
         lastProcessedIndex: index,
         batchSize,
@@ -199,6 +204,104 @@ export async function runNextBatch({ triggerRunKey = "" } = {}) {
     };
   } finally {
     batchRunning = false;
+  }
+}
+
+function safeRunResult(result) {
+  const countAutomation = (automation = {}) => {
+    const counts = automation || {};
+    return {
+      sent: Number(counts.sent || 0),
+      queued: Number(counts.queued || 0),
+      skipped: Number(counts.skipped || 0),
+      failed: Number(counts.failed || 0),
+    };
+  };
+  return {
+    processed: Number(result.processed || 0),
+    done: result.done === true,
+    cycle: result.cycle === true,
+    lastProcessedIndex: Number(result.lastProcessedIndex || 0),
+    triggerRunKey: result.triggerRunKey || null,
+    keywordSource: result.keywordSource || null,
+    keywordCount: Number(result.keywordCount || 0),
+    automation: countAutomation(result.automation),
+    results: (Array.isArray(result.results) ? result.results : []).map((item) => ({
+      keyword: String(item.keyword || "").slice(0, 180),
+      savedLeads: Number(item.savedLeads || 0),
+      automation: countAutomation(item.automation),
+    })),
+  };
+}
+
+export async function runNextBatch({ triggerRunKey = "", now = () => new Date(),
+  getContext = async () => {
+    const runtime = await import("../../comms-hub/runtime.js");
+    return runtime.getCommsHubContext();
+  }, execute = runBatchWork } = {}) {
+  const current = now();
+  if (!isAuthorisedOutreachSession(current)) {
+    return { processed: 0, skipped: true, status: "blocked", reason: "OUTSIDE_AUTHORISED_GUEST_ARTICLE_SESSION" };
+  }
+  if (!parseBoolean(process.env.AIMS_OPERATION_OUTREACH_ENABLED, false)) {
+    return { processed: 0, skipped: true, status: "blocked", reason: "GUEST_ARTICLE_OPERATION_DISABLED" };
+  }
+
+  const context = await getContext();
+  if (!context?.d1) throw new Error("Durable Comms Hub D1 is required for Guest Article occurrence control.");
+  const ledger = new GuestArticleRunRepository(context.d1, { now });
+  const localDate = londonParts(current).date;
+  const lease = await ledger.claim(localDate, triggerRunKey);
+  if (!lease.acquired) {
+    return { processed: 0, skipped: true, duplicate: lease.completed,
+      status: lease.status, reason: lease.completed ? "GUEST_ARTICLE_OCCURRENCE_ALREADY_TERMINAL" : "GUEST_ARTICLE_OCCURRENCE_ALREADY_RUNNING_OR_EXHAUSTED",
+      occurrenceId: lease.occurrenceId, attempts: lease.attempts, previousResult: lease.result };
+  }
+
+  let leaseError = null;
+  let renewalInFlight = null;
+  const renewLease = async () => {
+    if (leaseError) throw leaseError;
+    if (renewalInFlight) return renewalInFlight;
+    renewalInFlight = (async () => {
+      if (!await ledger.renew(lease)) {
+        leaseError = Object.assign(new Error("Guest Article run lease was lost."), { code: "GUEST_ARTICLE_LEASE_LOST" });
+        throw leaseError;
+      }
+    })();
+    try { await renewalInFlight; } finally { renewalInFlight = null; }
+  };
+  const assertLease = async () => {
+    if (leaseError) throw leaseError;
+    if (!await ledger.assertOwned(lease)) {
+      leaseError = Object.assign(new Error("Guest Article run lease expired or was taken."), { code: "GUEST_ARTICLE_LEASE_LOST" });
+      throw leaseError;
+    }
+  };
+  const heartbeat = setInterval(() => {
+    void renewLease().catch(() => {});
+  }, Math.max(1000, Math.floor(ledger.leaseMs / 3)));
+  heartbeat.unref?.();
+
+  try {
+    await renewLease();
+    const result = await execute({ triggerRunKey, recovering: lease.attempt > 1,
+      clock: () => current.getTime(), assertLease });
+    await assertLease();
+    const status = result.processed > 0
+      ? (Number(result.automation?.sent || 0) > 0 ? "completed" : "completed_zero")
+      : "blocked";
+    await ledger.finish(lease, status, { result: safeRunResult(result), errorCode: status === "blocked" ? result.reason : null });
+    return { ...result, status, occurrenceId: lease.occurrenceId, attempt: lease.attempt };
+  } catch (error) {
+    try {
+      await ledger.finish(lease, "failed", { errorCode: error?.code || "guest_article_run_failed" });
+    } catch (finishError) {
+      if (error && typeof error === "object") error.finishError = finishError;
+    }
+    throw error;
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 

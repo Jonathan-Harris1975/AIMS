@@ -6,7 +6,7 @@ import { runBookFeatureAssessment } from "../bookFeature/run.js";
 import { BookFeatureRepository } from "../bookFeature/repository.js";
 import { runKeyword } from "../services/outreachService.js";
 import { runNextBatch, resetProgress } from "../services/batchService.js";
-import { requestDedupe } from "../../shared/utils/requestDedupe.js";
+import { getRequestIdempotencyKey, requestDedupe } from "../../shared/utils/requestDedupe.js";
 import {
   validateBody,
   outreachKeywordBodySchema,
@@ -120,8 +120,8 @@ router.post("/keyword", requestDedupe("outreach:keyword"), asyncRoute(async (req
   res.json({ ok: true, ...result });
 }));
 
-router.post("/batch/next", requestDedupe("outreach:batchNext"), asyncRoute(async (req, res) => {
-  const result = await runNextBatch({ triggerRunKey: req.idempotencyKey || "" });
+router.post("/batch/next", asyncRoute(async (req, res) => {
+  const result = await runNextBatch({ triggerRunKey: getRequestIdempotencyKey(req) || "" });
   res.json({ ok: true, ...result });
 }));
 
