@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **539**
-- Present in curated templates: **406**
+- Runtime variables referenced in production code: **540**
+- Present in curated templates: **407**
 - Not present in curated templates: **133**
 
 | Variable | Curated template | Production references |
@@ -23,6 +23,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AIMS_OPERATION_DISPATCH_TIMEOUT_MS` | No | services/ops/index.js:537 |
 | `AIMS_OPERATION_FRIDAY_PM_DELAY_MS` | Yes | services/ops/index.js:214 |
 | `AIMS_OPERATION_NEWSLETTER_ENABLED` | Yes | scripts/contentDeliveryDiagnostics.js:234 |
+| `AIMS_OPERATION_OUTREACH_ENABLED` | Yes | services/outreach/services/batchService.js:246 |
 | `AIMS_OPERATION_TASK_TIMEOUT_MS` | Yes | services/ops/index.js:538 |
 | `AIMS_STARTUP_GRACE_MS` | No | services/shared/utils/lifecycle.js:14 |
 | `AI_MODEL_BLOCKLIST` | Yes | services/shared/utils/ai-service.js:88 |
@@ -33,7 +34,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
 | `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1351<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
 | `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:269 |
-| `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:186<br>services/outreach/services/batchService.js:45<br>services/shared/utils/stateFile.js:76 |
+| `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:186<br>services/outreach/services/batchService.js:47<br>services/shared/utils/stateFile.js:76 |
 | `API_HUNTER_KEY` | Yes | services/outreach/services/outreachCore.js:27 |
 | `API_KEY_PODCAST_INDEX` | Yes | services/shared/utils/podcastIndexClient.js:31 |
 | `API_OPENPAGERANK_KEY` | Yes | services/outreach/services/outreachCore.js:24 |
@@ -327,9 +328,9 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `OPENROUTER_SITE_URL` | Yes | ai-config.js:381<br>services/artwork/artwork.js:293<br>services/artwork/utils/artwork.js:373 |
 | `OPENROUTER_SORT_BY` | Yes | services/shared/utils/ai-service.js:186 |
 | `OPS_ALERT_TIMEOUT_MS` | Yes | services/shared/utils/operationalExcellence.js:6 |
-| `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:88 |
-| `OUTREACH_BATCH_CYCLE` | Yes | services/outreach/services/batchService.js:151 |
-| `OUTREACH_BATCH_SIZE` | Yes | services/outreach/services/batchService.js:147<br>services/outreach/utils/r2ProgressStore.js:7 |
+| `OUTREACH_AUTOMATION_ENABLED` | Yes | services/outreach/services/outreachService.js:90 |
+| `OUTREACH_BATCH_CYCLE` | Yes | services/outreach/services/batchService.js:153 |
+| `OUTREACH_BATCH_SIZE` | Yes | services/outreach/services/batchService.js:149<br>services/outreach/utils/r2ProgressStore.js:7 |
 | `OUTREACH_KEYWORDS_FILE` | No | services/outreach/utils/keywordLoader.js:27<br>services/outreach/utils/keywordLoader.js:32 |
 | `OUTREACH_MAX_DOMAINS_PER_SEARCH` | No | services/outreach/services/serp-OutreachService.js:98 |
 | `OUTREACH_PROGRESS_KEY` | Yes | services/outreach/utils/r2ProgressStore.js:28<br>services/outreach/utils/r2ProgressStore.js:44 |
@@ -431,7 +432,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `RSS_SOURCE_RECOVERY_TIMEOUT_MS` | No | services/rss-feed-creator/utils/models.js:48 |
 | `RSS_TOPIC_GUARD_MIN_OVERLAP` | Yes | services/rss-feed-creator/utils/models.js:36 |
 | `RSS_TOPIC_GUARD_MIN_SHARED` | Yes | services/rss-feed-creator/utils/models.js:37 |
-| `SERP_RATE_DELAY_MS` | Yes | services/outreach/services/batchService.js:148 |
+| `SERP_RATE_DELAY_MS` | Yes | services/outreach/services/batchService.js:150 |
 | `SERVER_LISTEN_TIMEOUT_MS` | No | scripts/bootstrap.js:6 |
 | `SHUTDOWN_TIMEOUT_MS` | Yes | server.js:595 |
 | `SITE_BASE_URL` | Yes | scripts/backfill-blog-main-site-links.js:63<br>scripts/backfill-transcript-html.js:77<br>scripts/backfill-transcript-html.js:133<br>services/blog/rss/publishBlogRssFeed.js:10<br>services/blog/utils/mainSiteLinks.js:20<br>services/blog/utils/mainSiteLinks.js:24<br>+5 more |
