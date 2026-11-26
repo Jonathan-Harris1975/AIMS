@@ -4,8 +4,8 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **540**
-- Present in curated templates: **407**
+- Runtime variables referenced in production code: **541**
+- Present in curated templates: **408**
 - Not present in curated templates: **133**
 
 | Variable | Curated template | Production references |
@@ -189,6 +189,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_WEBHOOK_SECRET` | Yes | services/shared/middleware/suiteAuth.js:76 |
 | `BLOTATO_YOUTUBE_NOTIFY_SUBSCRIBERS` | Yes | services/blotato/utils/autoPublishService.js:1010 |
 | `BLOTATO_YOUTUBE_PRIVACY_STATUS` | Yes | services/blotato/utils/autoPublishService.js:1009 |
+| `BOOK_FEATURE_OUTREACH_MODE` | Yes | services/outreach/routes/index.js:19<br>services/outreach/routes/index.js:24 |
 | `BOOTSTRAP_STEP_TIMEOUT_MS` | Yes | scripts/bootstrap.js:5 |
 | `BRAND_SOCIAL_COUNCIL_RUN_AFTER_SOCIAL` | Yes | audits/utils/zernioSocialPerformance.js:722 |
 | `CF_ACCOUNT_ID` | Yes | services/kdp/catalogue.js:18 |
