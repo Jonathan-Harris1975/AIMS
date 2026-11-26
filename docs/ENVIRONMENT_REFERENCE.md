@@ -349,8 +349,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Yes | audits/utils/contentMasterCouncil.js:320<br>audits/utils/websiteAuditCouncil.js:1113<br>services/artwork/utils/quizCardRenderer.js:21<br>services/blotato/utils/localCreditFallbackVideo.js:131 |
 | `PODCASTINDEX_USER_AGENT` | Yes | services/shared/utils/podcastIndexClient.js:34 |
 | `PODCAST_ARTWORK_TIMEOUT_MS` | Yes | services/artwork/createPodcastArtwork.js:12 |
-| `PODCAST_DURATION_MINS` | No | services/script/utils/durationCalculator.js:79 |
-| `PODCAST_DURATION_MINUTES` | No | services/script/utils/durationCalculator.js:80 |
+| `PODCAST_DURATION_MINS` | No | services/script/utils/durationCalculator.js:80 |
+| `PODCAST_DURATION_MINUTES` | No | services/script/utils/durationCalculator.js:81 |
 | `PODCAST_EDITORIAL_MAX_TOKENS` | Yes | services/script/utils/editorialPass.js:86 |
 | `PODCAST_EDITORIAL_TIMEOUT_MS` | Yes | services/script/utils/editorialPass.js:87 |
 | `PODCAST_EDIT_TMP_DIR` | Yes | services/tts/utils/editingProcessor.js:22 |
@@ -364,8 +364,8 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `PODCAST_RSS_EP` | Yes | services/script/utils/episodeCounter.js:17<br>services/script/utils/episodeCounter.js:60 |
 | `PODCAST_RSS_FEED_URL` | Yes | services/zernio/utils/config.js:226<br>services/zernio/utils/podcastRssFeed.js:50 |
 | `PODCAST_SPOTIFY_URL` | No | services/zernio/utils/config.js:227 |
-| `PODCAST_TARGET_MINS` | No | services/script/utils/durationCalculator.js:77 |
-| `PODCAST_TARGET_MINUTES` | Yes | services/script/utils/durationCalculator.js:78 |
+| `PODCAST_TARGET_MINS` | No | services/script/utils/durationCalculator.js:78 |
+| `PODCAST_TARGET_MINUTES` | Yes | services/script/utils/durationCalculator.js:79 |
 | `PODCAST_TRANSCRIPT_HARD_MAX_SENTENCE_WORDS` | Yes | services/script/utils/orchestrator.js:115 |
 | `PODCAST_TRANSCRIPT_HTML_BASE_URL` | Yes | scripts/backfill-transcript-html.js:80<br>scripts/backfill-transcript-html.js:131<br>services/script/utils/orchestrator.js:405<br>services/tts/utils/podcastProcessor.js:152 |
 | `PODCAST_TRANSCRIPT_MAX_SENTENCE_WORDS` | Yes | services/script/utils/editAndFormat.js:197<br>services/script/utils/orchestrator.js:114<br>services/script/utils/orchestrator.js:322<br>services/script/utils/scriptValidation.js:294 |
