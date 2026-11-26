@@ -58,6 +58,16 @@ test("a selected campaign cannot silently change and occurrences cannot overlap"
     { name: "Invented Org", occurrences: [{ pdfPage: 5, offset: 0, passage }] },
   ]), { attempted: 0, recorded: 0 });
   await assert.rejects(repository.recordCandidateEvidence(campaign.id, "not-a-checksum", candidates), /SHA-256/);
+  const batchSizes = [];
+  const originalBatch = d1.batch;
+  d1.batch = async (statements) => { batchSizes.push(statements.length); return originalBatch(statements); };
+  const manyCandidates = Array.from({ length: 205 }, (_, index) => ({
+    name: `Organisation ${index}`,
+    occurrences: [{ pdfPage: 5, offset: 1_000 + index, passage: `Organisation ${index} produced a useful product with documented practical results.` }],
+  }));
+  assert.deepEqual(await repository.recordCandidateEvidence(campaign.id, checksum, manyCandidates),
+    { attempted: 205, recorded: 205 });
+  assert.deepEqual(batchSizes, [100, 100, 5]);
   const lease = await repository.claimOccurrence(occurrence, campaign.id);
   assert.ok(lease);
   assert.equal(await repository.claimOccurrence(occurrence, campaign.id), null);
