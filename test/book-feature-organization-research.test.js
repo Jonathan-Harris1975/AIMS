@@ -10,9 +10,10 @@ function candidate(index, overrides = {}) {
 test("source research records bounded unverified leads and filters unsafe URLs", async () => {
   const result = await researchCandidateSources([candidate(1)], {
     apiKey: "test-key", now: () => new Date("2026-01-02T03:04:05.000Z"),
-    search: async ({ query, country, apiKey }) => {
+    search: async ({ query, country, freshness, apiKey }) => {
       assert.match(query, /Organisation 1/);
       assert.equal(country, "GB");
+      assert.equal(freshness, "pm");
       assert.equal(apiKey, "test-key");
       return [
         { title: " Official site\n ", url: "https://example.org/path", snippet: " A current source. ", published: "2026-01-01" },

@@ -70,7 +70,7 @@ export async function researchCandidateSources(entities, {
     const query = `"${name.replace(/["\\]/g, " ")}" official organisation website products`;
     const retrievedAt = now().toISOString();
     try {
-      const found = await search({ query, country: "GB", apiKey });
+      const found = await search({ query, country: "GB", freshness: "pm", apiKey });
       const sources = (Array.isArray(found) ? found : []).map(safeSource).filter(Boolean);
       rows.push({ id: entity.id || null, name, query, provider: "tavily", retrievedAt,
         status: sources.length ? "source_leads_found_unverified" : "no_source_leads_found",
