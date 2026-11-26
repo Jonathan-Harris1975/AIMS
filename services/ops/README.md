@@ -41,7 +41,7 @@ Successful and actively heartbeating operation windows remain one-shot for the L
 
 The daily social-blog build hands its current dated RSS item and single generated image to `/zernio/blog-rss/daily`. This handoff waits for a successful blog build. It is separate from the daily evergreen Zernio lane. E-book and paired quiz question/answer content also remain Zernio responsibilities.
 
-The social blog and newsletter run Monday–Friday only. Friday prepares Saturday and Sunday evergreen posts through Zernio. There are no weekend content-production operation windows; weekend time remains reserved for maintenance.
+The AIMS morning operation prepares weekday social-blog and newsletter content. Friday also prepares Saturday and Sunday evergreen posts through Zernio and the two AI Edge weekend editions. MAST runs the existing social-blog editorial, artwork, QA and publication pipeline on Saturday and Sunday at 08:00 Europe/London; it supplies the London-local publication date and waits for the child job to pass its publication gate. The weekend newsletter sends remain separately scheduled for Saturday 17:10 and Sunday 05:10 Europe/London. No other weekend content-production operation windows are scheduled.
 
 
 ## Verified content completion and recovery
