@@ -89,7 +89,8 @@ export function scoreOpportunity(components, gates) {
   const required = ["evidence", "identity", "contact", "lawfulBasis", "suppression", "duplicate", "qa", "campaign", "authorisation"];
   const commonGatesPass = required.every((key) => gates?.[key] === true);
   const conditional = score >= 55 && score < 70;
-  const eligible = score >= 70 && commonGatesPass || conditional && commonGatesPass && gates?.enhancedValidation === true;
+  const eligible = (score >= 70 && commonGatesPass) ||
+    (conditional && commonGatesPass && gates?.enhancedValidation === true);
   const failedGates = required.filter((key) => gates?.[key] !== true);
   if (conditional && gates?.enhancedValidation !== true) failedGates.push("enhancedValidation");
   return { score, rubric: RUBRIC_VERSION, tier: score >= 85 ? "priority" : score >= 70 ? "strong" : score >= 55 ? "conditional" : "exclude",
