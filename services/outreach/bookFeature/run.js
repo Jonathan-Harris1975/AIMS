@@ -65,7 +65,8 @@ export async function analysePublishedBook(book, {
 }
 
 export async function runBookFeatureAssessment({ now = new Date(), d1, repository = d1 ? new BookFeatureRepository(d1) : null,
-  resolveBook = resolveWeeklyBook, analyse = analysePublishedBook, persist = putPrivateJson } = {}) {
+  resolveBook = resolveWeeklyBook, analyse = analysePublishedBook, persist = putPrivateJson,
+  heartbeatIntervalMs = 5 * 60_000 } = {}) {
   const occurrence = scheduledLondonOccurrence(now);
   if (!occurrence) return { ok: false, status: "blocked", reason: "Outside Tuesday/Thursday 09:00–11:00 Europe/London assessment window." };
   if (!repository) throw new Error("Durable Book Feature repository is required.");
@@ -82,17 +83,44 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
     return { ok: completed, partialFailure: !completed, status: completed ? "already_completed" : "already_running_or_blocked",
       campaignId: campaign.id, occurrenceId: occurrence.id, dispatched: 0 };
   }
+  let leaseError = null;
+  let renewalInFlight = null;
+  const renewLease = async () => {
+    if (leaseError) throw leaseError;
+    if (renewalInFlight) return renewalInFlight;
+    renewalInFlight = (async () => {
+      if (!await repository.renewOccurrence(lease)) {
+        leaseError = Object.assign(new Error("Book Feature occurrence lease was lost."), { code: "BOOK_FEATURE_LEASE_LOST" });
+        throw leaseError;
+      }
+    })();
+    try { await renewalInFlight; } finally { renewalInFlight = null; }
+  };
+  const assertLease = async () => {
+    if (leaseError) throw leaseError;
+    if (!await repository.assertOccurrenceOwned(lease)) {
+      leaseError = Object.assign(new Error("Book Feature occurrence lease expired or was taken."), { code: "BOOK_FEATURE_LEASE_LOST" });
+      throw leaseError;
+    }
+  };
+  const heartbeat = setInterval(() => { void renewLease().catch(() => {}); },
+    Math.max(10, Number(heartbeatIntervalMs) || 5 * 60_000));
+  heartbeat.unref?.();
   try {
+    await renewLease();
     const analysis = await analyse(book);
+    await assertLease();
     const referenceEvidence = await repository.recordCandidateEvidence(campaign.id, analysis.sha256,
       analysis.candidates, analysis.sourcePages);
     const reportKey = `outreach/book-feature/campaigns/${occurrence.week}/${occurrence.localDate}.json`;
+    await assertLease();
     await persist("kdp", reportKey, { campaignId: campaign.id, occurrenceId: occurrence.id, ebookId: book.ebookId,
       title: book.title, manuscriptSha256: analysis.sha256, totalPages: analysis.totalPages,
       pagesAnalysed: analysis.pagesAnalysed, candidates: analysis.candidates, extractionCacheKey: analysis.cacheKey,
       referenceEvidence, evidenceStatus: "candidate_only_identity_and_qualification_pending",
       verifiedOrganisations: 0, qualifiedOpportunities: 0, contactEligibleOpportunities: 0,
       dispatched: 0, status: "assessment_pending_entity_validation", observedAt: now.toISOString() });
+    await assertLease();
     await repository.finishOccurrence(lease, "completed_zero", { reportKey });
     return { ok: true, status: "completed_zero", campaignId: campaign.id, occurrenceId: occurrence.id,
       pagesAnalysed: analysis.pagesAnalysed, totalPages: analysis.totalPages, candidatePhrases: analysis.candidates.length,
@@ -106,5 +134,7 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
       if (error && typeof error === "object") error.cleanupError = cleanupError;
     }
     throw error;
+  } finally {
+    clearInterval(heartbeat);
   }
 }
