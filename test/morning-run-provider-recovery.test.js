@@ -230,7 +230,7 @@ test("newsletter composition requests low reasoning rather than disabling requir
 test("content operation recovery revisions permit one bounded recovery of failed windows", async () => {
   const text = await source("services/ops/operationWindowState.js");
   assert.match(text, /OPERATION_RECOVERY_REVISION = "content-upstream-recovery-2026-11-03-v1"/);
-  assert.match(text, /NEWSLETTER_RECOVERY_REVISION = "newsletter-evidence-weekend-repair-2026-11-13-v3"/);
+  assert.match(text, /NEWSLETTER_RECOVERY_REVISION = "newsletter-blotato-renewal-2026-11-26-v1"/);
   assert.match(text, /reusableOperationTaskResults/);
 });
 
