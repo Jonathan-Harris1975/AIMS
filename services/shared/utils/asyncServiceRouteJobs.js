@@ -67,26 +67,27 @@ async function executeServiceJob({ service, lane, sessionId, payload, runner, me
   const jobType = asyncServiceJobType(service, lane);
   try {
     const result = await runner(payload);
-    const completed = completeJob(jobType, sessionId, {
-      ...metadata,
-      result,
-      ok: result?.ok !== false,
-    });
+    const succeeded = result?.ok !== false;
+    const job = succeeded
+      ? completeJob(jobType, sessionId, { ...metadata, result, ok: true })
+      : failJob(jobType, sessionId, new Error(
+        String(result?.error || result?.reason || "Async service task returned ok:false").slice(0, 500),
+      ), { ...metadata, result, ok: false });
     await flushJobStoreWrites({ throwOnError: false });
-    const outcome = result?.ok === false
+    const outcome = !succeeded
       ? (result?.quarantined ? "quarantined" : "not-ok")
       : (result?.skipped ? "skipped" : "succeeded");
-    info("service.async_route.completed", {
+    (succeeded ? info : logError)(succeeded ? "service.async_route.completed" : "service.async_route.result_failed", {
       service,
       lane,
       sessionId,
-      ok: result?.ok !== false,
+      ok: succeeded,
       outcome,
       skipped: Boolean(result?.skipped),
       quarantined: Boolean(result?.quarantined),
       reason: result?.reason || null,
     });
-    return completed;
+    return job;
   } catch (err) {
     const failed = failJob(jobType, sessionId, err, metadata);
     await flushJobStoreWrites({ throwOnError: false });
