@@ -3,7 +3,9 @@ import test from "node:test";
 
 import { bestEmail } from "../services/outreach/services/outreachService.js";
 import { classifyEditorialEvidence, scoreOpportunity } from "../services/outreach/utils/qualification.js";
-import { isAuthorisedOutreachSession, londonParts } from "../services/outreach/utils/schedule.js";
+import { classifyEditorialEvidence, scoreOpportunity } from "../services/outreach/utils/qualification.js";
+import { isAuthorisedOutreachSession, londonParts, nextAuthorisedOutreachSession } from "../services/outreach/utils/schedule.js";
+import { isPublicAddress } from "../services/outreach/services/outreachCore.js";
 
 test("editorial evidence is classified conservatively", () => {
   const confirmed = classifyEditorialEvidence({
@@ -56,3 +58,55 @@ test("authorised outreach sessions use Europe/London and only Monday, Wednesday 
   assert.equal(isAuthorisedOutreachSession(new Date("2026-07-06T11:00:00.000Z")), false);
 });
 
+
+
+test("explicit refusal pages are unsuitable even when they mention contributor terms", () => {
+  const refusal = classifyEditorialEvidence({
+    sourceUrl: "https://example.com/contributors",
+    pageText: "We do not accept guest posts or contributed articles. Paid placements are handled separately.",
+  });
+  assert.equal(refusal.classification, "unsuitable");
+  assert.equal(refusal.explicitRefusal, true);
+  assert.equal(refusal.submissionOpen, false);
+});
+
+test("configured campaign topics receive relevance credit without inventing evidence", () => {
+  const evidence = classifyEditorialEvidence({
+    sourceUrl: "https://example.com/write-for-us",
+    pageText: "We accept contributed articles and contributor guidelines are available.",
+  });
+  const scored = scoreOpportunity({
+    keyword: "predictive decision systems",
+    evidence,
+    contact: { eligible: true, editorialContact: true },
+    validation: { status: "valid" },
+  });
+  assert.equal(scored.components.relevance, 15);
+  assert.equal(scored.qualified, true);
+});
+
+test("named editorial contacts require opt-in and otherwise fall back to a role address", () => {
+  const entry = {
+    domain: "example.com",
+    editorialEvidence: { classification: "confirmed", editorialRoute: true },
+    emails: [
+      { email: "jane@example.com", validation: { status: "valid" }, hunter: { firstName: "Jane", position: "Editor" } },
+      { email: "info@example.com", validation: { status: "valid" }, hunter: { type: "generic" } },
+    ],
+  };
+  assert.equal(bestEmail(entry, { OUTREACH_ALLOW_NAMED_BUSINESS_CONTACTS: "false" }).email, "info@example.com");
+  assert.equal(bestEmail({ ...entry, emails: [entry.emails[0]] }, { OUTREACH_ALLOW_NAMED_BUSINESS_CONTACTS: "true" }).email, "jane@example.com");
+});
+
+test("next outreach session remains DST-aware and skips unauthorised days", () => {
+  assert.equal(nextAuthorisedOutreachSession(new Date("2026-07-06T10:00:00.000Z")).toISOString(), "2026-07-08T08:00:00.000Z");
+  assert.equal(nextAuthorisedOutreachSession(new Date("2026-07-05T12:00:00.000Z")).toISOString(), "2026-07-06T08:00:00.000Z");
+  assert.equal(nextAuthorisedOutreachSession(new Date("2026-01-05T08:00:00.000Z")).toISOString(), "2026-01-05T09:00:00.000Z");
+});
+
+test("evidence retrieval rejects loopback, private and reserved addresses", () => {
+  assert.equal(isPublicAddress("[::1]"), false);
+  assert.equal(isPublicAddress("10.0.0.1"), false);
+  assert.equal(isPublicAddress("169.254.169.254"), false);
+  assert.equal(isPublicAddress("8.8.8.8"), true);
+});
