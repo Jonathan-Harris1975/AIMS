@@ -17,6 +17,7 @@ function emptyState() {
     quiz: {
       topics: [],
       scheduled: [],
+      nextFormatIndex: 0,
     },
     slotClaims: [],
     weeklyLedger: [],
@@ -36,6 +37,7 @@ function normaliseState(raw) {
     quiz: {
       topics: ensureArray(state?.quiz?.topics),
       scheduled: ensureArray(state?.quiz?.scheduled),
+      nextFormatIndex: Number.isInteger(state?.quiz?.nextFormatIndex) ? state.quiz.nextFormatIndex : 0,
     },
     slotClaims: ensureArray(state?.slotClaims),
     weeklyLedger: ensureArray(state?.weeklyLedger),
@@ -379,6 +381,7 @@ export function recordLaneSchedule(laneKey, entry) {
       {
         lane: laneKey,
         topic: entry?.topic || null,
+        format: entry?.format || null,
         title: entry?.title || null,
         scheduledDateTime: entry?.scheduledDateTime || null,
         recordedAt: new Date().toISOString(),
@@ -394,6 +397,7 @@ export function getQuizHistory() {
   return {
     topics: trimHistory(state.quiz?.topics),
     scheduled: trimHistory(state.quiz?.scheduled),
+    nextFormatIndex: Number.isInteger(state.quiz?.nextFormatIndex) ? state.quiz.nextFormatIndex : 0,
   };
 }
 
@@ -415,6 +419,7 @@ export function recordQuizSchedule(entry) {
         recordedAt: new Date().toISOString(),
       },
     ]),
+    nextFormatIndex: (Number.isInteger(state.quiz?.nextFormatIndex) ? state.quiz.nextFormatIndex : 0) + 1,
   };
 
   if (entry?.topic || entry?.questionTitle || entry?.answerTitle) {
