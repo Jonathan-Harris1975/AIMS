@@ -72,6 +72,20 @@ export class BookFeatureRepository {
     return first(await this.d1.query("SELECT * FROM book_feature_occurrences WHERE id=?", [id]));
   }
 
+  async overview() {
+    const campaigns = (await this.d1.query(`SELECT id,iso_week,ebook_id,title,state,manuscript_sha256,updated_at
+      FROM book_feature_campaigns ORDER BY iso_week DESC LIMIT 10`)).results || [];
+    const occurrences = (await this.d1.query(`SELECT id,campaign_id,local_date,weekday,status,attempts,error_code,updated_at
+      FROM book_feature_occurrences ORDER BY local_date DESC LIMIT 20`)).results || [];
+    const opportunities = first(await this.d1.query(`SELECT COUNT(*) AS total,
+      SUM(CASE WHEN state IN ('qualified','eligible','drafted','qa_passed','queued','sent','awaiting_reply','engaged','developing','outcome_verified') THEN 1 ELSE 0 END) AS qualified
+      FROM book_feature_opportunities`));
+    return { campaigns, occurrences, opportunities: { total: Number(opportunities?.total || 0), qualified: Number(opportunities?.qualified || 0) },
+      dispatched: 0, delivered: null, responses: null, meaningfulEngagement: null,
+      actualCostUsd: null, costPerQualifiedOpportunity: null, costPerMeaningfulEngagement: null,
+      deliveryRate: null, responseRate: null, attribution: "unavailable", evidenceStatus: "pre_dispatch" };
+  }
+
   async finishOccurrence(lease, state, { reportKey = null, errorCode = null } = {}) {
     if (!["completed", "completed_zero", "blocked", "failed"].includes(state)) throw new Error("Invalid occurrence terminal state.");
     const result = await this.d1.query(`UPDATE book_feature_occurrences SET status=?,report_key=?,error_code=?,

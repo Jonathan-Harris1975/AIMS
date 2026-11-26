@@ -10,6 +10,8 @@ MAST owns the Tuesday/Thursday 09:00 Europe/London schedule. It remains manually
 
 `POST /outreach/book-feature/assessment/three-books` runs a reproducible read-only feasibility sample, retaining failures rather than replacing selected books. Both assessment endpoints are protected by the suite bearer token. Private R2 report keys must not be disclosed publicly. No outbound communications or endorsements are authorised by these routes. Production acceptance remains tracked in issue #498.
 
+`GET /outreach/book-feature/overview` exposes recent campaign and occurrence states to authenticated operators. Unavailable delivery and cost measurements are `null`, not zero, and no business outcome is inferred from candidate phrases.
+
 AIMS Outreach is a guest-article acquisition pipeline. Discovery and qualification remain deterministic; qualified business editorial contacts can then move through an automated cold pitch, one restrained follow-up, inbound-reply classification, article research, premium drafting, independent editorial review, bounded repair, revision handling and threaded delivery.
 
 ## HTTP contract

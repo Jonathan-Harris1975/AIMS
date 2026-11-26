@@ -57,7 +57,17 @@ export function verifyBook(featured, book) {
     throw new Error("Featured title does not uniquely match the KDP catalogue.");
   }
   if (book.storageBucket !== "kdp" || !/^Manuscripts pdf format\/.+\.pdf$/i.test(book.manuscriptR2Key)) throw new Error("Catalogue manuscript reference is not a private KDP PDF.");
-  if (!book.publicationDate || !book.bookUrl) throw new Error("Published metadata or canonical link is missing.");
+  const publishedAt = Date.parse(book.publicationDate || "");
+  if (!Number.isFinite(publishedAt) || publishedAt > Date.now() || !book.bookUrl) {
+    throw new Error("Published metadata or canonical link is missing or not yet live.");
+  }
+  if (book.titleAlignmentStatus && book.titleAlignmentStatus.toLowerCase() !== "aligned") {
+    throw new Error("Catalogue manuscript title alignment is unresolved.");
+  }
+  if (book.manuscriptTitleObserved &&
+      book.manuscriptTitleObserved.trim().toLowerCase() !== book.title.trim().toLowerCase()) {
+    throw new Error("Observed manuscript title conflicts with catalogue title.");
+  }
   if (featured.bookUrl && featured.bookUrl !== book.bookUrl && featured.bookUrl !== book.buyNowUrl && featured.bookUrl !== book.redirectUrl) throw new Error("Featured URL conflicts with catalogue.");
   return book;
 }

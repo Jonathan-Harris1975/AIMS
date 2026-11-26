@@ -24,6 +24,13 @@ router.get("/book-feature/status", asyncRoute(async (_req, res) => {
     dispatchEnabled: false, schedulerOwner: "MAST", pilotAuthorised: false });
 }));
 
+router.get("/book-feature/overview", asyncRoute(async (_req, res) => {
+  const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
+  const overview = await new BookFeatureRepository(getCommsHubContext().d1).overview();
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, service: "book_feature_outreach", ...overview });
+}));
+
 router.put("/book-feature/mode", asyncRoute(async (req, res) => {
   const next = req.body?.mode;
   const version = req.body?.expectedVersion;

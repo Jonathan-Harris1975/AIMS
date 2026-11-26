@@ -34,6 +34,10 @@ test("mode transitions are versioned and cannot activate dispatch", async (t) =>
   await assert.rejects(repository.transitionMode("production", "operator", 2));
   await assert.rejects(repository.transitionMode("assessment", "operator", 1));
   assert.equal((await repository.mode({ BOOK_FEATURE_OUTREACH_MODE: "suspended" })).effective, "suspended");
+  const overview = await repository.overview();
+  assert.equal(overview.opportunities.total, 0);
+  assert.equal(overview.actualCostUsd, null);
+  assert.equal(overview.deliveryRate, null);
 });
 
 test("a selected campaign cannot silently change and occurrences cannot overlap", async (t) => {
