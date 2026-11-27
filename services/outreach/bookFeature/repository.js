@@ -31,8 +31,9 @@ export class BookFeatureRepository {
     const row = first(await this.d1.query(`SELECT mode,kill_switch,test_recipients_json,per_run_cap,daily_cap,
       approval_actor,approval_reason,approved_at,version,updated_at FROM book_feature_configuration WHERE singleton=1`));
     if (!row) throw new Error("Book Feature configuration migration has not been applied.");
-    return { persisted: row.mode, effective: effectiveMode(env.BOOK_FEATURE_OUTREACH_MODE, row.mode),
-      killSwitch: Boolean(row.kill_switch), testRecipients: JSON.parse(row.test_recipients_json || "[]"),
+    const globalStop = ["1", "true", "yes", "on"].includes(String(env.OUTREACH_GLOBAL_KILL_SWITCH || "").trim().toLowerCase());
+    return { persisted: row.mode, effective: globalStop ? "suspended" : effectiveMode(env.BOOK_FEATURE_OUTREACH_MODE, row.mode),
+      killSwitch: globalStop || Boolean(row.kill_switch), testRecipients: JSON.parse(row.test_recipients_json || "[]"),
       perRunCap: Number(row.per_run_cap), dailyCap: Number(row.daily_cap), approvalActor: row.approval_actor,
       approvalReason: row.approval_reason, approvedAt: row.approved_at, version: row.version, updatedAt: row.updated_at };
   }
