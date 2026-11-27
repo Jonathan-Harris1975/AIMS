@@ -126,8 +126,9 @@ export class OutreachRepository {
     workflow = "outreach_guest_article", campaignType = "guest_article", opportunityId = null }) {
     const now = new Date().toISOString();
     const contactId = stableId("con", "outreach", email.toLowerCase());
-    const conversationId = stableId("cnv", "outreach", email.toLowerCase());
-    const threadId = stableId("eth", "outreach", email.toLowerCase());
+    const scope = opportunityId ? [campaignType, opportunityId] : [];
+    const conversationId = stableId("cnv", "outreach", email.toLowerCase(), ...scope);
+    const threadId = stableId("eth", "outreach", email.toLowerCase(), ...scope);
     const providerThreadKey = `outreach:${conversationId}`;
     await this.d1.batch([
       {
