@@ -37,6 +37,7 @@ import { runReviewCouncilGate, repairArtifactForReviewCouncil } from "../../cont
 import { completeEditorialReservation, releaseEditorialReservation, reserveEditorialSource } from "../../social/editorialLedger.js";
 import { startKeepAlive, stopKeepAlive } from "../../shared/utils/keepalive.js";
 import { assessRenderedVideoQaPublication, buildRenderedVideoQaError, reviewRenderedVideo } from "./renderedVideoQa.js";
+import { AUDIO_QA_VERSION } from "./renderedAudioQa.js";
 import { looksLikePendingVideoError } from "./renderStatus.js";
 import { pollUntil } from "./pollUntil.js";
 import { buildVisualCreationRequest } from "./visualRequest.js";
@@ -1593,7 +1594,7 @@ export function resumableReplacementHistory(job = {}) {
 }
 
 export function canReuseRenderedReview(qa) {
-  return Boolean(qa && qa.skipped !== true);
+  return Boolean(qa && qa.skipped !== true && qa.audioQa?.version === AUDIO_QA_VERSION && qa.audioQa?.available === true);
 }
 
 export function isReplaceableRenderedQualityFailure(job = {}) {
