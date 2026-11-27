@@ -259,7 +259,17 @@ test("controlled-test queue enforces backend allowlist, suppression, reservation
     idempotencyKey: "controlled-2", runKey: "run-1" }), /per-run cap/);
   await assert.rejects(repository.transitionMode("suspended", "operator", 2, "stale"), /version changed/);
   assert.equal(db.prepare("SELECT status FROM book_feature_outbox").get().status, "queued");
+  db.prepare("UPDATE book_feature_outbox SET status='leased',lease_owner='worker',lease_expires_at=?,attempt_count=1").run("2026-11-27T08:02:00.000Z");
+  const lease = { id: queued.outbox.id, lease_owner: "worker", attempt_count: 1 };
+  assert.equal(await repository.admitHandoff(lease, "b".repeat(64)), false);
+  assert.equal(await repository.admitHandoff(lease, "a".repeat(64)), true);
+  assert.equal(await repository.admitHandoff(lease, "a".repeat(64)), false);
   db.prepare("UPDATE book_feature_outbox SET status='leased',lease_owner='crashed',lease_expires_at=?").run("2026-11-27T07:59:00.000Z");
   assert.equal(await repository.claimOutbox(), null);
   assert.equal(db.prepare("SELECT status FROM book_feature_outbox").get().status, "unknown");
+  const event = { providerEventId: "opt-out-1", opportunityId: "opp", category: "opt_out", authenticated: true };
+  assert.equal((await repository.processInboundEvent(event)).action, "suppressed_and_cancelled");
+  assert.equal((await repository.processInboundEvent(event)).duplicate, true);
+  assert.equal(db.prepare("SELECT state FROM book_feature_opportunities WHERE id='opp'").get().state, "suppressed");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM comms_hub_outreach_suppression").get().n, 1);
 });
