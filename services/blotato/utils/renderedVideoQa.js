@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { parseStructuredJson, strictJsonResponseFormat } from "../../shared/utils/structuredJson.js";
+import { AUDIO_QA_VERSION, reviewRenderedAudio } from "./renderedAudioQa.js";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_MIN_SECONDS = Number(process.env.BLOTATO_RENDERED_MIN_SECONDS || 35);
@@ -258,7 +259,7 @@ export function buildRenderedVideoQaPrompt({ pack = {}, article = {}, technical 
 fail gibberish, cropped/unreadable captions, accidental logos or image-generated pseudo-text.",
     "Audio is checked separately for stream presence, duration integrity and signal audibility.",
     "This contact sheet cannot establish spoken-word accuracy, pronunciation, voice quality or caption sync.",
-    "Do not claim those audio qualities were audited.",
+    "Do not claim those audio qualities were audited by this visual-only review; a separate evidence-based audio review follows.",
     "The first three cells are deliberately sampled from the opening three seconds. Give the hook/scroll-stopper at least 40% of the overall judgement: movement, specificity, \
 visual tension, immediate source relevance and whether it stops a rapid scroll.",
     "Give special weight to source relevance, scene-to-narration fit, visual progression and whether the sequence tells one coherent story.",
@@ -415,9 +416,10 @@ export async function reviewRenderedVideo({
     const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../shared/utils/ai-service.js");
     const digest = createHash("sha256");
     for await (const chunk of createReadStream(videoPath)) digest.update(chunk);
-    const qaKey = qaFingerprint({ version: 2, route: "blotatoVisualQa", video: digest.digest("hex"), frameCount,
+    const qaKey = qaFingerprint({ version: 3, route: "blotatoVisualQa", video: digest.digest("hex"), frameCount,
       prompt: buildRenderedVideoQaPrompt({ pack, article, technical }), technical, schema: RENDERED_VIDEO_QA_SCHEMA,
       threshold: DEFAULT_THRESHOLD, models: getProviderDiagnosticsForRoute("blotatoVisualQa").configuredProviders,
+      audioQaVersion: AUDIO_QA_VERSION, audioModels: getProviderDiagnosticsForRoute("blotatoAudioQa").configuredProviders,
       providerPolicy: Object.entries(process.env).filter(([key]) => /^OPENROUTER_(PROVIDER_|SORT_BY|DATA_COLLECTION|SERVICE_TIER)/.test(key)) });
     const cached = visualQaCache.get(qaKey);
     if (cached) return cached;
@@ -443,7 +445,31 @@ export async function reviewRenderedVideo({
           }],
         });
         const result = normaliseRenderedVideoQa(raw, { technical });
-        visualQaCache.put(qaKey, result);
+        if (result.pass || !result.hardDefects.length && result.technical?.pass !== false) {
+          const audioQa = await reviewRenderedAudio({
+            videoPath, audioPath: path.join(directory, "audio.wav"), contactSheet, pack,
+            sampleTimes: renderedVideoSampleTimes(metadata.durationSeconds, frameCount),
+            sessionId: `${sessionId}-audio`, request: resilientRequest,
+          });
+          result.audioQa = audioQa;
+          technical.audioSemanticEvidence = audioQa.available ? "reviewed" : "unavailable";
+          technical.captionSyncEvidence = audioQa.available ? "sampled" : "unavailable";
+          if (audioQa.available) {
+            technical.audioIntegrityScore = Math.min(audioQa.narrationScore, audioQa.pronunciationScore, audioQa.voiceQualityScore);
+            result.voiceAudio = technical.audioIntegrityScore;
+            result.calibratedScore = calibratedVideoScore(result, technical);
+          }
+          if (!audioQa.pass) {
+            result.pass = false;
+            result.hardDefects.push(...audioQa.hardDefects);
+            result.defects.push(...audioQa.hardDefects);
+            if (!audioQa.available) {
+              result.skipped = true;
+              result.reason = "audio_qa_evidence_unavailable";
+            }
+          } else if (result.calibratedScore < result.threshold) result.pass = false;
+        }
+        if (!result.skipped) visualQaCache.put(qaKey, result);
         return result;
       } catch (error) {
         lastQaError = error;
