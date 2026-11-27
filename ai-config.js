@@ -308,6 +308,8 @@ export const aiConfig = {
     artworkImage: routeChain(["image"], ["artworkPrimary", "artworkBackup"]),
     artworkVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
     blotatoVisualQa: routeChain(["audit", "highQuality"], ["claudeSonnet5", "anthropic46", "gpt56Sol"]),
+    // Audio evidence must stay on the configured low-cost audio-capable role.
+    blotatoAudioQa: fixedRouteChain(["google25FlashLite"]),
     // Public RSS source text may use a free first draft; paid models remain the quality-gated fallback.
     rssRewriteFirstPass: routeChain(["openrouterFreePrimary"], ["google25FlashLite", "gpt56Sol"]),
     targetedRepair: fixedRouteChain(["fast", "standard", "fallback"]),
