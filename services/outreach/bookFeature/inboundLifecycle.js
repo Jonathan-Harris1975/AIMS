@@ -18,6 +18,8 @@ export function classifyBookFeatureInbound(text) {
   const value = String(text || "").slice(0, 100_000);
   if (!value.trim()) return "malformed";
   const matched = patterns.filter(([, expression]) => expression.test(value)).map(([category]) => category);
+  // An explicit opt-out overrides engagement or other ambiguous language.
+  if (matched.includes("opt_out")) return "opt_out";
   if (!matched.length || matched.length > 1) return "uncertain";
   return matched[0];
 }
