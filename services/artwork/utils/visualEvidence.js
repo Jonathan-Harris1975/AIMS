@@ -36,7 +36,7 @@ export function createVisualEvidenceTracker({ mode, prompt, now = new Date(), be
     },
     finish(image) {
       record.assetHash = image ? imageDigest(image) : null;
-      const accepted = record.attempts.filter((item) => item.assetHash === record.assetHash).at(-1);
+      const accepted = image ? record.attempts.filter((item) => item.assetHash === record.assetHash).at(-1) : null;
       record.status = image ? (accepted?.qaPass === true ? "qa-accepted" : "returned-unverified") : "failed";
       record.acceptedModel = accepted?.model || null;
       return record;
