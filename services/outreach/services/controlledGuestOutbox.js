@@ -21,7 +21,7 @@ export class ControlledGuestOutbox {
     if (mode.effective !== "controlled_test" || mode.killSwitch || !mode.approvalActor || !mode.testRecipients.length) return null;
     const at = this.now().toISOString();
     const recipient = normal(mode.testRecipients[0]);
-    const domain = normal(lead.domain);
+    const domain = normal(lead.domain).replace(/^www\./, '');
     const email = normal(lead.email);
     if (recipient === email || !domain || !email || !pitch.qa?.passed ||
         !Number.isFinite(pitch.qa.score) || pitch.qa.score < 9.1 ||
@@ -64,6 +64,8 @@ export class ControlledGuestOutbox {
     await this.d1.query(`UPDATE guest_article_controlled_outbox SET status='unknown',last_error_code='lease_expired',
       lease_owner=NULL,lease_expires_at=NULL,updated_at=? WHERE status='leased' AND lease_expires_at<=?`, [at,at]);
     if (mode.effective !== "controlled_test" || mode.killSwitch || !mode.approvalActor) return { processed: false };
+    await this.d1.query(`UPDATE guest_article_controlled_outbox SET status='cancelled',last_error_code='approval_changed_or_expired',updated_at=?
+      WHERE status='queued' AND (configuration_version<>? OR expires_at<=?)`, [at,mode.version,at]);
     const owner = randomUUID();
     const row = first(await this.d1.query(`UPDATE guest_article_controlled_outbox SET status='leased',lease_owner=?,lease_expires_at=?,updated_at=?
       WHERE id=(SELECT id FROM guest_article_controlled_outbox WHERE status='queued' AND expires_at>? AND configuration_version=?
