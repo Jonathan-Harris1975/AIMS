@@ -214,7 +214,7 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     }
     const shared = new BookFeatureRepository(this.context.d1);
     const reservation = await shared.reserveTarget({ campaignType: "guest_article",
-      opportunityId: stableId("guest-article", lead.email.toLowerCase()), email: lead.email });
+      opportunityId: stableId("guestart", lead.email.toLowerCase()), email: lead.email });
     if (!reservation.acquired) throw Object.assign(new Error("Target reserved by another campaign."), { code: "OUTREACH_TARGET_RESERVED" });
     const existing = await this.repository.getTargetByEmail(lead.email);
     if (existing?.last_sent_at) throw Object.assign(new Error("Recipient was contacted before dispatch."), { code: "OUTREACH_RECIPIENT_ALREADY_CONTACTED" });
@@ -397,6 +397,9 @@ enthusiasm that is not present.` },
     const cfg = this.config();
     if (!cfg.enabled || !cfg.sendEnabled) {
       throw Object.assign(new Error("Guest Article reply dispatch is disabled."), { code: "OUTREACH_DISPATCH_DISABLED" });
+    }
+    if (await this.repository.isSuppressed(target.email, target.domain)) {
+      throw Object.assign(new Error("Recipient is suppressed."), { code: "OUTREACH_SUPPRESSED" });
     }
     this.assertOutbound(body, { allowedUrls: [this.config().authorSite, this.config().privacyUrl] });
     return this.context.emailService.send({ conversationId: target.conversation_id, bodyText: body, subject, idempotencyKey, scheduledDelivery: true });
