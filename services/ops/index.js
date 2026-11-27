@@ -3,7 +3,7 @@ import { managementKey } from "./openrouterSpend.js";
 import crypto from "node:crypto";
 import express from "express";
 import { getOperationalExcellenceSnapshot } from "../shared/utils/operationalExcellence.js";
-import { collectVisualQualityEvidence } from "../blotato/utils/visualQualityEvidence.js";
+import { getCachedVisualQualityEvidence } from "../blotato/utils/visualQualityEvidence.js";
 import { collectPodcastGrowthSnapshot, readLatestPodcastGrowthSnapshot, podcastGrowthReadiness } from "../podcast-growth/organicDiscovery.js";
 import { getBookSalesEvidence } from "../podcast-growth/bookSalesEvidence.js";
 import { assessAsyncTaskOutcome, extractAsyncStatusUrl, waitForAsyncOperation } from "./asyncOperation.js";
@@ -1065,7 +1065,7 @@ router.get("/preflight", sendStage("preflight"));
 router.get("/warmup", sendStage("warmup"));
 router.get("/visual-quality/evidence", async (_req, res) => {
   res.set("Cache-Control", "no-store");
-  const evidence = await collectVisualQualityEvidence();
+  const evidence = await getCachedVisualQualityEvidence();
   return res.json({ ok: evidence.video.status === "observed" || evidence.artwork.status === "observed", evidence });
 });
 router.get("/excellence", (_req, res) => {
