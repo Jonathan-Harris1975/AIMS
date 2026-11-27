@@ -120,6 +120,26 @@ export function evaluateRenderedVideoAudioTechnical(metadata = {}) {
   };
 }
 
+export function evaluateAudioSignal(log = "", durationSeconds = 0) {
+  const peak = String(log).match(/max_volume:\s*(-?(?:\d+(?:\.\d+)?|inf))\s*dB/i);
+  const mean = String(log).match(/mean_volume:\s*(-?(?:\d+(?:\.\d+)?|inf))\s*dB/i);
+  const pauses = [...String(log).matchAll(/silence_duration:\s*(\d+(?:\.\d+)?)/g)].map((match) => Number(match[1]));
+  const silentSeconds = pauses.reduce((sum, value) => sum + value, 0);
+  const defects = [];
+  if (!peak || !mean || !Number.isFinite(durationSeconds) || durationSeconds <= 0) defects.push("Audio signal measurements unavailable.");
+  else if (Number(peak[1]) < -35 || mean[1] === "-inf" || Number(mean[1]) < -45) defects.push("Finished audio is silent or inaudible.");
+  if (silentSeconds > durationSeconds * 0.6) defects.push("Finished audio contains excessive silence.");
+  return { pass: defects.length === 0, silentSeconds, meanDb: mean && Number.isFinite(Number(mean[1])) ? Number(mean[1]) : null, defects };
+}
+
+async function probeAudioSignal(filePath, durationSeconds) {
+  const { stderr } = await execFileAsync("ffmpeg", [
+    "-hide_banner", "-nostats", "-i", filePath, "-map", "0:a:0",
+    "-vn", "-af", "silencedetect=noise=-45dB:d=1,volumedetect", "-f", "null", "-",
+  ], { maxBuffer: 2_000_000, timeout: 60_000 });
+  return evaluateAudioSignal(stderr, durationSeconds);
+}
+
 export async function probeRenderedVideo(filePath) {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "error",
@@ -236,7 +256,8 @@ export function buildRenderedVideoQaPrompt({ pack = {}, article = {}, technical 
     "This is post-render quality control. Judge the actual frames, not the script plan or prompt compliance.",
     "The video must finish within 35-55 seconds and normally targets roughly 45 seconds. Ordinary subtitle captions are expected; do not fail legitimate readable captions. Do \
 fail gibberish, cropped/unreadable captions, accidental logos or image-generated pseudo-text.",
-    "Audio is checked separately for stream presence and duration integrity. This contact sheet cannot establish spoken-word accuracy, pronunciation, voice quality or caption sync.",
+    "Audio is checked separately for stream presence, duration integrity and signal audibility.",
+    "This contact sheet cannot establish spoken-word accuracy, pronunciation, voice quality or caption sync.",
     "Do not claim those audio qualities were audited.",
     "The first three cells are deliberately sampled from the opening three seconds. Give the hook/scroll-stopper at least 40% of the overall judgement: movement, specificity, \
 visual tension, immediate source relevance and whether it stops a rapid scroll.",
@@ -363,8 +384,13 @@ export async function reviewRenderedVideo({
     const audioTechnical = evaluateRenderedVideoAudioTechnical(metadata);
     technical.audio = audioTechnical;
     technical.audioIntegrityScore = audioTechnical.audioIntegrityScore;
-    technical.pass = technical.pass && audioTechnical.pass;
-    technical.defects.push(...audioTechnical.defects);
+    const audioSignal = audioTechnical.pass ? await probeAudioSignal(videoPath, metadata.durationSeconds) : null;
+    technical.audioSignal = audioSignal;
+    technical.audioSemanticEvidence = "not-assessed";
+    technical.captionSyncEvidence = "not-assessed";
+    technical.pass = technical.pass && audioTechnical.pass && audioSignal?.pass === true;
+    technical.defects.push(...audioTechnical.defects, ...(audioSignal?.defects || []));
+    if (!technical.pass) technical.audioIntegrityScore = 0;
     technical.downloadedBytes = downloadedBytes;
     if (!technical.pass) {
       return {
@@ -389,7 +415,7 @@ export async function reviewRenderedVideo({
     const { resilientRequest, getProviderDiagnosticsForRoute } = await import("../../shared/utils/ai-service.js");
     const digest = createHash("sha256");
     for await (const chunk of createReadStream(videoPath)) digest.update(chunk);
-    const qaKey = qaFingerprint({ version: 1, route: "blotatoVisualQa", video: digest.digest("hex"), frameCount,
+    const qaKey = qaFingerprint({ version: 2, route: "blotatoVisualQa", video: digest.digest("hex"), frameCount,
       prompt: buildRenderedVideoQaPrompt({ pack, article, technical }), technical, schema: RENDERED_VIDEO_QA_SCHEMA,
       threshold: DEFAULT_THRESHOLD, models: getProviderDiagnosticsForRoute("blotatoVisualQa").configuredProviders,
       providerPolicy: Object.entries(process.env).filter(([key]) => /^OPENROUTER_(PROVIDER_|SORT_BY|DATA_COLLECTION|SERVICE_TIER)/.test(key)) });
