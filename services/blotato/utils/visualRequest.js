@@ -103,6 +103,8 @@ export function buildVisualCreationRequest({
       `theme=${clean(creativeBrief.theme)}`,
       `message=${clean(creativeBrief.coreMessage)}`,
       `composition=${clean(creativeBrief.composition)}`,
+      `factual-constraints=${clean(creativeBrief.factualConstraints)}`,
+      `subject-placement=${clean(creativeBrief.subjectPlacement)}`,
       `safe-zones=${JSON.stringify(creativeBrief.safeZones || {})}`,
       `prohibited=${(creativeBrief.prohibited || []).map(clean).join(", ")}`,
     ].join("; ")
@@ -117,7 +119,7 @@ export function buildVisualCreationRequest({
   return {
     templateId,
     inputs: manualInputsConfigured ? buildAiStoryTemplateInputs(visualInputs) : {},
-    prompt: `${prompt}${creativeDirective}`,
+    prompt: [prompt, creativeDirective].filter(Boolean).join("\n\n"),
     render: true,
     isDraft: false,
     ...(useBrandKit === true ? { useBrandKit: true } : {}),

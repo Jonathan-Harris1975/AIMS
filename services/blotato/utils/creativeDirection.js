@@ -6,11 +6,10 @@
  * without importing its AGPL server/editor runtime.
  */
 
-export const APPROVED_BLOTATO_THEMES = Object.freeze(["futuristic", "modern"]);
-const THEME_VERSION = "2026-11-26.1";
+import { BLOTATO_VISUAL_THEME_VERSION, listBlotatoVisualThemes, selectBlotatoVisualTheme } from "./blotatoVisualThemes.js";
 
-const FUTURISTIC_TERMS = /\b(ai infrastructure|inference|robotics?|agents?|model development|automation|research|compute|data cent(?:re|er)|deployment|technical)\b/i;
-const MODERN_TERMS = /\b(news|business|workplace|education|ethics?|productivity|podcast|practical|commentary|customer|team|career)\b/i;
+export const APPROVED_BLOTATO_THEMES = Object.freeze(listBlotatoVisualThemes().map(({ key }) => key));
+const THEME_VERSION = BLOTATO_VISUAL_THEME_VERSION;
 
 function text(value = "", max = 900) {
   const result = String(value ?? "").replace(/\s+/g, " ").trim();
@@ -22,13 +21,8 @@ function tokens(value = "") {
 }
 
 export function selectBlotatoTheme({ topic = "", lane = "", angle = "", audience = "", recentThemes = [] } = {}) {
-  const corpus = [topic, lane, angle, audience].join(" ");
-  const futuristic = FUTURISTIC_TERMS.test(corpus);
-  const modern = MODERN_TERMS.test(corpus);
-  let theme = futuristic && !modern ? "futuristic" : "modern";
-  const recent = Array.isArray(recentThemes) ? recentThemes.map((v) => String(v).toLowerCase()) : [];
-  if (recent.length >= 2 && recent.slice(0, 2).every((v) => v === theme) && (futuristic || modern)) theme = theme === "modern" ? "futuristic" : "modern";
-  return { theme, version: THEME_VERSION, reason: futuristic && !modern ? "technical subject" : modern && !futuristic ? "editorial/practical subject" : "balanced editorial default" };
+  const selected = selectBlotatoVisualTheme({ topic, lane, angle, audience, history: [...(Array.isArray(recentThemes) ? recentThemes : [])].reverse() });
+  return { theme: selected.key, version: selected.version, reason: "content-led registry selection" };
 }
 
 export function assertApprovedBlotatoTheme(theme) {
@@ -74,7 +68,7 @@ export function buildHookCandidates({ topic = "", angle = "", evidence = "", aud
   }).sort((a, b) => b.score - a.score);
 }
 
-function scoreHook(hook, { topic = "", evidence = "" } = {}) {
+export function scoreHook(hook, { topic = "", evidence = "" } = {}) {
   const value = String(hook);
   const specific = [...tokens(topic), ...tokens(evidence)].some((token) => value.toLowerCase().includes(token));
   return Math.max(0, Math.min(100, 55 + (specific ? 20 : 0) + (/[0-9%£$]/.test(value) ? 10 : 0) + (value.length >= 55 && value.length <= 220 ? 10 : 0)));
