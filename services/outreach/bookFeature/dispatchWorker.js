@@ -19,8 +19,10 @@ export class BookFeatureDispatchWorker {
   async runOnce() {
     const lease = await this.repository.claimOutbox();
     if (!lease) return { processed: false, reason: "no_authorised_work" };
-    const context = await this.repository.outboxDispatchContext(lease.id);
+    let handoffStarted = false;
+    let handoffRecorded = false;
     try {
+      const context = await this.repository.outboxDispatchContext(lease.id);
       const config = await this.repository.mode();
       const email = String(context?.email || "").toLowerCase();
       const controlled = config.effective === "controlled_test";
@@ -54,7 +56,8 @@ export class BookFeatureDispatchWorker {
       const finalConfig = await this.repository.mode();
       if (finalConfig.killSwitch || !["controlled_test","pilot"].includes(finalConfig.effective) ||
           (finalConfig.effective === "controlled_test" && !finalConfig.testRecipients.includes(email)) ||
-          await this.shared.isSuppressed(email, context.official_domain)) {
+          await this.shared.isSuppressed(email, context.official_domain) ||
+          (context.intended_email && await this.shared.isSuppressed(context.intended_email, context.official_domain))) {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "final_handoff_gate_failed" });
         return { processed: true, status: "cancelled" };
       }
@@ -63,18 +66,25 @@ export class BookFeatureDispatchWorker {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "handoff_expired" });
         return { processed: true, status: "cancelled" };
       }
+      // Once provider handoff begins, an exception is not proof of non-delivery.
+      handoffStarted = true;
       const sent = await this.context.emailService.send({ conversationId: conversation.conversationId,
         bodyText: archived.pitch.body, subject: archived.pitch.subject, recipients: [email],
         idempotencyKey: context.idempotency_key, scheduledDelivery: true });
       const providerMessageId = sent?.providerMessageId || sent?.response?.messageId || sent?.messageId || null;
       const acceptedAt = this.now().toISOString();
       await this.repository.finishOutboxLease(lease, { status: "accepted", providerMessageId, acceptedAt });
+      handoffRecorded = true;
       await this.repository.recordDeliveryEvent({ outboxId: lease.id,
         providerEventId: `submission:${lease.id}:${lease.attempt_count}`, eventType: "accepted", providerMessageId,
         occurredAt: acceptedAt, evidence: { duplicate: Boolean(sent?.duplicate) } });
       return { processed: true, status: "accepted", outboxId: lease.id, providerMessageId };
     } catch (error) {
-      if (error?.deliveryUncertain || error?.failureClass === "uncertain") {
+      if (handoffRecorded) {
+        // Acceptance was already persisted; do not try to finish the lease twice.
+        return { processed: true, status: "accepted", outboxId: lease.id, reconciliationRequired: true };
+      }
+      if (handoffStarted || error?.deliveryUncertain || error?.failureClass === "uncertain") {
         await this.repository.finishOutboxLease(lease, { status: "unknown", failureClass: "uncertain",
           errorCode: String(error?.code || "provider_outcome_unknown").slice(0, 100) });
         return { processed: true, status: "unknown", reconciliationRequired: true };
