@@ -106,3 +106,12 @@ test("quality-first routing never falls back when fallback is disabled", () => {
   assert.deepEqual(plan.models, ["route/quality"]);
   assert.equal(plan.fallbackEnabled, false);
 });
+
+test("creative brief and video theme registry agree on content and recent history", async () => {
+  const { selectBlotatoVisualTheme } = await import("../services/blotato/utils/blotatoVisualThemes.js");
+  const topic = "AI inference infrastructure news";
+  const recentThemes = ["futuristic", "futuristic", "futuristic"];
+  const expected = selectBlotatoVisualTheme({ topic, history: recentThemes });
+  assert.equal(selectBlotatoTheme({ topic, recentThemes }).theme, expected.key);
+  assert.equal(buildCreativeBrief({ topic, recentThemes }).version, expected.version);
+});
