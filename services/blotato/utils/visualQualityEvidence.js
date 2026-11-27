@@ -31,6 +31,14 @@ export async function collectVisualQualityEvidence(options = {}) {
   return { version: 1, generatedAt: new Date().toISOString(), video, artwork };
 }
 
+let cached;
+export async function getCachedVisualQualityEvidence() {
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+  const promise = collectVisualQualityEvidence();
+  cached = { expiresAt: Date.now() + 300000, promise };
+  return promise;
+}
+
 export function renderVisualQualityAppendix(evidence = {}) {
   const { video = {}, artwork = {} } = evidence;
   const value = (input) => typeof input === "number" && Number.isFinite(input) ? String(Math.round(input * 10000) / 10000) : "Unavailable";
@@ -44,6 +52,7 @@ export function renderVisualQualityAppendix(evidence = {}) {
       + '; duplicate exact assets: ' + value(artwork.duplicateAssetCount) + '.</p>',
     '<p>Known returned costs (USD): ' + value(artwork.knownCostUsd) + '; unknown costs: ' + value(artwork.unknownCosts)
       + '; cost per QA-accepted image (USD): ' + value(artwork.costPerQaAcceptedUsd) + '.</p>',
+    '<p>Controlled benchmark observations: ' + value(artwork.benchmark?.records) + '.</p>',
     '<p>Model results are observational. Missing evidence or incomplete cost coverage must not be treated as zero cost or quality success.</p></section>',
   ].join("\n");
 }
