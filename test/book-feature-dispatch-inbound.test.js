@@ -4,7 +4,7 @@ import { createHmac } from "node:crypto";
 import { BookFeatureDispatchWorker } from "../services/outreach/bookFeature/dispatchWorker.js";
 import { classifyBookFeatureInbound, handleBookFeatureInbound, verifyInboundSignature } from "../services/outreach/bookFeature/inboundLifecycle.js";
 
-function lease() { return { id: "outbox-1", lease_owner: "worker", attempt_count: 1, max_attempts: 3 }; }
+function lease() { return { id: "outbox-1", lease_owner: "worker", lease_expires_at: "2026-11-27T08:02:00.000Z", attempt_count: 1, max_attempts: 3 }; }
 function dispatchContext() { return { id: "outbox-1", opportunity_id: "opp", email: "test@example.com",
   official_domain: "example.com", canonical_name: "Example", validation_result: "valid",
   validation_expires_at: "2026-12-01T00:00:00.000Z", eligibility_status: "eligible",
@@ -70,4 +70,23 @@ test("inbound signatures reject replay windows and ambiguous content does not au
   assert.equal(result.action, "operator_review");
   assert.equal(calls[0].category, "uncertain");
   assert.equal(calls[0].authenticated, true);
+});
+
+test("expired dispatch lease prevents provider handoff", async () => {
+  const outcomes = [];
+  let sends = 0;
+  const repository = {
+    claimOutbox: async () => ({ ...lease(), lease_expires_at: "2026-11-27T07:59:00.000Z" }),
+    outboxDispatchContext: async () => dispatchContext(),
+    mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
+    finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome),
+  };
+  const worker = new BookFeatureDispatchWorker({ repository,
+    context: { d1: {}, emailService: { send: async () => { sends++; } } },
+    readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    now: () => new Date("2026-11-27T08:00:00.000Z") });
+  worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
+  assert.equal((await worker.runOnce()).status, "cancelled");
+  assert.equal(sends, 0);
+  assert.equal(outcomes[0].errorCode, "handoff_expired");
 });
