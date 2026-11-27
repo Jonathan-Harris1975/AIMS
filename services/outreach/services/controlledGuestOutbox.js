@@ -3,6 +3,7 @@ import { getObjectAsText, putPrivateJson } from "../../shared/utils/r2-client.js
 import { BookFeatureRepository } from "../bookFeature/repository.js";
 import { OutreachRepository } from "./outreachRepository.js";
 import { classifyBookFeatureInbound } from "../bookFeature/inboundLifecycle.js";
+import { checkCurrentContactAssessment } from "../bookFeature/contactEligibility.js";
 
 const first = (r) => r?.results?.[0] || null;
 const changes = (r) => Number(r?.meta?.changes || 0);
@@ -10,20 +11,21 @@ const hash = (v) => createHash("sha256").update(v).digest("hex");
 const normal = (v) => String(v || "").trim().toLowerCase();
 
 export class ControlledGuestOutbox {
-  constructor(d1, { now = () => new Date(), persist = putPrivateJson, read = getObjectAsText } = {}) {
-    this.d1 = d1; this.now = now; this.persist = persist; this.read = read;
+  constructor(d1, { now = () => new Date(), persist = putPrivateJson, read = getObjectAsText, checkAssessment = checkCurrentContactAssessment } = {}) {
+    this.d1 = d1; this.now = now; this.persist = persist; this.read = read; this.checkAssessment = checkAssessment;
     this.controls = new BookFeatureRepository(d1, { now });
     this.shared = new OutreachRepository(d1);
   }
 
-  async queue({ lead, pitch, keyword, validationExpiresAt }) {
+  async queue({ lead, pitch, keyword, validationExpiresAt, assessmentKey, recipientType }) {
     const mode = await this.controls.mode();
     if (mode.effective !== "controlled_test" || mode.killSwitch || !mode.approvalActor || !mode.testRecipients.length) return null;
     const at = this.now().toISOString();
     const recipient = normal(mode.testRecipients[0]);
     const domain = normal(lead.domain).replace(/^www\./, '');
     const email = normal(lead.email);
-    if (recipient === email || !domain || !email || !pitch.qa?.passed ||
+    if (recipient === email || !domain || !email || !pitch.qa?.passed || !lead.qualification?.qualified ||
+        !await this.checkAssessment({ domain, email, recipientType, campaign: "guest_article", assessmentKey, now: this.now() }) ||
         !Number.isFinite(pitch.qa.score) || pitch.qa.score < 9.1 ||
         !(Date.parse(validationExpiresAt) > Date.parse(at))) return null;
     const source = new URL(lead.editorialEvidence?.evidenceUrl || lead.sourceUrl);
@@ -34,7 +36,7 @@ export class ControlledGuestOutbox {
     const runKey = `guest-article:${at.slice(0,10)}`;
     const contentHash = hash(`${pitch.subject}\n${pitch.body}`);
     const key = `outreach/guest-article/pitches/${id}/${contentHash}.json`;
-    await this.persist("kdp", key, { pitch, keyword, sourceUrl: source.href, qualification: lead.qualification, validationExpiresAt });
+    await this.persist("kdp", key, { pitch, keyword, sourceUrl: source.href, qualification: lead.qualification, validationExpiresAt, assessmentKey, recipientType });
     const reserved = await this.controls.reserveTarget({ opportunityId: opportunity, campaignType: "guest_article", email, domain });
     if (!reserved.acquired) return null;
     const result = await this.d1.query(`INSERT OR IGNORE INTO guest_article_controlled_outbox
@@ -87,7 +89,9 @@ export class ControlledGuestOutbox {
         workflow: "outreach_guest_article_test", campaignType: "guest_article", opportunityId: row.id });
       const beforeProviderHandoff = async () => {
         const effective = await this.controls.mode();
-        if (effective.effective !== "controlled_test" || effective.killSwitch || effective.version !== row.configuration_version) return false;
+        if (effective.effective !== "controlled_test" || effective.killSwitch || effective.version !== row.configuration_version ||
+          !await this.checkAssessment({ domain: row.official_domain, email: row.intended_email, recipientType: archived.recipientType,
+            campaign: "guest_article", assessmentKey: archived.assessmentKey, now: this.now() })) return false;
         const now = this.now().toISOString();
         const result = await this.d1.query(`INSERT OR IGNORE INTO book_feature_audit
           (id,entity_type,entity_id,action,actor,evidence_json,created_at)
