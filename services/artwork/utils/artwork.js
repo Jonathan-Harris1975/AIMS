@@ -16,7 +16,7 @@ import { buildModelAwareArtworkPrompt } from "./artworkModelPrompt.js";
 import { THRESHOLDS } from "../../../config/thresholds.js";
 import { auditArtworkBase64 } from "./artworkVisualQa.js";
 import { resolveImageProviderPlan } from "../../blotato/utils/imageQualityGovernance.js";
-import { createVisualEvidenceTracker, persistVisualEvidence } from "./visualEvidence.js";
+import { checkArtworkDuplicate, createVisualEvidenceTracker, persistVisualEvidence } from "./visualEvidence.js";
 import { filterImagePayloadByCapabilities, getImageSupportedParameters } from "./openrouterImageCapabilities.js";
 import {
   artworkRetryDelayMs,
@@ -365,6 +365,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, {
   maxQaRegenerations = null,
   providerAttempts = null,
   evidence,
+  forceQa = false,
 } = {}) {
   const baseInstruction = useShortInstruction ? buildShortInstruction(prompt, mode, date) : buildInstruction(prompt, mode, date);
   const instruction = buildModelAwareArtworkPrompt({
@@ -428,7 +429,7 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, {
         throw err;
       }
 
-      if (shouldAuditArtwork(mode)) {
+      if (forceQa || shouldAuditArtwork(mode)) {
         const maxRegenerations = maxQaRegenerations ?? artworkQaRegenerationLimit(mode);
         let qa;
         let qaPrompt = prompt;
@@ -460,6 +461,16 @@ async function requestArtworkFromProvider(provider, prompt, mode, date, {
             brandFit: qa.brandFit,
             hardDefects: qa.hardDefects,
           });
+          if (qa.pass && evidence && !evidence.record.benchmark) {
+            const duplication = await checkArtworkDuplicate({ image, briefHash: evidence.record.briefHash });
+            if (evidenceRow) evidenceRow.duplicateCheck = duplication.status;
+            if (duplication.status === "unavailable") {
+              const failure = new Error("Durable artwork duplication check unavailable: " + duplication.reason);
+              failure.visualEvidenceUnavailable = true;
+              throw failure;
+            }
+            if (duplication.duplicate) qa = { ...qa, pass: false, hardDefects: [...(qa.hardDefects || []), "Exact asset reused for a different brief"] };
+          }
           if (evidenceRow) evidence.reviewed(evidenceRow, qa);
           if (qa.pass) return image;
           if (qaAttempt >= maxRegenerations) {
@@ -579,6 +590,7 @@ async function generateArtworkWithEvidence(prompt, { mode = "podcast", date, sig
       }
       return image;
     } catch (e) {
+      if (e?.visualEvidenceUnavailable) throw e;
       lastError = e;
       if (e?.artworkCandidate) {
         qaCandidates.push(e.artworkCandidate);
@@ -613,6 +625,7 @@ async function generateArtworkWithEvidence(prompt, { mode = "podcast", date, sig
         });
         return image;
       } catch (e) {
+        if (e?.visualEvidenceUnavailable) throw e;
         lastError = e;
         if (e?.artworkCandidate) qaCandidates.push(e.artworkCandidate);
         error("Artwork provider failed on shortened-prompt retry", {
@@ -645,6 +658,7 @@ async function generateArtworkWithEvidence(prompt, { mode = "podcast", date, sig
             maxQaRegenerations: 0, providerAttempts: 1, evidence },
         );
       } catch (rescueError) {
+        if (rescueError?.visualEvidenceUnavailable) throw rescueError;
         if (rescueError?.artworkCandidate) qaCandidates.push(rescueError.artworkCandidate);
         lastError = rescueError;
         warn("artwork.social.final_qa_rescue_failed", {
