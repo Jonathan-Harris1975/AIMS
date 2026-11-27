@@ -54,7 +54,10 @@ export async function researchCandidateSources(entities, {
   readCache = getObjectAsText,
   writeCache = putPrivateJson,
 } = {}) {
-  if (!Array.isArray(entities)) throw new TypeError("Book Feature entities must be an array.");
+  if (!Array.isArray(entities)) {
+    return { sources: [], searched: 0, notResearched: 0, deferred: 0, unverified: true,
+      verifiedOrganisations: 0, contactEligibleOpportunities: 0, status: "invalid_entity_input" };
+  }
   const selected = [];
   const rows = [];
   const seenNames = new Map();
@@ -116,7 +119,8 @@ export async function researchCandidateSources(entities, {
       }
     }
     if (!apiKey) {
-      rows[index] = { id: entity.id || null, name, status: "unavailable", reason: "search_not_configured", sources: [] };
+      rows[index] = { id: entity.id || null, name, status: "unavailable", reason: "search_not_configured",
+        cache: { read: cacheRead, write: "not_attempted" }, sources: [] };
       continue;
     }
     try {
