@@ -58,10 +58,10 @@ export async function persistVisualEvidence(record) {
   }
 }
 
-export function summariseArtworkEvidence(records = []) {
+export function summariseArtworkEvidence(records = [], { benchmarkOnly = false } = {}) {
   const models = new Map(), assets = new Set(), duplicateAssets = new Set();
   let accepted = 0, knownCostUsd = 0, unknownCosts = 0;
-  const production = records.filter((record) => record?.version === 1 && record.benchmark !== true);
+  const production = records.filter((record) => record?.version === 1 && (record.benchmark === true) === benchmarkOnly);
   for (const record of production) {
     if (record.status === "qa-accepted") accepted++;
     if (record.assetHash) {
@@ -119,7 +119,7 @@ export async function collectArtworkEvidence({ now = new Date(), days = 31 } = {
     }
     const summary = summariseArtworkEvidence(records);
     const benchmarkRows = records.filter((record) => record.benchmark === true);
-    const benchmark = summariseArtworkEvidence(benchmarkRows.map((record) => ({ ...record, benchmark: false })));
+    const benchmark = summariseArtworkEvidence(benchmarkRows, { benchmarkOnly: true });
     benchmark.comparisonBasis = "operator-invoked matched creative briefs; no automatic model promotion";
     benchmark.status = benchmarkRows.length ? "observed" : "not-run";
     const incomplete = unreadable > 0 || selected.length > limit;
