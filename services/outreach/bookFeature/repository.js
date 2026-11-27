@@ -52,9 +52,13 @@ export class BookFeatureRepository {
       { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
               SELECT ?,'configuration','1','mode_transition',?,?,? WHERE changes()=1`,
         params: [id, actor, JSON.stringify({ next, expectedVersion, reason: String(reason).slice(0, 500) }), at] },
-      { sql: `UPDATE book_feature_outbox SET status='cancelled',failure_class='policy',
+      { sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+              failure_class=CASE WHEN status='leased' THEN 'uncertain' ELSE 'policy' END,
               last_error_code='kill_switch_enabled',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
-              WHERE status IN ('queued','leased')`, params: [at] },
+              WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,id] },
+      { sql: `UPDATE guest_article_controlled_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+        last_error_code='kill_switch_enabled',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+        WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,id] },
     ]);
     if (changes(result[0]) !== 1) throw new Error("Configuration version changed; mode transition rejected.");
     return this.mode();
@@ -81,6 +85,12 @@ export class BookFeatureRepository {
           SELECT ?,'configuration','1','controlled_test_enabled',?,?,? WHERE changes()=1`,
         params: [auditId,actor,JSON.stringify({ recipients: allowlist, perRunCap, dailyCap, expectedVersion,
           reason: String(reason).slice(0,500) }),at] },
+      { sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+        last_error_code='approval_changed',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+        WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,auditId] },
+      { sql: `UPDATE guest_article_controlled_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+        last_error_code='approval_changed',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+        WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,auditId] },
     ]);
     if (changes(result[0]) !== 1) throw new Error("Configuration version changed; controlled test rejected.");
     return this.mode();
@@ -108,10 +118,11 @@ export class BookFeatureRepository {
         { sql: `INSERT INTO book_feature_opportunities
           (id,campaign_id,organisation_id,state,tier,score,rubric_version,gate_json,next_action_at,reason,created_at,updated_at,
            score_components_json,evidence_json)
-          VALUES (?,?,?,'validated',?,?,?,?,?,?,?, ?,?,?,?)
+          VALUES (?,?,?,'validated',?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(campaign_id,organisation_id) DO UPDATE SET state='validated',tier=excluded.tier,score=excluded.score,
           rubric_version=excluded.rubric_version,gate_json=excluded.gate_json,reason=excluded.reason,updated_at=excluded.updated_at,
-          score_components_json=excluded.score_components_json,evidence_json=excluded.evidence_json`,
+          score_components_json=excluded.score_components_json,evidence_json=excluded.evidence_json
+          WHERE book_feature_opportunities.state IN ('discovered','validated','qualified','awaiting_contact','eligible','drafted','qa_passed')`,
           params: [opportunityId,campaignId,organisationId,item.tier === "priority" ? "A" : item.tier === "strong" ? "B" :
             item.tier === "conditional" ? "C" : "D",item.score,item.rubric,JSON.stringify(item.gates),null,item.reason,at,at,
             JSON.stringify(item.components),JSON.stringify(evidence)] },
@@ -131,13 +142,14 @@ export class BookFeatureRepository {
     const accepted = [];
     for (const contact of contacts) {
       const email = normalisedEmail(contact?.email);
-      if (!emailPattern.test(email) || contact.eligibilityStatus !== "eligible" || contact.validationResult !== "valid" ||
-          !contact.sourceUrl || !contact.assessmentKey) continue;
+      if (!validEmail(email) || contact.eligibilityStatus !== "eligible" || contact.validationResult !== "valid" ||
+          !contact.sourceUrl || !contact.assessmentKey || !(Date.parse(contact.validationExpiresAt || '') > this.now().getTime()) ||
+          !contact.jurisdiction || !contact.lawfulBasis || !['confirmed','not_required'].includes(contact.consentStatus)) continue;
       const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression
         WHERE lower(email)=? OR (domain<>'' AND lower(domain)=?) LIMIT 1`, [email, email.split("@")[1]]));
       if (suppressed) continue;
       const contactId = createHash("sha256").update(`book-feature-contact\u001f${email}`).digest("hex");
-      await this.d1.batch([
+      const stored = await this.d1.batch([
         { sql: `INSERT INTO book_feature_contacts
           (id,organisation_id,email,normalised_email,display_name,role,recipient_type,source_url,source_title,
            validation_provider,validation_result,validated_at,validation_expires_at,jurisdiction,lawful_basis,assessment_key,
@@ -148,20 +160,23 @@ export class BookFeatureRepository {
           validation_result=excluded.validation_result,validated_at=excluded.validated_at,
           validation_expires_at=excluded.validation_expires_at,lawful_basis=excluded.lawful_basis,
           assessment_key=excluded.assessment_key,consent_status=excluded.consent_status,
-          eligibility_status=excluded.eligibility_status,updated_at=excluded.updated_at`,
+          eligibility_status=excluded.eligibility_status,updated_at=excluded.updated_at
+          WHERE book_feature_contacts.organisation_id=excluded.organisation_id`,
           params: [contactId,organisationId,email,email,contact.displayName || null,contact.role,contact.recipientType,
             contact.sourceUrl,contact.sourceTitle || null,contact.validationProvider,contact.validationResult,
-            contact.validatedAt,contact.validationExpiresAt,contact.jurisdiction || "GB",contact.lawfulBasis,
+            contact.validatedAt,contact.validationExpiresAt,contact.jurisdiction,contact.lawfulBasis,
             contact.assessmentKey,contact.consentStatus,contact.eligibilityStatus,at,at] },
         { sql: `UPDATE book_feature_opportunities SET contact_id=?,state='eligible',
           gate_json=json_set(gate_json,'$.contact',json('true'),'$.lawfulBasis',json('true'),'$.suppression',json('true')),
-          reason='draft_and_qa_pending',updated_at=? WHERE id=? AND organisation_id=? AND state='validated'`,
-          params: [contactId,at,opportunityId,organisationId] },
+          reason='draft_and_qa_pending',updated_at=? WHERE id=? AND organisation_id=? AND state='validated'
+          AND EXISTS (SELECT 1 FROM book_feature_contacts c WHERE c.id=? AND c.organisation_id=?)`,
+          params: [contactId,at,opportunityId,organisationId,contactId,organisationId] },
         { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
-          VALUES (?,'contact',?,'contact_eligible','book-feature-assessment',?,?)`,
+          SELECT ?,'contact',?,'contact_eligible','book-feature-assessment',?,? WHERE changes()=1`,
           params: [this.leaseId(),contactId,JSON.stringify({ opportunityId, validationProvider: contact.validationProvider,
             validatedAt: contact.validatedAt, sourceUrl: contact.sourceUrl, assessmentKey: contact.assessmentKey }),at] },
       ]);
+      if (changes(stored[1]) !== 1) continue;
       persisted++;
       accepted.push(contact);
       break;
@@ -178,7 +193,7 @@ export class BookFeatureRepository {
     const id = createHash("sha256").update(`outreach-reservation\u001f${key}`).digest("hex");
     await this.d1.batch([
       { sql: `UPDATE outreach_target_reservations SET campaign_type=?,opportunity_id=?,status='active',reserved_at=?,expires_at=?,
-          released_at=NULL,reason=NULL WHERE target_key=? AND (status IN ('released','expired') OR expires_at<=?)`,
+          released_at=NULL,reason=NULL WHERE target_key=? AND (status IN ('released','expired') OR (status='active' AND expires_at<=?))`,
         params: [campaignType,opportunityId,at,expiresAt,key,at] },
       { sql: `INSERT OR IGNORE INTO outreach_target_reservations
           (id,target_key,campaign_type,opportunity_id,status,reserved_at,expires_at) VALUES (?,?,?,?, 'active',?,?)`,
@@ -259,13 +274,16 @@ export class BookFeatureRepository {
       JOIN book_feature_organisations g ON g.id=o.organisation_id
       JOIN book_feature_pitch_versions p ON p.opportunity_id=o.id
       JOIN book_feature_qa_reviews q ON q.pitch_version_id=p.id AND q.passed=1
-      WHERE o.id=? AND o.state='qa_passed' ORDER BY p.version DESC LIMIT 1`, [opportunityId]));
+      WHERE o.id=? AND o.state='qa_passed' AND g.identity_status='verified' AND g.identity_expires_at>?
+      AND p.version=(SELECT MAX(v.version) FROM book_feature_pitch_versions v WHERE v.opportunity_id=o.id)
+      ORDER BY p.version DESC LIMIT 1`, [opportunityId,at]));
     if (!row || row.validation_result !== "valid" ||
         row.eligibility_status !== "eligible" || !(Date.parse(row.validation_expires_at) > now.getTime())) {
       throw Object.assign(new Error("Contact or QA eligibility changed before queueing."), { code: "BOOK_FEATURE_ELIGIBILITY_EXPIRED" });
     }
     const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression WHERE lower(email)=? OR
-      (domain<>'' AND lower(domain)=?) LIMIT 1`, [email,email.split("@")[1]]));
+      (domain<>'' AND lower(domain)=?) OR lower(email)=? OR
+      (domain<>'' AND lower(domain)=?) LIMIT 1`, [email,email.split("@")[1],normalisedEmail(row.email),row.official_domain]));
     if (suppressed) throw Object.assign(new Error("Recipient is suppressed."), { code: "BOOK_FEATURE_SUPPRESSED" });
     const reservation = await this.reserveTarget({ opportunityId, email, domain: row.official_domain });
     if (!reservation.acquired) throw Object.assign(new Error("Target is reserved by another campaign."), { code: "OUTREACH_TARGET_RESERVED" });
@@ -273,13 +291,13 @@ export class BookFeatureRepository {
     const result = await this.d1.batch([
       { sql: `INSERT OR IGNORE INTO book_feature_outbox
         (id,opportunity_id,contact_id,idempotency_key,status,not_before,expires_at,qa_version,created_at,updated_at,
-         next_attempt_at,subject,body_key,campaign_type,delivery_recipient,run_key)
-        SELECT ?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?
+         next_attempt_at,subject,body_key,campaign_type,delivery_recipient,run_key,configuration_version)
+        SELECT ?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?,?
         WHERE EXISTS (SELECT 1 FROM book_feature_configuration WHERE singleton=1 AND version=? AND mode='controlled_test' AND kill_switch=0)
         AND (SELECT COUNT(*) FROM book_feature_outbox WHERE run_key=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?
         AND (SELECT COUNT(*) FROM book_feature_outbox WHERE created_at>=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?`,
         params: [outboxId,opportunityId,row.contact_id,idempotencyKey,notBefore.toISOString(),expiry.toISOString(),
-          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey,
+          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey,config.version,
           config.version,runKey,config.perRunCap,dayStart.toISOString(),config.dailyCap] },
       { sql: `UPDATE book_feature_opportunities SET state='queued',gate_json=json_set(gate_json,'$.authorisation',json('true'),
           '$.duplicate',json('true')),reason='controlled_test_queued',updated_at=? WHERE id=? AND state='qa_passed' AND changes()=1`, params: [at,opportunityId] },
@@ -297,18 +315,59 @@ export class BookFeatureRepository {
   }
 
   async claimOutbox({ owner = this.leaseId(), leaseMs = 2 * 60_000 } = {}) {
-    const config = await this.mode();
-    if (!(["controlled_test","pilot"].includes(config.effective)) || config.killSwitch) return null;
     const now = this.now();
     const at = now.toISOString();
+    // A crashed worker may have handed off its message before losing its lease.
+    // Never make such a message sendable again without delivery reconciliation.
+    await this.d1.query(`UPDATE book_feature_outbox SET status='unknown',failure_class='uncertain',
+      last_error_code='dispatch_lease_expired',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+      WHERE status='leased' AND (lease_expires_at IS NULL OR lease_expires_at<=?)`, [at,at]);
+    const config = await this.mode();
+    if (config.effective !== "controlled_test" || config.killSwitch) return null;
+    await this.d1.query(`UPDATE book_feature_outbox SET status='cancelled',last_error_code='approval_changed_or_expired',updated_at=?
+      WHERE status='queued' AND (configuration_version IS NULL OR configuration_version<>? OR expires_at<=?)`, [at,config.version,at]);
     const expires = new Date(now.getTime() + leaseMs).toISOString();
     const candidate = first(await this.d1.query(`SELECT id FROM book_feature_outbox WHERE status='queued'
       AND not_before<=? AND expires_at>? AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       AND attempt_count<max_attempts ORDER BY created_at LIMIT 1`, [at,at,at]));
     if (!candidate) return null;
     const claimed = await this.d1.query(`UPDATE book_feature_outbox SET status='leased',lease_owner=?,lease_expires_at=?,
-      attempt_count=attempt_count+1,updated_at=? WHERE id=? AND status='queued' RETURNING *`, [owner,expires,at,candidate.id]);
+      attempt_count=attempt_count+1,updated_at=? WHERE id=? AND status='queued' AND not_before<=? AND expires_at>?
+      AND (next_attempt_at IS NULL OR next_attempt_at<=?) AND attempt_count<max_attempts RETURNING *`,
+      [owner,expires,at,candidate.id,at,at,at]);
     return first(claimed);
+  }
+
+  async admitHandoff(lease, contentHash) {
+    const config = await this.mode();
+    if (config.effective !== "controlled_test" || config.killSwitch || !config.approvalActor) return false;
+    const at = this.now().toISOString();
+    const day = at.slice(0, 10);
+    const id = createHash("sha256").update(`outreach-handoff:${lease.id}:${lease.attempt_count}`).digest("hex");
+    const result = await this.d1.query(`INSERT OR IGNORE INTO book_feature_audit
+      (id,entity_type,entity_id,action,actor,evidence_json,created_at)
+      SELECT ?,'outbox',b.id,'handoff_admitted',f.approval_actor,json_object('runKey',b.run_key,'version',f.version),?
+      FROM book_feature_outbox b JOIN book_feature_contacts c ON c.id=b.contact_id
+      JOIN book_feature_opportunities o ON o.id=b.opportunity_id
+      JOIN book_feature_organisations g ON g.id=o.organisation_id
+      JOIN book_feature_configuration f ON f.singleton=1
+      WHERE b.id=? AND b.status='leased' AND b.lease_owner=? AND b.lease_expires_at>? AND b.expires_at>?
+      AND f.mode='controlled_test' AND f.kill_switch=0 AND f.version=? AND f.version=b.configuration_version AND f.approval_actor IS NOT NULL
+      AND EXISTS (SELECT 1 FROM json_each(f.test_recipients_json) WHERE value=b.delivery_recipient)
+      AND o.state='queued' AND o.contact_id=c.id AND c.organisation_id=g.id
+      AND EXISTS (SELECT 1 FROM outreach_target_reservations t WHERE t.target_key=g.official_domain AND t.opportunity_id=o.id
+        AND t.status='active' AND t.expires_at>?)
+      AND c.validation_result='valid' AND c.eligibility_status='eligible' AND c.validation_expires_at>?
+      AND g.identity_status='verified' AND g.identity_expires_at>?
+      AND NOT EXISTS (SELECT 1 FROM comms_hub_outreach_suppression s WHERE lower(s.email) IN (lower(c.email),lower(b.delivery_recipient))
+        OR (s.domain<>'' AND lower(s.domain) IN (lower(g.official_domain),lower(substr(b.delivery_recipient,instr(b.delivery_recipient,'@')+1)))))
+      AND EXISTS (SELECT 1 FROM book_feature_pitch_versions p JOIN book_feature_qa_reviews q ON q.pitch_version_id=p.id
+        WHERE p.opportunity_id=o.id AND p.version=(SELECT MAX(v.version) FROM book_feature_pitch_versions v WHERE v.opportunity_id=o.id)
+        AND p.body_key=b.body_key AND p.subject=b.subject AND p.content_sha256=? AND q.passed=1 AND q.rubric_version=b.qa_version)
+      AND (SELECT COUNT(*) FROM book_feature_audit a WHERE a.action='handoff_admitted' AND substr(a.created_at,1,10)=?)<f.daily_cap
+      AND (SELECT COUNT(*) FROM book_feature_audit a WHERE a.action='handoff_admitted' AND json_extract(a.evidence_json,'$.runKey')=b.run_key)<f.per_run_cap`,
+      [id,at,lease.id,lease.lease_owner,at,at,config.version,at,at,at,contentHash,day]);
+    return changes(result) === 1;
   }
 
   async finishOutboxLease(lease, outcome) {
@@ -325,7 +384,7 @@ export class BookFeatureRepository {
 
   async outboxDispatchContext(outboxId) {
     return first(await this.d1.query(`SELECT b.*,COALESCE(b.delivery_recipient,c.email) AS email,c.email AS intended_email,
-      c.validation_result,c.validation_expires_at,c.eligibility_status,
+      c.validation_result,c.validation_expires_at,c.eligibility_status,c.assessment_key,c.recipient_type,
       c.display_name,c.role,o.state AS opportunity_state,o.campaign_id,g.official_domain,g.canonical_name
       FROM book_feature_outbox b JOIN book_feature_contacts c ON c.id=b.contact_id
       JOIN book_feature_opportunities o ON o.id=b.opportunity_id
@@ -334,7 +393,8 @@ export class BookFeatureRepository {
 
   async cancelPendingForKillSwitch(actor = "environment_or_operator") {
     const at = this.now().toISOString();
-    const result = await this.d1.query(`UPDATE book_feature_outbox SET status='cancelled',failure_class='policy',
+    const result = await this.d1.query(`UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+      failure_class=CASE WHEN status='leased' THEN 'uncertain' ELSE 'policy' END,
       last_error_code='kill_switch',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
       WHERE status IN ('queued','leased')`, [at]);
     await this.d1.query(`INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
@@ -352,28 +412,38 @@ export class BookFeatureRepository {
     return { duplicate: changes(result) !== 1, id };
   }
 
-  async reconcileOutbox({ outboxId, outcome, providerEventId, providerMessageId = null, actor, evidence = {} }) {
-    if (!["delivered","bounced","failed","unknown"].includes(outcome) || !actor || !providerEventId) {
-      throw new Error("A supported reconciliation outcome, actor and provider event are required.");
+  async reconcileOutbox({ outboxId, outcome, providerEventId, providerMessageId = null, actor, evidence = {}, authenticatedProvider = false }) {
+    if (!["delivered","bounced","failed","unknown"].includes(outcome) || !actor || !providerEventId ||
+        (outcome !== "unknown" && (!authenticatedProvider || !providerMessageId))) {
+      throw new Error("Authenticated provider evidence is required for a definitive delivery outcome.");
     }
     const status = outcome === "failed" ? "quarantined" : outcome;
     const at = this.now().toISOString();
-    const current = first(await this.d1.query("SELECT status FROM book_feature_outbox WHERE id=?", [outboxId]));
-    if (!current || !["accepted","unknown",status].includes(current.status)) throw new Error("Outbox item is not awaiting reconciliation.");
-    const event = await this.recordDeliveryEvent({ outboxId, providerEventId, eventType: outcome === "failed" ? "failed" : outcome,
-      providerMessageId, occurredAt: at, evidence });
-    if (!event.duplicate) await this.d1.batch([
+    const current = first(await this.d1.query("SELECT status,provider_message_id FROM book_feature_outbox WHERE id=?", [outboxId]));
+    if (!current || !["accepted","unknown",status].includes(current.status) ||
+        (current.provider_message_id && providerMessageId && current.provider_message_id !== providerMessageId)) {
+      throw new Error("Outbox item is not awaiting matching delivery reconciliation.");
+    }
+    const id = createHash("sha256").update(`delivery-event\u001f${providerEventId}`).digest("hex");
+    const pending = "NOT EXISTS (SELECT 1 FROM outreach_delivery_events WHERE provider_event_id=?)";
+    const result = await this.d1.batch([
       { sql: `UPDATE book_feature_outbox SET status=?,provider_message_id=COALESCE(?,provider_message_id),
-          delivered_at=CASE WHEN ?='delivered' THEN ? ELSE delivered_at END,updated_at=? WHERE id=?`,
-        params: [status,providerMessageId,status,at,at,outboxId] },
+          delivered_at=CASE WHEN ?='delivered' THEN ? ELSE delivered_at END,updated_at=?
+          WHERE id=? AND status IN ('accepted','unknown') AND ${pending}`,
+        params: [status,providerMessageId,status,at,at,outboxId,providerEventId] },
       { sql: `UPDATE book_feature_opportunities SET state=CASE WHEN ?='delivered' THEN 'awaiting_reply'
-          WHEN ?='bounced' THEN 'blocked' ELSE state END,reason=?,updated_at=? WHERE id=(SELECT opportunity_id FROM book_feature_outbox WHERE id=?)`,
+          WHEN ?='bounced' THEN 'blocked' ELSE state END,reason=?,updated_at=?
+          WHERE id=(SELECT opportunity_id FROM book_feature_outbox WHERE id=?) AND state NOT IN ('suppressed','declined','outcome_verified') AND changes()=1`,
         params: [status,status,`delivery_${status}`,at,outboxId] },
       { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
-          VALUES (?,'outbox',?,'delivery_reconciled',?,?,?)`, params: [this.leaseId(),outboxId,actor,
-          JSON.stringify({ outcome: status, providerEventId, providerMessageId }),at] },
+          SELECT ?,'outbox',?,'delivery_reconciled',?,?,? WHERE ${pending}`,
+        params: [this.leaseId(),outboxId,actor,JSON.stringify({ outcome: status, providerEventId, providerMessageId }),at,providerEventId] },
+      { sql: `INSERT OR IGNORE INTO outreach_delivery_events
+          (id,outbox_id,provider_event_id,event_type,provider_message_id,occurred_at,evidence_json,created_at)
+          SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM book_feature_outbox WHERE id=? AND status=?)`,
+        params: [id,outboxId,providerEventId,outcome,providerMessageId,at,JSON.stringify(evidence),at,outboxId,status] },
     ]);
-    return { duplicate: event.duplicate, status };
+    return { duplicate: changes(result[3]) !== 1, status };
   }
 
   async processInboundEvent({ providerEventId, providerMessageId = null, opportunityId = null, contactId = null,
@@ -382,42 +452,57 @@ export class BookFeatureRepository {
     if (!authenticated || !providerEventId || !allowed.has(category)) throw new Error("Authenticated inbound event and supported category are required.");
     const at = this.now().toISOString();
     const id = createHash("sha256").update(`outreach-inbound\u001f${providerEventId}`).digest("hex");
-    const inserted = await this.d1.query(`INSERT OR IGNORE INTO outreach_inbound_events
-      (id,provider_event_id,provider_message_id,opportunity_id,contact_id,category,authenticated,body_evidence_key,occurred_at,processed_at,action_json)
-      VALUES (?,?,?,?,?,?,1,?,?,?,?)`, [id,providerEventId,providerMessageId,opportunityId,contactId,category,
-      bodyEvidenceKey,occurredAt || at,at,JSON.stringify({ automaticReply: false })]);
-    if (changes(inserted) !== 1) return { duplicate: true, action: "none" };
-    if (!opportunityId) return { duplicate: false, action: "unmatched_preserved" };
-    const context = first(await this.d1.query(`SELECT o.id,o.organisation_id,o.contact_id,c.email,g.official_domain
+    const context = opportunityId ? first(await this.d1.query(`SELECT o.id,o.organisation_id,o.contact_id,c.email,g.official_domain
       FROM book_feature_opportunities o LEFT JOIN book_feature_contacts c ON c.id=o.contact_id
-      JOIN book_feature_organisations g ON g.id=o.organisation_id WHERE o.id=?`, [opportunityId]));
-    if (!context) return { duplicate: false, action: "unmatched_preserved" };
-    if (["opt_out","decline","bounce"].includes(category)) {
-      const reason = category === "bounce" ? "bounce" : category;
-      const suppressionId = createHash("sha256").update(`osup\u001f${normalisedEmail(context.email)}\u001f${context.official_domain}`).digest("hex");
-      await this.d1.batch([
+      JOIN book_feature_organisations g ON g.id=o.organisation_id WHERE o.id=?`, [opportunityId])) : null;
+    const delivery = providerMessageId ? await this.findOpportunityByProviderMessage(providerMessageId) : null;
+    const testAddress = delivery?.opportunity_id === opportunityId ? normalisedEmail(delivery.delivery_recipient) : "";
+    const controlled = Boolean(testAddress && testAddress !== normalisedEmail(context?.email));
+    const pending = "NOT EXISTS (SELECT 1 FROM outreach_inbound_events WHERE provider_event_id=?)";
+    const statements = [];
+    let action = context ? "operator_review" : "unmatched_preserved";
+    let nextState = null;
+    if (context && ["opt_out","decline","bounce"].includes(category)) {
+      const suppressionEmail = controlled ? testAddress : normalisedEmail(context.email);
+      const suppressionDomain = controlled ? "" : context.official_domain;
+      const suppressionId = createHash("sha256").update(`osup\u001f${suppressionEmail}\u001f${suppressionDomain}`).digest("hex");
+      statements.push(
         { sql: `INSERT INTO comms_hub_outreach_suppression (id,email,domain,reason,source,created_at,metadata_json)
-          VALUES (?,?,?,?, 'book_feature_inbound',?,?) ON CONFLICT(id) DO UPDATE SET reason=excluded.reason,
-          source=excluded.source,metadata_json=excluded.metadata_json`, params: [suppressionId,normalisedEmail(context.email),
-          context.official_domain,reason,at,JSON.stringify({ providerEventId })] },
-        { sql: `UPDATE book_feature_opportunities SET state=?,reason=?,updated_at=? WHERE id=?`,
-          params: [category === "decline" ? "declined" : "suppressed",`inbound_${category}`,at,opportunityId] },
-        { sql: `UPDATE book_feature_outbox SET status='cancelled',failure_class='policy',last_error_code=?,updated_at=?
-          WHERE opportunity_id=? AND status IN ('queued','leased')`, params: [`inbound_${category}`,at,opportunityId] },
-        { sql: `UPDATE outreach_target_reservations SET status='suppressed',released_at=?,reason=? WHERE opportunity_id=? AND status='active'`,
-          params: [at,`inbound_${category}`,opportunityId] },
-      ]);
-      return { duplicate: false, action: "suppressed_and_cancelled" };
+          SELECT ?,?,?,?,'book_feature_inbound',?,? WHERE ${pending}
+          ON CONFLICT(id) DO UPDATE SET reason=excluded.reason,source=excluded.source,metadata_json=excluded.metadata_json`,
+          params: [suppressionId,suppressionEmail,suppressionDomain,category,at,JSON.stringify({ providerEventId }),providerEventId] },
+        { sql: `UPDATE book_feature_opportunities SET state=?,reason=?,updated_at=? WHERE id=? AND ${pending}`,
+          params: [controlled ? "blocked" : category === "decline" ? "declined" : "suppressed",`${controlled ? "controlled_test_" : ""}inbound_${category}`,at,context.id,providerEventId] },
+        { sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+          failure_class=CASE WHEN status='leased' THEN 'uncertain' ELSE 'policy' END,lease_owner=NULL,lease_expires_at=NULL,last_error_code=?,updated_at=?
+          WHERE (delivery_recipient=? OR (?=0 AND opportunity_id IN (SELECT id FROM book_feature_opportunities WHERE organisation_id=?)))
+          AND status IN ('queued','leased') AND ${pending}`,
+          params: [`inbound_${category}`,at,suppressionEmail,controlled ? 1 : 0,context.organisation_id,providerEventId] },
+        { sql: `UPDATE guest_article_controlled_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+          lease_owner=NULL,lease_expires_at=NULL,last_error_code=?,updated_at=? WHERE (delivery_recipient=? OR (?=0 AND official_domain=?))
+          AND status IN ('queued','leased') AND ${pending}`, params: [`inbound_${category}`,at,suppressionEmail,controlled ? 1 : 0,context.official_domain,providerEventId] },
+        { sql: `UPDATE outreach_target_reservations SET status='suppressed',released_at=?,reason=? WHERE target_key=? AND status='active' AND ?=0 AND ${pending}`,
+          params: [at,`inbound_${category}`,context.official_domain,controlled ? 1 : 0,providerEventId] });
+      action = "suppressed_and_cancelled";
+    } else if (context && ["positive","question","revision"].includes(category)) {
+      nextState = "engaged";
+      statements.push({ sql: `UPDATE book_feature_opportunities SET state=?,reason=?,updated_at=?
+        WHERE id=? AND state NOT IN ('suppressed','declined','expired','outcome_verified') AND ${pending}`,
+        params: [nextState,`inbound_${category}`,at,context.id,providerEventId] });
+      action = "state_updated";
     }
-    const nextState = category === "publication" ? "outcome_verified" : ["positive","question","revision"].includes(category) ? "engaged" : "awaiting_reply";
-    await this.d1.query("UPDATE book_feature_opportunities SET state=?,reason=?,updated_at=? WHERE id=?",
-      [nextState,`inbound_${category}`,at,opportunityId]);
-    return { duplicate: false, action: category === "uncertain" ? "operator_review" : "state_updated", state: nextState };
+    statements.push({ sql: `INSERT OR IGNORE INTO outreach_inbound_events
+      (id,provider_event_id,provider_message_id,opportunity_id,contact_id,category,authenticated,body_evidence_key,occurred_at,processed_at,action_json)
+      VALUES (?,?,?,?,?,?,1,?,?,?,?)`, params: [id,providerEventId,providerMessageId,context?.id || null,context?.contact_id || contactId,
+      category,bodyEvidenceKey,occurredAt || at,at,JSON.stringify({ automaticReply: false, action })] });
+    const result = await this.d1.batch(statements);
+    if (changes(result[result.length-1]) !== 1) return { duplicate: true, action: "none" };
+    return { duplicate: false, action, ...(nextState ? { state: nextState } : {}) };
   }
 
   async findOpportunityByProviderMessage(providerMessageId) {
     if (!providerMessageId) return null;
-    return first(await this.d1.query(`SELECT opportunity_id,contact_id,status FROM book_feature_outbox
+    return first(await this.d1.query(`SELECT id,opportunity_id,contact_id,status,delivery_recipient FROM book_feature_outbox
       WHERE provider_message_id=? ORDER BY updated_at DESC LIMIT 1`, [providerMessageId]));
   }
 

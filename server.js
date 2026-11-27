@@ -251,6 +251,7 @@ function commsHubIntakePath(req) {
     "/comms-hub/intake/chat",
     "/comms-hub/intake/chat/sync",
     "/outreach/book-feature/inbound",
+    "/outreach/book-feature/delivery/event",
   ].includes(path) ? path : "";
 }
 
@@ -269,7 +270,7 @@ function recordCommsHubParsedBodyBytes(req, _res, buffer) {
   }
   req.aimsParsedBodyBytes = bytes;
   if (path.startsWith("/comms-hub/intake/zernio/") || path.startsWith("/comms-hub/intake/chat") ||
-      path === "/outreach/book-feature/inbound") req.aimsRawBody = Buffer.from(buffer);
+      (path === "/outreach/book-feature/inbound" || path === "/outreach/book-feature/delivery/event")) req.aimsRawBody = Buffer.from(buffer);
 }
 
 app.use(

@@ -220,7 +220,7 @@ test("migration 0020 is delivered and keeps all three customer-facing autonomous
   assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0019_social_context_retry"));
   assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0020_professional_autonomous_comms"));
   assert.ok(COMMS_HUB_REQUIRED_MIGRATIONS.includes("0027_restore_missing_autonomy_policies"));
-  assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), "0030_outreach_production_controls");
+  assert.equal(COMMS_HUB_REQUIRED_MIGRATIONS.at(-1), "0031_guest_article_controlled_outbox");
   const db = new DatabaseSync(":memory:");
   for (const key of COMMS_HUB_REQUIRED_MIGRATIONS) db.exec(readFileSync(new URL(`../services/comms-hub/migrations/${key}.sql`, import.meta.url), "utf8"));
   const rows = db.prepare("SELECT policy_key, status FROM comms_hub_autonomous_reply_policies WHERE policy_key IN ('full-chat-low-risk','full-email-low-risk','full-social-low-\

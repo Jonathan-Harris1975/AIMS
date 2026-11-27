@@ -18,6 +18,10 @@ export function classifyBookFeatureInbound(text) {
   const value = String(text || "").slice(0, 100_000);
   if (!value.trim()) return "malformed";
   const matched = patterns.filter(([, expression]) => expression.test(value)).map(([category]) => category);
+  // An explicit opt-out overrides engagement or other ambiguous language.
+  if (matched.includes("opt_out")) return "opt_out";
+  if (matched.includes("decline")) return "decline";
+  if (matched.includes("bounce")) return "bounce";
   if (!matched.length || matched.length > 1) return "uncertain";
   return matched[0];
 }
@@ -32,11 +36,16 @@ export function verifyInboundSignature(rawBody, { signature, timestamp, secret, 
 }
 
 export async function handleBookFeatureInbound({ rawBody, signature, timestamp, secret, providerEventId,
-  providerMessageId = null, contactId = null, text = "", occurredAt = null }, {
+  providerMessageId = null, text = "", occurredAt = null }, {
   repository, persist = putPrivateJson, now = () => new Date(),
 } = {}) {
   if (!repository || !verifyInboundSignature(rawBody, { signature, timestamp, secret, now: now() })) {
     throw Object.assign(new Error("Inbound event authentication failed."), { code: "BOOK_FEATURE_INBOUND_AUTH_FAILED" });
+  }
+  const event = JSON.parse(rawBody);
+  if (event.providerEventId !== providerEventId || event.text !== text ||
+      (event.providerMessageId || null) !== providerMessageId || (event.occurredAt || null) !== occurredAt) {
+    throw Object.assign(new Error("Signed inbound payload does not match supplied event."), { code: "BOOK_FEATURE_INBOUND_AUTH_FAILED" });
   }
   const match = providerMessageId ? await repository.findOpportunityByProviderMessage(providerMessageId) : null;
   const category = classifyBookFeatureInbound(text);
@@ -44,7 +53,20 @@ export async function handleBookFeatureInbound({ rawBody, signature, timestamp, 
   const bodyEvidenceKey = `outreach/book-feature/inbound/${hash}.json`;
   await persist("kdp", bodyEvidenceKey, { providerEventId, providerMessageId, text, occurredAt, receivedAt: now().toISOString() });
   return repository.processInboundEvent({ providerEventId, providerMessageId, opportunityId: match?.opportunity_id || null,
-    contactId: contactId || match?.contact_id || null, category, authenticated: true, bodyEvidenceKey, occurredAt });
+    contactId: match?.contact_id || null, category, authenticated: true, bodyEvidenceKey, occurredAt });
+}
+
+export async function handleBookFeatureMailboxInbound({ providerMessageId, eventId, sender, text, occurredAt }, { repository } = {}) {
+  const match = providerMessageId ? await repository.findOpportunityByProviderMessage(providerMessageId) : null;
+  if (!match || !eventId || !match.delivery_recipient ||
+      String(sender || "").trim().toLowerCase() !== match.delivery_recipient.toLowerCase()) return { matched: false };
+  const category = classifyBookFeatureInbound(text);
+  if (category !== "malformed" && category !== "bounce" && ["accepted","unknown"].includes(match.status)) {
+    await repository.reconcileOutbox({ outboxId: match.id, outcome: "delivered", providerEventId: `mailbox-reply:${eventId}`,
+      providerMessageId, actor: "authenticated_mailbox", authenticatedProvider: true, evidence: { matchingReply: true } });
+  }
+  return repository.processInboundEvent({ providerEventId: eventId, providerMessageId,
+    opportunityId: match.opportunity_id, contactId: match.contact_id, category, authenticated: true, occurredAt });
 }
 
 export const bookFeatureInboundPolicy = Object.freeze({ maximumEventAgeMs: MAX_EVENT_AGE_MS });

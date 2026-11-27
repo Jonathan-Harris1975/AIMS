@@ -29,6 +29,7 @@ export const COMMS_HUB_REQUIRED_MIGRATIONS = Object.freeze([
   "0028_book_feature_outreach",
   "0029_guest_article_run_ledger",
   "0030_outreach_production_controls",
+  "0031_guest_article_controlled_outbox",
 ]);
 
 export default COMMS_HUB_REQUIRED_MIGRATIONS;

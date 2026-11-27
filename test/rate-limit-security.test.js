@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import express from "express";
+import request from "supertest";
+import outreachRouter from "../services/outreach/routes/index.js";
 
 import { getRateLimitClientId } from "../services/shared/http/clientIdentity.js";
 import { parseTrustProxy } from "../services/shared/http/trustProxy.js";
@@ -38,4 +41,24 @@ test("authentication and rate limiting run before request body parsers", async (
   assert.ok(generalParser > auth, "general JSON parser must run after authentication gating");
   assert.match(source, /type: \(req\) => Boolean\(commsHubIntakePath\(req\)\) && isJsonRequest\(req\)/);
   assert.match(source, /type: \(req\) => !commsHubIntakePath\(req\) && isJsonRequest\(req\)/);
+});
+
+test("signed Outreach delivery and inbound routes share an independent, always-on abuse limit", async () => {
+  const app = express();
+  app.use("/outreach", outreachRouter);
+  app.get("/unrelated", (_req, res) => res.sendStatus(204));
+  const client = request(app);
+  const delivery = "/outreach/book-feature/delivery/event";
+  const inbound = "/outreach/book-feature/inbound";
+  for (let i = 0; i < 60; i++) {
+    const response = await client.post(delivery).send({});
+    assert.equal(response.status, 401, "unsigned delivery events must not reach the provider repository");
+  }
+  for (const route of [delivery, inbound]) {
+    const response = await client.post(route).send({});
+    assert.equal(response.status, 429);
+    assert.equal(response.body.ok, false);
+    assert.ok(Number(response.headers["retry-after"]) > 0);
+  }
+  await client.get("/unrelated").expect(204);
 });

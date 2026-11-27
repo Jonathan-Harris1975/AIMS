@@ -1,6 +1,7 @@
 import { info, warn } from "../../../logger.js";
 import { resilientRequest, getProviderDiagnosticsForRoute } from "../../shared/utils/ai-service.js";
-import { putPrivateJson } from "../../shared/utils/r2-client.js";
+import { getObjectAsText, putPrivateJson } from "../../shared/utils/r2-client.js";
+import { ControlledGuestOutbox } from "./controlledGuestOutbox.js";
 import { stableId } from "../../comms-hub/domain/ids.js";
 import { businessHoursPolicy, ensureFutureBusinessTime, isWithinBusinessHours } from "../../comms-hub/domain/businessHours.js";
 import { scanOutboundLanguagePolicy } from "../../comms-hub/conversationConductService.js";
@@ -248,6 +249,8 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
     // send-mode change or contact to be recorded. Recheck at the last app-level
     // boundary before handing the message to the Comms Hub provider.
     await this.assertInitialPitchDispatchAllowed(lead, assertLease);
+    const mode = await new BookFeatureRepository(this.context.d1).mode(this.env);
+    if (mode.effective !== "pilot") throw Object.assign(new Error("Direct prospect sends are not authorised."), { code: "OUTREACH_DISPATCH_DISABLED" });
     const idempotencyKey = `outreach-initial:${lead.email.toLowerCase()}:${slug(keyword)}`;
     const sent = await this.context.emailService.send({
       conversationId: convo.conversationId,
@@ -284,47 +287,67 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
 
   async automateLeads(leads = [], { keyword = "", assertLease = async () => {} } = {}) {
     const cfg = this.config();
-    if (!cfg.enabled || !cfg.sendEnabled) return { enabled: false, sent: 0, queued: 0, skipped: leads.length, failed: 0, results: [] };
-    const policy = businessHoursPolicy(this.context.config);
-    if (!isWithinBusinessHours(new Date(), policy)) {
-      return { enabled: true, sent: 0, queued: leads.length, skipped: 0, failed: 0, reason: "outside_business_hours", results: [] };
-    }
-    if (!isAuthorisedOutreachSession(new Date())) {
-      return { enabled: true, sent: 0, queued: leads.length, skipped: leads.length, failed: 0, reason: "outside_authorised_morning_session", results: [] };
-    }
-    const dayStart = new Date(); dayStart.setUTCHours(0,0,0,0);
-    const alreadyToday = await this.repository.countInitialSendsSince(dayStart.toISOString());
-    let remaining = Math.max(0, Math.min(cfg.maxBatch, cfg.maxDaily - alreadyToday));
+    const controls = new BookFeatureRepository(this.context.d1, { now: this.now });
+    const mode = await controls.mode(this.env);
     const results = [];
-    for (const lead of leads) {
+    if (!cfg.enabled || !["assessment","controlled_test"].includes(mode.effective)) {
+      return { enabled: false, sent: 0, queued: 0, skipped: leads.length, failed: 0, results };
+    }
+    const now = this.now();
+    if (!isAuthorisedOutreachSession(now) || !isWithinBusinessHours(now, businessHoursPolicy(this.context.config))) {
+      return { enabled: true, sent: 0, queued: 0, skipped: leads.length, failed: 0, reason: "outside_authorised_session", results };
+    }
+    const assessmentKey = this.env.BOOK_FEATURE_LAWFUL_BASIS_ASSESSMENT_KEY;
+    let assessments = null;
+    if (assessmentKey) {
+      try { assessments = JSON.parse(await getObjectAsText("kdp", assessmentKey)); }
+      catch { /* Missing evidence blocks every candidate. */ }
+    }
+    const outbox = new ControlledGuestOutbox(this.context.d1, { now: this.now });
+    for (const lead of leads.slice(0, Math.min(cfg.maxBatch, mode.perRunCap || 1))) {
       await assertLease();
-      if (remaining <= 0) { results.push({ email: lead.email, status: "skipped", reason: "send_cap" }); continue; }
       try {
+        const domain = cleanDomain(lead.domain);
         const eligibility = this.recipientEligibility(lead);
-        if (!eligibility.eligible) { results.push({ email: lead.email, status: "skipped", reason: eligibility.reason }); continue; }
-        if (await this.repository.isSuppressed(lead.email, lead.domain)) { results.push({ email: lead.email, status: "skipped", reason: "suppressed" }); continue; }
-        const existing = await this.repository.getTargetByEmail(lead.email);
-        if (existing?.last_sent_at) { results.push({ email: lead.email, status: "skipped", reason: "already_contacted" }); continue; }
-        const existingDomain = await this.repository.getTargetByDomain(lead.domain);
-        if (existingDomain?.last_sent_at) { results.push({ email: lead.email, status: "skipped", reason: "publication_already_contacted" }); continue; }
+        const assessment = assessments?.organisations?.[domain]?.guest_article || assessments?.organisations?.[domain] || assessments;
+        const type = eligibility.recipientType === "role" ? "role_address" : "named_person";
+        const evidenceAt = Date.parse(lead.editorialEvidence?.retrievedAt || "");
+        const legal = assessment?.officialDomain === domain && assessment.campaign === "guest_article" &&
+          assessment.channel === "email" && assessment.jurisdiction === "GB" && assessment.subscriberType === "corporate" &&
+          assessment.lawfulBasis === "legitimate_interests_documented" && assessment.approved === true &&
+          typeof assessment.approvedBy === "string" && assessment.approvedBy.trim() &&
+          Date.parse(assessment.assessedAt || "") <= now.getTime() && Date.parse(assessment.expiresAt || "") > now.getTime() &&
+          ["confirmed","not_required"].includes(assessment.consentStatus) && assessment.allowedRecipientTypes?.includes(type) &&
+          (type === "role_address" || (assessment.consentStatus === "confirmed" && assessment.consentedEmails?.includes(lead.email)));
+        if (!eligibility.eligible || !lead.qualification?.qualified || !Object.values(lead.qualification?.mandatoryGates || {}).every(Boolean) ||
+            lead.qualification?.total < OUTREACH_QUALIFICATION_THRESHOLD || !legal || !(evidenceAt <= now.getTime()) ||
+            !(now.getTime()-evidenceAt < 24*60*60_000) || await this.repository.isSuppressed(lead.email, domain)) {
+          results.push({ status: "skipped", reason: "qualification_or_eligibility_gate" }); continue;
+        }
+        if ((await this.repository.getTargetByEmail(lead.email))?.last_sent_at ||
+            (await this.repository.getTargetByDomain(domain))?.last_sent_at) {
+          results.push({ status: "skipped", reason: "already_contacted" }); continue;
+        }
         const pitch = await this.generatePitch({ lead, keyword });
         await assertLease();
-        const sent = await this.sendInitialPitch({ lead, keyword, pitch, recipientType: eligibility.recipientType, assertLease });
-        results.push({ email: lead.email, status: "sent", conversationId: sent.target.conversation_id, proposedTitle: pitch.proposedTitle });
-        remaining -= 1;
+        const validationExpiresAt = new Date(Math.min(Date.parse(assessment.expiresAt), now.getTime()+24*60*60_000)).toISOString();
+        if (mode.effective === "assessment") {
+          const key = stableId("guest-assessment", domain, keyword, now.toISOString().slice(0,10));
+          await putPrivateJson("kdp", `outreach/guest-article/assessment/${key}.json`,
+            { pitch, qualification: lead.qualification, source: lead.editorialEvidence, validationExpiresAt });
+          results.push({ status: "qa_passed_assessment" }); continue;
+        }
+        const queued = await outbox.queue({ lead: { ...lead, domain }, pitch, keyword, validationExpiresAt, assessmentKey, recipientType: type });
+        results.push(queued ? { status: "queued", outboxId: queued.id } : { status: "skipped", reason: "queue_admission_denied" });
       } catch (error) {
-        warn("outreach.automation.initial.failed", { domain: lead?.domain, code: error?.code, error: error?.message });
-        results.push({ email: lead?.email, status: "failed", reason: error?.code || "send_failed" });
+        warn("outreach.automation.assessment.failed", { code: error?.code || "assessment_failed" });
+        results.push({ status: "failed", reason: error?.code || "assessment_failed" });
       }
     }
-    return {
-      enabled: true,
-      sent: results.filter((x) => x.status === "sent").length,
-      queued: 0,
-      skipped: results.filter((x) => x.status === "skipped").length,
-      failed: results.filter((x) => x.status === "failed").length,
-      results,
-    };
+    return { enabled: true, sent: 0, queued: results.filter(x => x.status === "queued").length,
+      assessed: results.filter(x => x.status === "qa_passed_assessment").length,
+      skipped: leads.length-results.filter(x => ["queued","qa_passed_assessment","failed"].includes(x.status)).length,
+      failed: results.filter(x => x.status === "failed").length, results };
   }
 
   async processFollowUp({ targetId }) {
