@@ -21,7 +21,7 @@ test("dispatch rechecks effective mode and allowlist immediately before provider
     finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome), recordDeliveryEvent: async () => {} };
   const context = { d1: {}, emailService: { send: async () => { sends++; } } };
   const worker = new BookFeatureDispatchWorker({ repository, context,
-    readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    checkAssessment: async () => true, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
     now: () => new Date("2026-11-27T08:00:00.000Z") });
   worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
   const result = await worker.runOnce();
@@ -37,7 +37,7 @@ test("provider acceptance remains accepted pending delivery reconciliation and u
     finishOutboxLease: async (_lease, outcome) => accepted.push(outcome), recordDeliveryEvent: async () => {} };
   const context = { d1: {}, emailService: { send: async () => ({ providerMessageId: "provider-1" }) } };
   const worker = new BookFeatureDispatchWorker({ repository, context,
-    readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    checkAssessment: async () => true, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
     now: () => new Date("2026-11-27T08:00:00.000Z") });
   worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
   assert.equal((await worker.runOnce()).status, "accepted");
@@ -84,7 +84,7 @@ test("expired dispatch lease prevents provider handoff", async () => {
   };
   const worker = new BookFeatureDispatchWorker({ repository,
     context: { d1: {}, emailService: { send: async () => { sends++; } } },
-    readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    checkAssessment: async () => true, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
     now: () => new Date("2026-11-27T08:00:00.000Z") });
   worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
   assert.equal((await worker.runOnce()).status, "cancelled");
@@ -118,7 +118,7 @@ test("late suppression of intended contact blocks controlled-test handoff", asyn
     finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
   const worker = new BookFeatureDispatchWorker({ repository,
     context: { d1: {}, emailService: { send: async () => { sends++; } } },
-    readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    checkAssessment: async () => true, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
     now: () => new Date("2026-11-27T08:00:00.000Z") });
   worker.shared = { isSuppressed: async (email) => email === "editor@example.com" && ++checks > 1,
     createOutboundConversation: async () => ({ conversationId: "conversation" }) };
@@ -134,7 +134,7 @@ test("unclassified provider exceptions after handoff are reconciliation pending,
     finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
   const worker = new BookFeatureDispatchWorker({ repository, context: { d1: {}, emailService: {
     send: async () => { throw Object.assign(new Error("provider timeout"), { retryable: true }); },
-  } }, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+  } }, checkAssessment: async () => true, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
     now: () => new Date("2026-11-27T08:00:00.000Z") });
   worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
   assert.equal((await worker.runOnce()).status, "unknown");
@@ -150,7 +150,7 @@ test("a failed delivery event write after persisted acceptance does not re-finis
     recordDeliveryEvent: async () => { throw new Error("event store unavailable"); } };
   const worker = new BookFeatureDispatchWorker({ repository, context: { d1: {}, emailService: {
     send: async () => ({ providerMessageId: "provider-1" }),
-  } }, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+  } }, checkAssessment: async () => true, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
     now: () => new Date("2026-11-27T08:00:00.000Z") });
   worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
   const result = await worker.runOnce();
@@ -168,7 +168,7 @@ test("atomic dispatch admission denial prevents provider handoff", async () => {
     admitHandoff: async () => false, finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
   const worker = new BookFeatureDispatchWorker({ repository, context: { d1: {}, emailService: {
     send: async () => { sends++; },
-  } }, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+  } }, checkAssessment: async () => true, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
     now: () => new Date("2026-11-27T08:00:00.000Z") });
   worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
   assert.equal((await worker.runOnce()).status, "cancelled");
