@@ -113,7 +113,7 @@ export class ControlledGuestOutbox {
       const sent = await context.emailService.send({ conversationId: conversation.conversationId, bodyText: archived.pitch.body,
         subject: row.subject, recipients: [row.delivery_recipient], idempotencyKey: `guest-controlled:${row.id}`,
         scheduledDelivery: true, beforeProviderHandoff });
-      if (!sent?.providerMessageId) { await finish("unknown","provider_receipt_missing"); return { processed: true, status: "unknown", outboxId: row.id }; }
+      if (!admitted || !sent?.providerMessageId) { await finish("unknown","provider_receipt_missing"); return { processed: true, status: "unknown", outboxId: row.id }; }
       await finish("accepted",null,sent.providerMessageId);
       return { processed: true, status: "accepted", outboxId: row.id, providerMessageId: sent.providerMessageId };
     } catch {
