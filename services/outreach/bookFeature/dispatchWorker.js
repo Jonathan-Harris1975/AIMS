@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
 import { OutreachRepository } from "../services/outreachRepository.js";
 
@@ -64,6 +65,11 @@ export class BookFeatureDispatchWorker {
       if (!(Date.parse(context.validation_expires_at || "") > this.now().getTime()) ||
           !(Date.parse(lease.lease_expires_at || "") > this.now().getTime())) {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "handoff_expired" });
+        return { processed: true, status: "cancelled" };
+      }
+      const contentHash = createHash("sha256").update(`${archived.pitch.subject}\n${archived.pitch.body}`).digest("hex");
+      if (!await this.repository.admitHandoff(lease, contentHash)) {
+        await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "atomic_admission_denied" });
         return { processed: true, status: "cancelled" };
       }
       // Once provider handoff begins, an exception is not proof of non-delivery.
