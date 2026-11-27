@@ -257,4 +257,9 @@ test("controlled-test queue enforces backend allowlist, suppression, reservation
   assert.equal(duplicate.duplicate, true);
   await assert.rejects(repository.queueControlledTest({ opportunityId: "opp", recipient: "test@example.com",
     idempotencyKey: "controlled-2", runKey: "run-1" }), /per-run cap/);
+  await assert.rejects(repository.transitionMode("suspended", "operator", 2, "stale"), /version changed/);
+  assert.equal(db.prepare("SELECT status FROM book_feature_outbox").get().status, "queued");
+  db.prepare("UPDATE book_feature_outbox SET status='leased',lease_owner='crashed',lease_expires_at=?").run("2026-11-27T07:59:00.000Z");
+  assert.equal(await repository.claimOutbox(), null);
+  assert.equal(db.prepare("SELECT status FROM book_feature_outbox").get().status, "unknown");
 });
