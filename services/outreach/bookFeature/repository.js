@@ -127,6 +127,7 @@ export class BookFeatureRepository {
   async persistEligibleContacts(opportunityId, organisationId, contacts = []) {
     const at = this.now().toISOString();
     let persisted = 0;
+    const accepted = [];
     for (const contact of contacts) {
       const email = normalisedEmail(contact?.email);
       if (!emailPattern.test(email) || contact.eligibilityStatus !== "eligible" || contact.validationResult !== "valid" ||
@@ -161,8 +162,10 @@ export class BookFeatureRepository {
             validatedAt: contact.validatedAt, sourceUrl: contact.sourceUrl, assessmentKey: contact.assessmentKey }),at] },
       ]);
       persisted++;
+      accepted.push(contact);
+      break;
     }
-    return { persisted };
+    return { persisted, contacts: accepted };
   }
 
   async reserveTarget({ opportunityId, campaignType = "book_feature", email, domain, ttlMs = 7 * 24 * 60 * 60_000 }) {
