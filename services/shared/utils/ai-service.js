@@ -535,6 +535,7 @@ async function requestWithProviders(routeName, {
   signal,
   returnMetadata = false,
   validateContent,
+  onUsage,
 } = {}) {
   const routeKey = resolveRouteKey(routeName);
   const repairRequest = prepareRepairRequest(routeKey, messages, { stage: section });
@@ -577,6 +578,9 @@ async function requestWithProviders(routeName, {
     for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
       if (attempt > 0) claimRepairAction("recoveries");
       const logReturnedUsage = (result, parameterMode) => {
+        if (typeof onUsage === "function") {
+          try { onUsage({ model: result.model || provider.name, usage: result.usage || null, responseId: result.responseId }); } catch {}
+        }
         if (shouldLogUsage()) {
           info("ai.request.usage", {
             taskRepairBudget: currentTaskRepairBudget()?.snapshot() || null,
