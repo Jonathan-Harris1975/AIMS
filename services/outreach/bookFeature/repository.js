@@ -455,25 +455,34 @@ export class BookFeatureRepository {
     const context = opportunityId ? first(await this.d1.query(`SELECT o.id,o.organisation_id,o.contact_id,c.email,g.official_domain
       FROM book_feature_opportunities o LEFT JOIN book_feature_contacts c ON c.id=o.contact_id
       JOIN book_feature_organisations g ON g.id=o.organisation_id WHERE o.id=?`, [opportunityId])) : null;
+    const delivery = providerMessageId ? await this.findOpportunityByProviderMessage(providerMessageId) : null;
+    const testAddress = delivery?.opportunity_id === opportunityId ? normalisedEmail(delivery.delivery_recipient) : "";
+    const controlled = Boolean(testAddress && testAddress !== normalisedEmail(context?.email));
     const pending = "NOT EXISTS (SELECT 1 FROM outreach_inbound_events WHERE provider_event_id=?)";
     const statements = [];
     let action = context ? "operator_review" : "unmatched_preserved";
     let nextState = null;
     if (context && ["opt_out","decline","bounce"].includes(category)) {
-      const suppressionId = createHash("sha256").update(`osup\u001f${normalisedEmail(context.email)}\u001f${context.official_domain}`).digest("hex");
+      const suppressionEmail = controlled ? testAddress : normalisedEmail(context.email);
+      const suppressionDomain = controlled ? "" : context.official_domain;
+      const suppressionId = createHash("sha256").update(`osup\u001f${suppressionEmail}\u001f${suppressionDomain}`).digest("hex");
       statements.push(
         { sql: `INSERT INTO comms_hub_outreach_suppression (id,email,domain,reason,source,created_at,metadata_json)
           SELECT ?,?,?,?,'book_feature_inbound',?,? WHERE ${pending}
           ON CONFLICT(id) DO UPDATE SET reason=excluded.reason,source=excluded.source,metadata_json=excluded.metadata_json`,
-          params: [suppressionId,normalisedEmail(context.email),context.official_domain,category,at,JSON.stringify({ providerEventId }),providerEventId] },
+          params: [suppressionId,suppressionEmail,suppressionDomain,category,at,JSON.stringify({ providerEventId }),providerEventId] },
         { sql: `UPDATE book_feature_opportunities SET state=?,reason=?,updated_at=? WHERE id=? AND ${pending}`,
-          params: [category === "decline" ? "declined" : "suppressed",`inbound_${category}`,at,context.id,providerEventId] },
+          params: [controlled ? "blocked" : category === "decline" ? "declined" : "suppressed",`${controlled ? "controlled_test_" : ""}inbound_${category}`,at,context.id,providerEventId] },
         { sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
           failure_class=CASE WHEN status='leased' THEN 'uncertain' ELSE 'policy' END,lease_owner=NULL,lease_expires_at=NULL,last_error_code=?,updated_at=?
-          WHERE opportunity_id IN (SELECT id FROM book_feature_opportunities WHERE organisation_id=?) AND status IN ('queued','leased') AND ${pending}`,
-          params: [`inbound_${category}`,at,context.organisation_id,providerEventId] },
-        { sql: `UPDATE outreach_target_reservations SET status='suppressed',released_at=?,reason=? WHERE target_key=? AND status='active' AND ${pending}`,
-          params: [at,`inbound_${category}`,context.official_domain,providerEventId] });
+          WHERE (delivery_recipient=? OR (?=0 AND opportunity_id IN (SELECT id FROM book_feature_opportunities WHERE organisation_id=?)))
+          AND status IN ('queued','leased') AND ${pending}`,
+          params: [`inbound_${category}`,at,suppressionEmail,controlled ? 1 : 0,context.organisation_id,providerEventId] },
+        { sql: `UPDATE guest_article_controlled_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+          lease_owner=NULL,lease_expires_at=NULL,last_error_code=?,updated_at=? WHERE (delivery_recipient=? OR (?=0 AND official_domain=?))
+          AND status IN ('queued','leased') AND ${pending}`, params: [`inbound_${category}`,at,suppressionEmail,controlled ? 1 : 0,context.official_domain,providerEventId] },
+        { sql: `UPDATE outreach_target_reservations SET status='suppressed',released_at=?,reason=? WHERE target_key=? AND status='active' AND ?=0 AND ${pending}`,
+          params: [at,`inbound_${category}`,context.official_domain,controlled ? 1 : 0,providerEventId] });
       action = "suppressed_and_cancelled";
     } else if (context && ["positive","question","revision"].includes(category)) {
       nextState = "engaged";
@@ -493,7 +502,7 @@ export class BookFeatureRepository {
 
   async findOpportunityByProviderMessage(providerMessageId) {
     if (!providerMessageId) return null;
-    return first(await this.d1.query(`SELECT opportunity_id,contact_id,status FROM book_feature_outbox
+    return first(await this.d1.query(`SELECT id,opportunity_id,contact_id,status,delivery_recipient FROM book_feature_outbox
       WHERE provider_message_id=? ORDER BY updated_at DESC LIMIT 1`, [providerMessageId]));
   }
 
