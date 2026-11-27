@@ -3,8 +3,21 @@ import { effectiveMode, matchedPassage } from "./core.js";
 
 const first = (response) => response?.results?.[0] || null;
 const changes = (response) => Number(response?.meta?.changes || 0);
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const normalisedEmail = (value) => String(value || "").trim().toLowerCase();
+const validEmail = (value) => {
+  if (!value || value.length > 254) return false;
+  const separator = value.indexOf("@");
+  if (separator < 1 || separator !== value.lastIndexOf("@") || separator > 64) return false;
+  const local = value.slice(0, separator);
+  const domain = value.slice(separator + 1);
+  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".") || domain.includes("..")) return false;
+  for (const character of local) {
+    const code = character.charCodeAt(0);
+    if (code <= 32 || code === 127) return false;
+  }
+  return domain.split(".").every((label) => label && !label.startsWith("-") && !label.endsWith("-") &&
+    [...label].every((character) => /[a-z0-9-]/.test(character)));
+};
 
 export class BookFeatureRepository {
   constructor(d1, { now = () => new Date(), leaseId = randomUUID, leaseMs = 15 * 60_000 } = {}) {
@@ -47,7 +60,7 @@ export class BookFeatureRepository {
   }
 
   async configureControlledTest({ recipients, perRunCap = 1, dailyCap = 1, actor, reason, expectedVersion }) {
-    const allowlist = [...new Set((recipients || []).map(normalisedEmail).filter((email) => emailPattern.test(email)))];
+    const allowlist = [...new Set((recipients || []).map(normalisedEmail).filter(validEmail))];
     if (!allowlist.length || allowlist.length > 5 || allowlist.length !== (recipients || []).length) {
       throw new Error("One to five unique valid test recipients are required.");
     }
