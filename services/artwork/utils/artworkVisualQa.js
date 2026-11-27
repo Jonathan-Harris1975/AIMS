@@ -180,7 +180,7 @@ another zoom belongs in defects, not hardDefects. Be strict about actual readabl
   ].join("\n");
 }
 
-export async function auditArtworkBase64({ base64, mode = "editorial", creativePrompt = "", sessionId = "artwork-qa", signal } = {}) {
+export async function auditArtworkBase64({ base64, mode = "editorial", creativePrompt = "", sessionId = "artwork-qa", signal, onUsage } = {}) {
   const image = String(base64 || "").trim();
   if (!image) throw new Error("Artwork visual QA requires a base64 image.");
 
@@ -212,6 +212,7 @@ export async function auditArtworkBase64({ base64, mode = "editorial", creativeP
         : undefined,
       maxRetries: 1,
       signal,
+      onUsage,
       messages: [
         {
           role: "user",
