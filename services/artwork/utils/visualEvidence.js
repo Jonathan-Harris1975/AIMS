@@ -118,8 +118,12 @@ export async function collectArtworkEvidence({ now = new Date(), days = 31 } = {
       }
     }
     const summary = summariseArtworkEvidence(records);
+    const benchmarkRows = records.filter((record) => record.benchmark === true);
+    const benchmark = summariseArtworkEvidence(benchmarkRows.map((record) => ({ ...record, benchmark: false })));
+    benchmark.comparisonBasis = "operator-invoked matched creative briefs; no automatic model promotion";
+    benchmark.status = benchmarkRows.length ? "observed" : "not-run";
     const incomplete = unreadable > 0 || selected.length > limit;
-    return { ...summary, status: incomplete ? "partial" : records.length ? "observed" : "no-evidence",
+    return { ...summary, benchmark, status: incomplete ? "partial" : records.length ? "observed" : "no-evidence",
       start, end, unreadable, truncated: selected.length > limit,
       costPerQaAcceptedUsd: incomplete ? null : summary.costPerQaAcceptedUsd };
   } catch (error) {
