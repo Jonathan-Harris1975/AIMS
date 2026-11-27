@@ -34,3 +34,6 @@ CREATE TABLE guest_article_controlled_events (
   category TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+-- Existing queued items cannot inherit a new operator approval.
+ALTER TABLE book_feature_outbox ADD COLUMN configuration_version INTEGER;
