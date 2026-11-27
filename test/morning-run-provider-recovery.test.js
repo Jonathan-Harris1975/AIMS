@@ -246,7 +246,9 @@ test("interrupted render and review recovery preserve replacement limits and re-
   }
   assert.equal(canReuseRenderedReview({ pass: true, skipped: true }), false);
   assert.equal(canReuseRenderedReview({ pass: true, skipped: false }), false);
-  assert.equal(canReuseRenderedReview({ pass: true, skipped: false, audioQa: { version: 1, available: true, pass: true } }), true);
+  const audioQa = { version: 1, available: true, pass: true };
+  assert.equal(canReuseRenderedReview({ pass: true, skipped: false, audioQa }), false);
+  assert.equal(canReuseRenderedReview({ pass: true, skipped: false, technical: { pass: true }, audioQa }), true);
   assert.equal(canReuseRenderedReview(null), false);
 });
 
