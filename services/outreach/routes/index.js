@@ -1,4 +1,5 @@
 import express from "express";
+import { createRateLimitMiddleware } from "../../shared/middleware/rateLimit.js";
 import { startAsyncServiceRouteJob, getAsyncServiceRouteJobFresh } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { assessThreeBooks } from "../bookFeature/assessment.js";
 import { scheduledLondonOccurrence } from "../bookFeature/core.js";
@@ -17,6 +18,8 @@ import {
 } from "../../shared/utils/requestSchemas.js";
 
 const router = express.Router();
+const outreachWebhookRateLimit = createRateLimitMiddleware({ enabled: true, windowMs: 60_000,
+  maxRequests: 60, scope: "outreach-webhook" });
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const operatorActor = (req) => String(req.get("x-comms-hub-actor") || "authenticated_suite_operator").slice(0, 200);
 const requireAdminMutation = (req, res) => {
@@ -108,7 +111,7 @@ router.post("/book-feature/delivery/:outboxId/reconcile", asyncRoute(async (req,
   res.json({ ok: true, ...result });
 }));
 
-router.post("/book-feature/delivery/event", asyncRoute(async (req, res) => {
+router.post("/book-feature/delivery/event", outreachWebhookRateLimit, asyncRoute(async (req, res) => {
   const rawBody = req.aimsRawBody?.toString("utf8");
   if (!rawBody || !verifyInboundSignature(rawBody, { signature: req.get("x-aims-outreach-signature"),
     timestamp: req.get("x-aims-outreach-timestamp"), secret: process.env.BOOK_FEATURE_INBOUND_WEBHOOK_SECRET })) {
@@ -131,7 +134,7 @@ router.post("/book-feature/delivery/event", asyncRoute(async (req, res) => {
   res.status(202).json({ ok: true, ...result });
 }));
 
-router.post("/book-feature/inbound", asyncRoute(async (req, res) => {
+router.post("/book-feature/inbound", outreachWebhookRateLimit, asyncRoute(async (req, res) => {
   const repository = await bookFeatureRepository(res);
   if (!repository) return;
   const rawBody = req.aimsRawBody?.toString("utf8");
