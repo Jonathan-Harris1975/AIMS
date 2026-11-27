@@ -109,10 +109,11 @@ export class BookFeatureRepository {
         { sql: `INSERT INTO book_feature_opportunities
           (id,campaign_id,organisation_id,state,tier,score,rubric_version,gate_json,next_action_at,reason,created_at,updated_at,
            score_components_json,evidence_json)
-          VALUES (?,?,?,'validated',?,?,?,?,?,?,?, ?,?,?,?)
+          VALUES (?,?,?,'validated',?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(campaign_id,organisation_id) DO UPDATE SET state='validated',tier=excluded.tier,score=excluded.score,
           rubric_version=excluded.rubric_version,gate_json=excluded.gate_json,reason=excluded.reason,updated_at=excluded.updated_at,
-          score_components_json=excluded.score_components_json,evidence_json=excluded.evidence_json`,
+          score_components_json=excluded.score_components_json,evidence_json=excluded.evidence_json
+          WHERE book_feature_opportunities.state IN ('discovered','validated','qualified','awaiting_contact','eligible','drafted','qa_passed')`,
           params: [opportunityId,campaignId,organisationId,item.tier === "priority" ? "A" : item.tier === "strong" ? "B" :
             item.tier === "conditional" ? "C" : "D",item.score,item.rubric,JSON.stringify(item.gates),null,item.reason,at,at,
             JSON.stringify(item.components),JSON.stringify(evidence)] },
@@ -133,7 +134,8 @@ export class BookFeatureRepository {
     for (const contact of contacts) {
       const email = normalisedEmail(contact?.email);
       if (!validEmail(email) || contact.eligibilityStatus !== "eligible" || contact.validationResult !== "valid" ||
-          !contact.sourceUrl || !contact.assessmentKey) continue;
+          !contact.sourceUrl || !contact.assessmentKey || !(Date.parse(contact.validationExpiresAt || '') > this.now().getTime()) ||
+          !contact.jurisdiction || !contact.lawfulBasis || !['confirmed','not_required'].includes(contact.consentStatus)) continue;
       const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression
         WHERE lower(email)=? OR (domain<>'' AND lower(domain)=?) LIMIT 1`, [email, email.split("@")[1]]));
       if (suppressed) continue;
@@ -149,15 +151,17 @@ export class BookFeatureRepository {
           validation_result=excluded.validation_result,validated_at=excluded.validated_at,
           validation_expires_at=excluded.validation_expires_at,lawful_basis=excluded.lawful_basis,
           assessment_key=excluded.assessment_key,consent_status=excluded.consent_status,
-          eligibility_status=excluded.eligibility_status,updated_at=excluded.updated_at`,
+          eligibility_status=excluded.eligibility_status,updated_at=excluded.updated_at
+          WHERE book_feature_contacts.organisation_id=excluded.organisation_id`,
           params: [contactId,organisationId,email,email,contact.displayName || null,contact.role,contact.recipientType,
             contact.sourceUrl,contact.sourceTitle || null,contact.validationProvider,contact.validationResult,
-            contact.validatedAt,contact.validationExpiresAt,contact.jurisdiction || "GB",contact.lawfulBasis,
+            contact.validatedAt,contact.validationExpiresAt,contact.jurisdiction,contact.lawfulBasis,
             contact.assessmentKey,contact.consentStatus,contact.eligibilityStatus,at,at] },
         { sql: `UPDATE book_feature_opportunities SET contact_id=?,state='eligible',
           gate_json=json_set(gate_json,'$.contact',json('true'),'$.lawfulBasis',json('true'),'$.suppression',json('true')),
-          reason='draft_and_qa_pending',updated_at=? WHERE id=? AND organisation_id=? AND state='validated'`,
-          params: [contactId,at,opportunityId,organisationId] },
+          reason='draft_and_qa_pending',updated_at=? WHERE id=? AND organisation_id=? AND state='validated'
+          AND EXISTS (SELECT 1 FROM book_feature_contacts c WHERE c.id=? AND c.organisation_id=?)`,
+          params: [contactId,at,opportunityId,organisationId,contactId,organisationId] },
         { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
           SELECT ?,'contact',?,'contact_eligible','book-feature-assessment',?,? WHERE changes()=1`,
           params: [this.leaseId(),contactId,JSON.stringify({ opportunityId, validationProvider: contact.validationProvider,
