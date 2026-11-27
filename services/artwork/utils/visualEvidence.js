@@ -100,7 +100,8 @@ export async function collectArtworkEvidence({ now = new Date(), days = 31 } = {
     const { listObjects, getObjectAsBuffer } = await import("../../shared/utils/r2-client.js");
     const start = new Date(now.getTime() - (Math.min(31, Math.max(1, days)) - 1) * 86400000).toISOString().slice(0, 10);
     const end = now.toISOString().slice(0, 10);
-    const months = [...new Set([start.slice(0, 7), end.slice(0, 7)])];
+    const months = [...new Set(Array.from({ length: Math.min(31, Math.max(1, days)) }, (_, i) =>
+      new Date(now.getTime() - i * 86400000).toISOString().slice(0, 7)))];
     const objects = (await Promise.all(months.map((month) => listObjects("metaSystem", VISUAL_EVIDENCE_PREFIX + "/" + month)))).flat();
     const selected = objects.filter((item) => {
       const date = item.key.split("/").at(-2);
