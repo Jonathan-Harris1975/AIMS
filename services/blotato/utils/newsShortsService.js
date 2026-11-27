@@ -835,7 +835,8 @@ function normalisePack(pack = {}) {
   for (const key of required) {
     output[key] = cleanText(pack[key] || "", key === "script" ? 4000 : 1400);
   }
-  output.editorialHooks = [...new Set([output.hook, ...(Array.isArray(pack.editorialHooks) ? pack.editorialHooks : []), pack.hookAlt].map((value) => cleanText(typeof value === "string" ? value : "", 320)).filter(Boolean))].slice(0, 3);
+  output.editorialHooks = [...new Set([output.hook, ...(Array.isArray(pack.editorialHooks) ? pack.editorialHooks : []), pack.hookAlt]
+    .map((value) => cleanText(typeof value === "string" ? value : "", 320)).filter(Boolean))].slice(0, 3);
   output.theme = ["futuristic", "modern"].includes(output.theme.toLowerCase()) ? output.theme.toLowerCase() : "modern";
   output.creativeBrief = output.creativeBrief || `Source-specific ${output.theme} treatment for ${output.internalTitle || "the supplied story"}.`;
 
@@ -1504,7 +1505,10 @@ export async function buildOrCreateShortLane(options = {}) {
   const storyboard = buildStoryboard({ script: pack.script, hook: pack.hook, scenes: pack.scenes, durationSeconds: options.durationSeconds || 45, creativeBrief });
   const finalHooks = [...new Set([pack.hook, ...(pack.editorialHooks || [])].filter(Boolean))].slice(0, 3);
   const hookCandidates = finalHooks.length === 3
-    ? finalHooks.map((hook, index) => ({ hook, category: index === 0 ? "selected-editorial" : "alternative-editorial", score: scoreHook(hook, { topic: options.article?.title || pack.internalTitle, evidence: options.article?.summary }) })).sort((a, b) => b.score - a.score)
+    ? finalHooks.map((hook, index) => ({
+      hook, category: index === 0 ? "selected-editorial" : "alternative-editorial",
+      score: scoreHook(hook, { topic: options.article?.title || pack.internalTitle, evidence: options.article?.summary }),
+    })).sort((a, b) => b.score - a.score)
     : buildHookCandidates({ topic: options.article?.title || pack.internalTitle, angle: pack.angle, evidence: options.article?.summary, audience: options.audience });
   const visualInputs = buildBlotatoVideoInputs(pack);
   // Always build source-grounded manual inputs from the pack. Route this
