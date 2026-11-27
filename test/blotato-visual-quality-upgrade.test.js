@@ -133,3 +133,11 @@ test("visual request preserves factual constraints with a separate directive", a
   assert.ok(request.prompt.startsWith("Story\n\nCREATIVE BRIEF:"));
   assert.match(request.prompt, /factual-constraints=Source only/);
 });
+
+test("historical acceptance cannot replay a render with hard QA defects", async () => {
+  const { isRetryableRenderedPublishFailure } = await import("../services/blotato/utils/autoPublishService.js");
+  const job = { status: "failed", phase: "publish-failed", videoId: "paid-render", attempt: 1 };
+  for (const qa of [{ hardDefects: ["off-topic"] }, { technical: { pass: false } }, { skipped: true }]) {
+    assert.equal(isRetryableRenderedPublishFailure({ ...job, renderedVideoQa: { acceptedForScheduling: true, ...qa } }), false);
+  }
+});
