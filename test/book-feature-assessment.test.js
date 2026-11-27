@@ -42,8 +42,8 @@ test("featured metadata, passage matching, scoring and dispatch mode fail closed
   assert.equal(score.score, 100);
   assert.equal(score.eligible, false);
   assert.ok(score.failedGates.includes("authorisation"));
-  assert.equal(effectiveMode("production", "production"), "shadow");
-  assert.equal(effectiveMode("suspended", "production"), "suspended");
+  assert.equal(effectiveMode("production", "production"), "assessment");
+  assert.equal(effectiveMode("suspended", "pilot"), "suspended");
 });
 
 test("conditional Book Feature scores require enhanced validation and preserve mandatory gates", () => {

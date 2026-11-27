@@ -4,6 +4,8 @@ import { assessThreeBooks } from "../bookFeature/assessment.js";
 import { scheduledLondonOccurrence } from "../bookFeature/core.js";
 import { runBookFeatureAssessment } from "../bookFeature/run.js";
 import { BookFeatureRepository } from "../bookFeature/repository.js";
+import { BookFeatureDispatchWorker } from "../bookFeature/dispatchWorker.js";
+import { handleBookFeatureInbound } from "../bookFeature/inboundLifecycle.js";
 import { runKeyword } from "../services/outreachService.js";
 import { runNextBatch, resetProgress } from "../services/batchService.js";
 import { getRequestIdempotencyKey, requestDedupe } from "../../shared/utils/requestDedupe.js";
@@ -15,6 +17,15 @@ import {
 
 const router = express.Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const operatorActor = (req) => String(req.get("x-comms-hub-actor") || "authenticated_suite_operator").slice(0, 200);
+const requireAdminMutation = (req, res) => {
+  const delegatedRole = String(req.get("x-comms-hub-role") || "").toLowerCase();
+  if (delegatedRole && delegatedRole !== "admin") {
+    res.status(403).json({ ok: false, error: "Administrator role is required for Outreach control changes." });
+    return false;
+  }
+  return true;
+};
 const bookFeatureRepository = async (res) => {
   const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
   const d1 = getCommsHubContext()?.d1;
@@ -31,7 +42,9 @@ router.get("/book-feature/status", asyncRoute(async (_req, res) => {
   const mode = await repository.mode();
   res.set("Cache-Control", "no-store");
   res.json({ ok: true, service: "book_feature_outreach", mode: mode.effective, configurationVersion: mode.version,
-    dispatchEnabled: false, schedulerOwner: "MAST", pilotAuthorised: false });
+    killSwitch: mode.killSwitch, testRecipientsConfigured: mode.testRecipients.length, perRunCap: mode.perRunCap,
+    dailyCap: mode.dailyCap, dispatchEnabled: mode.effective === "controlled_test" && !mode.killSwitch,
+    schedulerOwner: "MAST", pilotAuthorised: mode.effective === "pilot" });
 }));
 
 router.get("/book-feature/overview", asyncRoute(async (_req, res) => {
@@ -43,17 +56,65 @@ router.get("/book-feature/overview", asyncRoute(async (_req, res) => {
 }));
 
 router.put("/book-feature/mode", asyncRoute(async (req, res) => {
+  if (!requireAdminMutation(req, res)) return;
   const next = req.body?.mode;
   const version = req.body?.expectedVersion;
-  if (!["disabled", "assessment", "shadow", "suspended"].includes(next) ||
+  const reason = String(req.body?.reason || "").trim();
+  if (!["disabled", "assessment", "suspended"].includes(next) || !reason ||
       !Number.isSafeInteger(version) || version < 1) {
-    return res.status(400).json({ ok: false, error: "Safe mode and expectedVersion are required." });
+    return res.status(400).json({ ok: false, error: "Safe mode, reason and expectedVersion are required." });
   }
   const repository = await bookFeatureRepository(res);
   if (!repository) return;
-  const mode = await repository.transitionMode(next, "authenticated_suite_operator", version);
+  const mode = await repository.transitionMode(next, operatorActor(req), version, reason);
   res.set("Cache-Control", "no-store");
   res.json({ ok: true, mode });
+}));
+
+router.put("/book-feature/controlled-test", asyncRoute(async (req, res) => {
+  if (!requireAdminMutation(req, res)) return;
+  const repository = await bookFeatureRepository(res);
+  if (!repository) return;
+  const mode = await repository.configureControlledTest({ recipients: req.body?.recipients,
+    perRunCap: req.body?.perRunCap, dailyCap: req.body?.dailyCap,
+    reason: req.body?.reason, expectedVersion: req.body?.expectedVersion,
+    actor: operatorActor(req) });
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, mode });
+}));
+
+router.post("/book-feature/dispatch/once", asyncRoute(async (req, res) => {
+  if (!requireAdminMutation(req, res)) return;
+  const repository = await bookFeatureRepository(res);
+  if (!repository) return;
+  const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
+  const context = getCommsHubContext();
+  const result = await new BookFeatureDispatchWorker({ repository, context }).runOnce();
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, ...result });
+}));
+
+router.post("/book-feature/delivery/:outboxId/reconcile", asyncRoute(async (req, res) => {
+  if (!requireAdminMutation(req, res)) return;
+  const repository = await bookFeatureRepository(res);
+  if (!repository) return;
+  const result = await repository.reconcileOutbox({ outboxId: req.params.outboxId, outcome: req.body?.outcome,
+    providerEventId: req.body?.providerEventId, providerMessageId: req.body?.providerMessageId || null,
+    evidence: req.body?.evidence || {}, actor: operatorActor(req) });
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, ...result });
+}));
+
+router.post("/book-feature/inbound", asyncRoute(async (req, res) => {
+  const repository = await bookFeatureRepository(res);
+  if (!repository) return;
+  const rawBody = req.aimsRawBody?.toString("utf8") || JSON.stringify(req.body || {});
+  const result = await handleBookFeatureInbound({ rawBody,
+    signature: req.get("x-aims-outreach-signature"), timestamp: req.get("x-aims-outreach-timestamp"),
+    secret: process.env.BOOK_FEATURE_INBOUND_WEBHOOK_SECRET,
+    providerEventId: req.body?.providerEventId, providerMessageId: req.body?.providerMessageId,
+    contactId: req.body?.contactId, text: req.body?.text, occurredAt: req.body?.occurredAt }, { repository });
+  res.status(202).json({ ok: true, ...result });
 }));
 
 router.post("/book-feature/run", asyncRoute(async (req, res) => {

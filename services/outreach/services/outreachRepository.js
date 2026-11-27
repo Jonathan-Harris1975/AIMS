@@ -122,7 +122,8 @@ export class OutreachRepository {
     return Number(rows(result)[0]?.count || 0);
   }
 
-  async createOutboundConversation({ email, displayName = "", domain, keyword, subject, sourceUrl = "", sourceTitle = "" }) {
+  async createOutboundConversation({ email, displayName = "", domain, keyword, subject, sourceUrl = "", sourceTitle = "",
+    workflow = "outreach_guest_article", campaignType = "guest_article", opportunityId = null }) {
     const now = new Date().toISOString();
     const contactId = stableId("con", "outreach", email.toLowerCase());
     const conversationId = stableId("cnv", "outreach", email.toLowerCase());
@@ -139,10 +140,11 @@ export class OutreachRepository {
       {
         sql: `INSERT INTO comms_hub_conversations
               (id, channel, provider, workflow, status, contact_id, subject, source_reference, created_at, updated_at, last_message_at, metadata_json)
-              VALUES (?, 'email', 'one.com', 'outreach_guest_article', 'open', ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(id) DO UPDATE SET workflow='outreach_guest_article', subject=excluded.subject,
+              VALUES (?, 'email', 'one.com', ?, 'open', ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET workflow=excluded.workflow, subject=excluded.subject,
                 source_reference=excluded.source_reference, updated_at=excluded.updated_at, metadata_json=excluded.metadata_json`,
-        params: [conversationId, contactId, subject, sourceUrl || domain, now, now, now, json({ outreach: true, domain, keyword, sourceUrl, sourceTitle })],
+        params: [conversationId, workflow, contactId, subject, sourceUrl || domain, now, now, now,
+          json({ outreach: true, campaignType, opportunityId, domain, keyword, sourceUrl, sourceTitle })],
       },
       {
         sql: `INSERT OR IGNORE INTO comms_hub_conversation_operations

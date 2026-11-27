@@ -10,6 +10,10 @@ import { runBookFeatureAssessment, resolveWeeklyBook, analysePublishedBook } fro
 function fixture() {
   const db = new DatabaseSync(":memory:");
   db.exec(readFileSync(new URL("../services/comms-hub/migrations/0028_book_feature_outreach.sql", import.meta.url), "utf8"));
+  db.exec(readFileSync(new URL("../services/comms-hub/migrations/0030_outreach_production_controls.sql", import.meta.url), "utf8"));
+  db.exec(`CREATE TABLE IF NOT EXISTS comms_hub_outreach_suppression (
+    id TEXT PRIMARY KEY,email TEXT NOT NULL DEFAULT '',domain TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL,
+    source TEXT NOT NULL,created_at TEXT NOT NULL,metadata_json TEXT NOT NULL DEFAULT '{}')`);
   const query = async (sql, values = []) => {
     const statement = db.prepare(sql);
     if (/^\s*(?:SELECT|PRAGMA)/i.test(sql)) return { results: statement.all(...values), meta: { changes: 0 } };
@@ -25,14 +29,23 @@ const book = { ebookId: 20, title: "Published Book", author: "Author", bookUrl: 
   coverArtUrl: "https://example.com/cover", manuscriptR2Key: "Manuscripts pdf format/exact.pdf",
   storageBucket: "kdp", publicationDate: "2025-01-01" };
 
-test("mode transitions are versioned and cannot activate dispatch", async (t) => {
+test("mode transitions are versioned and controlled testing requires explicit allowlist approval", async (t) => {
   const { db, d1 } = fixture(); t.after(() => db.close());
-  const repository = new BookFeatureRepository(d1, { leaseId: () => "audit1" });
+  let auditSequence = 0;
+  const repository = new BookFeatureRepository(d1, { leaseId: () => `audit${++auditSequence}` });
   assert.equal((await repository.mode()).effective, "assessment");
-  assert.equal((await repository.transitionMode("shadow", "operator", 1)).version, 2);
+  assert.equal((await repository.transitionMode("assessment", "operator", 2, "continue assessment")).version, 3);
   assert.equal(db.prepare("SELECT count(*) AS count FROM book_feature_audit").get().count, 1);
-  await assert.rejects(repository.transitionMode("production", "operator", 2));
-  await assert.rejects(repository.transitionMode("assessment", "operator", 1));
+  await assert.rejects(repository.transitionMode("pilot", "operator", 3, "not accepted"));
+  await assert.rejects(repository.transitionMode("assessment", "operator", 2, "stale"));
+  const controlled = await repository.configureControlledTest({ recipients: ["test@example.com"], perRunCap: 1,
+    dailyCap: 1, actor: "operator", reason: "controlled inbox delivery test", expectedVersion: 3 });
+  assert.equal(controlled.effective, "controlled_test");
+  assert.equal(controlled.killSwitch, false);
+  assert.deepEqual(controlled.testRecipients, ["test@example.com"]);
+  assert.equal(db.prepare("SELECT count(*) AS count FROM book_feature_audit").get().count, 2);
+  await assert.rejects(repository.configureControlledTest({ recipients: ["invalid"], actor: "operator",
+    reason: "bad", expectedVersion: 4 }));
   assert.equal((await repository.mode({ BOOK_FEATURE_OUTREACH_MODE: "suspended" })).effective, "suspended");
   const overview = await repository.overview();
   assert.equal(overview.opportunities.total, 0);
@@ -199,4 +212,49 @@ test("PDF cache is keyed to content and refuses incomplete coverage", async () =
   await analysePublishedBook(book, options);
   assert.equal(extracts, 1);
   assert.equal(cached.configVersion, "book-feature-pdf-v1");
+});
+
+test("controlled-test queue enforces backend allowlist, suppression, reservation, caps and idempotency", async (t) => {
+  const { db, d1 } = fixture(); t.after(() => db.close());
+  let sequence = 0;
+  const now = new Date("2026-11-27T08:00:00.000Z");
+  const repository = new BookFeatureRepository(d1, { now: () => now, leaseId: () => `id-${++sequence}` });
+  await repository.configureControlledTest({ recipients: ["test@example.com"], perRunCap: 1, dailyCap: 1,
+    actor: "operator", reason: "approved controlled inbox", expectedVersion: 2 });
+  db.exec(`INSERT INTO book_feature_campaigns
+    (id,iso_week,ebook_id,title,author,canonical_url,cover_url,manuscript_key,selection_json,state,created_at,updated_at)
+    VALUES ('campaign','2026-W48',1,'Book','Author','https://book.example','https://book.example/cover',
+      'Manuscripts pdf format/book.pdf','{}','assessment','${now.toISOString()}','${now.toISOString()}');
+    INSERT INTO book_feature_organisations
+    (id,canonical_name,official_domain,identity_status,source_json,verified_at,updated_at,legal_name,identity_evidence_key,identity_expires_at)
+    VALUES ('org','Example','example.com','verified','{}','${now.toISOString()}','${now.toISOString()}','Example','private/id.json','2026-12-27T08:00:00.000Z');
+    INSERT INTO book_feature_opportunities
+    (id,campaign_id,organisation_id,state,tier,score,rubric_version,gate_json,reason,created_at,updated_at,score_components_json,evidence_json,contact_id)
+    VALUES ('opp','campaign','org','qa_passed','A',90,'v1',
+      '{"evidence":true,"identity":true,"contact":true,"lawfulBasis":true,"suppression":true,"duplicate":false,
+      "qa":true,"campaign":true,"authorisation":false}',
+      'authorisation pending','${now.toISOString()}','${now.toISOString()}','{}','[]','contact');
+    INSERT INTO book_feature_contacts
+    (id,organisation_id,email,normalised_email,role,recipient_type,source_url,validation_provider,validation_result,validated_at,
+     validation_expires_at,jurisdiction,lawful_basis,assessment_key,consent_status,eligibility_status,created_at,updated_at)
+    VALUES ('contact','org','test@example.com','test@example.com','Editor','role_address','https://example.com/contact','zerobounce','valid',
+    '${now.toISOString()}','2026-12-11T08:00:00.000Z','GB','legitimate_interests_documented','private/assessment.json','not_required','eligible','${now.toISOString()}','${now.toISOString()}');
+    INSERT INTO book_feature_pitch_versions
+    (id,opportunity_id,version,subject,body_key,content_sha256,prompt_version,model_route,created_at)
+    VALUES ('pitch','opp',1,'A useful feature','private/pitch.json','${"a".repeat(64)}','v1','route','${now.toISOString()}');
+    INSERT INTO book_feature_qa_reviews
+    (id,pitch_version_id,rubric_version,passed,score,gates_json,reasons_json,reviewer_route,created_at)
+    VALUES ('qa','pitch','qa-v1',1,95,'{}','[]','qa-route','${now.toISOString()}')`);
+  await assert.rejects(repository.queueControlledTest({ opportunityId: "opp", recipient: "prospect@example.com",
+    idempotencyKey: "wrong-recipient", runKey: "run-1" }), /not authorised/);
+  const queued = await repository.queueControlledTest({ opportunityId: "opp", recipient: "test@example.com",
+    idempotencyKey: "controlled-1", runKey: "run-1" });
+  assert.equal(queued.duplicate, false);
+  assert.equal(queued.outbox.status, "queued");
+  assert.equal(db.prepare("SELECT status FROM outreach_target_reservations").get().status, "active");
+  const duplicate = await repository.queueControlledTest({ opportunityId: "opp", recipient: "test@example.com",
+    idempotencyKey: "controlled-1", runKey: "run-1" });
+  assert.equal(duplicate.duplicate, true);
+  await assert.rejects(repository.queueControlledTest({ opportunityId: "opp", recipient: "test@example.com",
+    idempotencyKey: "controlled-2", runKey: "run-1" }), /per-run cap/);
 });

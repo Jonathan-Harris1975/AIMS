@@ -6,6 +6,10 @@ import { BookFeatureRepository } from "./repository.js";
 import { candidateReferences, extractManuscript, validateExtraction } from "./assessment.js";
 import { analyseCandidateContext } from "./entityAnalysis.js";
 import { researchCandidateSources } from "./organizationResearch.js";
+import { verifyOrganisationIdentities } from "./organizationIdentity.js";
+import { qualifyVerifiedOrganisations } from "./qualification.js";
+import { discoverEligibleContacts } from "./contactEligibility.js";
+import { createAndReviewPitch } from "./pitchWorkflow.js";
 import { scheduledLondonOccurrence, verifyBook } from "./core.js";
 
 const EXTRACTION_CONFIG_VERSION = "book-feature-pdf-v1";
@@ -70,12 +74,16 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
   resolveBook = resolveWeeklyBook, analyse = analysePublishedBook, persist = putPrivateJson,
   analyseEntities = analyseCandidateContext,
   researchOrganizations = researchCandidateSources,
+  verifyOrganizations = verifyOrganisationIdentities,
+  qualifyOrganizations = qualifyVerifiedOrganisations,
+  discoverContacts = discoverEligibleContacts,
+  draftAndReview = createAndReviewPitch,
   heartbeatIntervalMs = 5 * 60_000 } = {}) {
   const occurrence = scheduledLondonOccurrence(now);
   if (!occurrence) return { ok: false, status: "blocked", reason: "Outside Tuesday/Thursday 09:00–11:00 Europe/London assessment window." };
   if (!repository) throw new Error("Durable Book Feature repository is required.");
   const mode = await repository.mode();
-  if (!["assessment", "shadow"].includes(mode.effective)) {
+  if (!["assessment", "controlled_test"].includes(mode.effective)) {
     return { ok: false, status: "suspended", mode: mode.effective, reason: "Configured mode forbids scheduled assessment." };
   }
   const { book, selection } = await resolveBook(occurrence.week);
@@ -115,25 +123,71 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
     const analysis = await analyse(book);
     const entityAnalysis = await analyseEntities(analysis.candidates);
     const organizationResearch = await researchOrganizations(entityAnalysis.entities);
+    const identityAnalysis = await verifyOrganizations(organizationResearch);
+    const qualifications = qualifyOrganizations(entityAnalysis, identityAnalysis);
     await assertLease();
     const referenceEvidence = await repository.recordCandidateEvidence(campaign.id, analysis.sha256,
       analysis.candidates, analysis.sourcePages);
+    for (const identity of identityAnalysis.organisations.filter((item) => item.status === "verified")) {
+      const organisationId = createHash("sha256").update(`book-feature-org\u001f${identity.officialDomain}`).digest("hex");
+      await persist("kdp", `outreach/book-feature/identity/${organisationId}/${identity.verifiedAt}.json`, identity);
+    }
+    const qualificationPersistence = await repository.persistQualifications(campaign.id, qualifications);
+    const contactResults = [];
+    const pitchResults = [];
+    const queueResults = [];
+    for (const qualification of qualifications.filter((item) => item.identity.status === "verified")) {
+      const organisationId = createHash("sha256").update(`book-feature-org\u001f${qualification.identity.officialDomain}`).digest("hex");
+      const opportunityId = createHash("sha256").update(`${campaign.id}\u001f${organisationId}`).digest("hex");
+      const result = await discoverContacts(qualification.identity);
+      const stored = await repository.persistEligibleContacts(opportunityId, organisationId, result.contacts || []);
+      contactResults.push({ candidateId: qualification.candidateId, status: result.status, reason: result.reason || null,
+        eligibleContacts: stored.persisted });
+      const contact = result.contacts?.[0];
+      if (stored.persisted && contact) {
+        const pitch = await draftAndReview({ opportunityId, campaignId: campaign.id,
+          facts: { organisation: { name: qualification.name, legalName: qualification.identity.legalName,
+            officialDomain: qualification.identity.officialDomain }, contact: { email: contact.email, role: contact.role,
+            recipientType: contact.recipientType }, book: { title: book.title, author: book.author,
+            url: book.bookUrl }, evidence: qualification.identity.evidence.map((item) => ({ url: item.canonicalUrl,
+            retrievedAt: item.retrievedAt, contentHash: item.contentHash })) }, allowedUrls: [book.bookUrl] }, { repository, persist });
+        pitchResults.push({ candidateId: qualification.candidateId, status: pitch.status, version: pitch.version || null });
+        if (pitch.status === "qa_passed" && mode.effective === "controlled_test") {
+          const recipient = mode.testRecipients[0];
+          const queued = await repository.queueControlledTest({ opportunityId, recipient,
+            runKey: occurrence.id,
+            idempotencyKey: `${occurrence.id}:${opportunityId}:v${pitch.version}` });
+          queueResults.push({ candidateId: qualification.candidateId, recipient, duplicate: queued.duplicate,
+            outboxId: queued.outbox?.id || null });
+        }
+      }
+    }
     const reportKey = `outreach/book-feature/campaigns/${occurrence.week}/${occurrence.localDate}.json`;
     await assertLease();
     await persist("kdp", reportKey, { campaignId: campaign.id, occurrenceId: occurrence.id, ebookId: book.ebookId,
       title: book.title, manuscriptSha256: analysis.sha256, totalPages: analysis.totalPages,
       pagesAnalysed: analysis.pagesAnalysed, candidates: analysis.candidates, extractionCacheKey: analysis.cacheKey,
-      referenceEvidence, entityAnalysis, organizationResearch,
-      evidenceStatus: "candidate_only_identity_and_qualification_pending",
-      verifiedOrganisations: 0, qualifiedOpportunities: 0, contactEligibleOpportunities: 0,
-      dispatched: 0, status: "assessment_pending_entity_validation", observedAt: now.toISOString() });
+      referenceEvidence, entityAnalysis, organizationResearch, identityAnalysis,
+      qualifications: qualifications.map(({ identity, entity, ...item }) => ({ ...item,
+        identity: { status: identity.status, officialDomain: identity.officialDomain || null, reason: identity.reason || null },
+        entityId: entity?.id || null })),
+      evidenceStatus: identityAnalysis.verified ? "identity_verified_contact_qualification_pending" : "identity_unverified",
+      verifiedOrganisations: identityAnalysis.verified, qualifiedOpportunities: qualificationPersistence.persisted,
+      contactResults, pitchResults, queueResults,
+      contactEligibleOpportunities: contactResults.reduce((sum, item) => sum + item.eligibleContacts, 0), dispatched: 0,
+      status: contactResults.some((item) => item.eligibleContacts) ? "assessment_pending_draft_and_qa" :
+        identityAnalysis.verified ? "assessment_pending_contact_validation" : "assessment_identity_unverified",
+      observedAt: now.toISOString() });
     await assertLease();
     await repository.finishOccurrence(lease, "completed_zero", { reportKey });
     return { ok: true, status: "completed_zero", campaignId: campaign.id, occurrenceId: occurrence.id,
       pagesAnalysed: analysis.pagesAnalysed, totalPages: analysis.totalPages, candidatePhrases: analysis.candidates.length,
       candidateEvidenceRecorded: referenceEvidence.recorded,
       contextClassifiedCandidates: entityAnalysis.entities.length,
-      verifiedOrganisations: 0, qualifiedOpportunities: 0, dispatched: 0 };
+      verifiedOrganisations: identityAnalysis.verified, qualifiedOpportunities: qualificationPersistence.persisted,
+      contactEligibleOpportunities: contactResults.reduce((sum, item) => sum + item.eligibleContacts, 0),
+      qaPassed: pitchResults.filter((item) => item.status === "qa_passed").length,
+      queued: queueResults.length, dispatched: 0 };
   } catch (error) {
     try {
       await repository.finishOccurrence(lease, "blocked", { errorCode: String(error?.code || "assessment_failed").slice(0, 100) });
