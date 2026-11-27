@@ -5,6 +5,7 @@ import { scheduledLondonOccurrence } from "../bookFeature/core.js";
 import { runBookFeatureAssessment } from "../bookFeature/run.js";
 import { BookFeatureRepository } from "../bookFeature/repository.js";
 import { BookFeatureDispatchWorker } from "../bookFeature/dispatchWorker.js";
+import { ControlledGuestOutbox } from "../services/controlledGuestOutbox.js";
 import { handleBookFeatureInbound, verifyInboundSignature } from "../bookFeature/inboundLifecycle.js";
 import { runKeyword } from "../services/outreachService.js";
 import { runNextBatch, resetProgress } from "../services/batchService.js";
@@ -51,6 +52,7 @@ router.get("/book-feature/overview", asyncRoute(async (_req, res) => {
   const repository = await bookFeatureRepository(res);
   if (!repository) return;
   const overview = await repository.overview();
+  overview.guestArticleControlled = await new ControlledGuestOutbox(repository.d1).overview();
   res.set("Cache-Control", "no-store");
   res.json({ ok: true, service: "book_feature_outreach", ...overview });
 }));
@@ -89,7 +91,8 @@ router.post("/book-feature/dispatch/once", asyncRoute(async (req, res) => {
   if (!repository) return;
   const { getCommsHubContext } = await import("../../comms-hub/runtime.js");
   const context = getCommsHubContext();
-  const result = await new BookFeatureDispatchWorker({ repository, context }).runOnce();
+  let result = await new BookFeatureDispatchWorker({ repository, context }).runOnce();
+  if (!result.processed) result = await new ControlledGuestOutbox(context.d1).runOnce(context);
   res.set("Cache-Control", "no-store");
   res.json({ ok: true, ...result });
 }));
@@ -117,6 +120,11 @@ router.post("/book-feature/delivery/event", asyncRoute(async (req, res) => {
   }
   const repository = await bookFeatureRepository(res);
   if (!repository) return;
+  if (event.campaign === "guest_article") {
+    const result = await new ControlledGuestOutbox(repository.d1).reconcile({ outboxId: event.outboxId,
+      eventId: event.providerEventId, providerMessageId: event.providerMessageId, outcome: event.outcome });
+    return res.status(202).json({ ok: true, ...result });
+  }
   const result = await repository.reconcileOutbox({ outboxId: event.outboxId, outcome: event.outcome,
     providerEventId: event.providerEventId, providerMessageId: event.providerMessageId,
     evidence: { authenticatedRelay: true }, actor: "authenticated_provider_relay", authenticatedProvider: true });
