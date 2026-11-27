@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createRateLimitMiddleware } from "../services/shared/middleware/rateLimit.js";
 
 import { getRateLimitClientId } from "../services/shared/http/clientIdentity.js";
 import { parseTrustProxy } from "../services/shared/http/trustProxy.js";
@@ -38,4 +39,34 @@ test("authentication and rate limiting run before request body parsers", async (
   assert.ok(generalParser > auth, "general JSON parser must run after authentication gating");
   assert.match(source, /type: \(req\) => Boolean\(commsHubIntakePath\(req\)\) && isJsonRequest\(req\)/);
   assert.match(source, /type: \(req\) => !commsHubIntakePath\(req\) && isJsonRequest\(req\)/);
+});
+
+test("scoped outreach limiter rejects excess requests without consuming another limiter's quota", () => {
+  const webhook = createRateLimitMiddleware({ enabled: true, maxRequests: 1, windowMs: 60_000, scope: "test-outreach" });
+  const other = createRateLimitMiddleware({ enabled: true, maxRequests: 1, windowMs: 60_000, scope: "test-other" });
+  const req = { ip: "203.0.113.77", method: "POST", path: "/book-feature/inbound",
+    originalUrl: "/outreach/book-feature/inbound", headers: {} };
+  let accepted = 0;
+  let status;
+  let retryAfter;
+  const res = {
+    setHeader(name, value) { if (name === "Retry-After") retryAfter = value; },
+    status(value) { status = value; return this; },
+    json(value) { return value; },
+  };
+  const next = () => { accepted++; };
+  webhook(req, res, next);
+  webhook({ ...req, path: "/book-feature/delivery/event" }, res, next);
+  assert.equal(accepted, 1);
+  assert.equal(status, 429);
+  assert.ok(Number(retryAfter) > 0);
+  other(req, res, next);
+  assert.equal(accepted, 2);
+});
+
+test("both outreach webhook handlers mount the explicit scoped limiter", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../services/outreach/routes/index.js", import.meta.url), "utf8");
+  assert.ok(source.includes('router.post("/book-feature/inbound", outreachWebhookRateLimit,'));
+  assert.ok(source.includes('router.post("/book-feature/delivery/event", outreachWebhookRateLimit,'));
 });
