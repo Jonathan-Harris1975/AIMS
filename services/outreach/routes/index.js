@@ -1,5 +1,5 @@
 import express from "express";
-import { createRateLimitMiddleware } from "../../shared/middleware/rateLimit.js";
+import { rateLimit } from "express-rate-limit";
 import { startAsyncServiceRouteJob, getAsyncServiceRouteJobFresh } from "../../shared/utils/asyncServiceRouteJobs.js";
 import { assessThreeBooks } from "../bookFeature/assessment.js";
 import { scheduledLondonOccurrence } from "../bookFeature/core.js";
@@ -18,8 +18,8 @@ import {
 } from "../../shared/utils/requestSchemas.js";
 
 const router = express.Router();
-const outreachWebhookRateLimit = createRateLimitMiddleware({ enabled: true, windowMs: 60_000,
-  maxRequests: 60, scope: "outreach-webhook" });
+const outreachWebhookRateLimit = rateLimit({ windowMs: 60_000, limit: 60, legacyHeaders: false,
+  standardHeaders: "draft-8", passOnStoreError: false, message: { ok: false, error: "Rate limit exceeded" } });
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const operatorActor = (req) => String(req.get("x-comms-hub-actor") || "authenticated_suite_operator").slice(0, 200);
 const requireAdminMutation = (req, res) => {
