@@ -1091,10 +1091,11 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
 
   const finalPack = applyBritishEnglishPack(reinforceSourceGrounding(output, options.article));
   const creativeBrief = buildCreativeBrief({
-    topic: options.article?.title || finalPack.internalTitle, angle: finalPack.angle,
+    topic: options.article?.title || finalPack.internalTitle, angle: options.article?.angle || options.article?.summary || options.article?.description || finalPack.angle,
     audience: options.audience, lane: laneConfig.slug, coreMessage: finalPack.script,
     recentThemes: [...(Array.isArray(options.visualHistory) ? options.visualHistory : [])].reverse().map((item) => item?.theme || item),
   });
+  finalPack.theme = creativeBrief.theme;
   finalPack.storyboard = buildStoryboard({
     script: finalPack.script, hook: finalPack.hook, scenes: finalPack.scenes,
     durationSeconds: options.durationSeconds || 45, creativeBrief, article: options.article,
@@ -1506,7 +1507,7 @@ export async function buildOrCreateShortLane(options = {}) {
   const laneConfig = requireShortLaneConfig(options.lane || DEFAULT_BLOTATO_SHORT_LANE);
   const pack = await buildShortLanePack({ ...options, lane: laneConfig.slug });
   const visualPrompt = buildBlotatoVisualPrompt(pack);
-  const creativeBrief = buildCreativeBrief({
+  const creativeBrief = pack.creativeDirection || buildCreativeBrief({
     topic: options.article?.title || pack.internalTitle || pack.angle,
     angle: pack.angle,
     audience: options.audience || "intelligent adult AI audience",
