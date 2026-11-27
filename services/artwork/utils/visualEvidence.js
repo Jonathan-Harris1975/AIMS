@@ -126,3 +126,24 @@ export async function collectArtworkEvidence({ now = new Date(), days = 31 } = {
     return { status: "unavailable", reason: String(error?.message || error).slice(0, 200), ...summariseArtworkEvidence() };
   }
 }
+
+export async function checkArtworkDuplicate({ image, briefHash, now = new Date(), storage } = {}) {
+  if (!storage && !hasDurableStateEnv()) return { status: "not-configured", duplicate: false };
+  try {
+    const { putPrivateJson, getObjectAsText } = storage || await import("../../shared/utils/r2-client.js");
+    const assetHash = imageDigest(image);
+    const key = "visual-quality/asset-index/" + assetHash + ".json";
+    try {
+      await putPrivateJson("metaSystem", key, { version: 1, briefHash, createdAt: now.toISOString() }, { ifNoneMatch: "*" });
+      return { status: "claimed", duplicate: false };
+    } catch (error) {
+      const status = Number(error?.$metadata?.httpStatusCode || error?.statusCode || error?.status);
+      if (![409, 412].includes(status) && !["PreconditionFailed", "ConditionalRequestConflict"].includes(error?.name)) throw error;
+      const prior = JSON.parse(await getObjectAsText("metaSystem", key));
+      if (prior?.version !== 1 || typeof prior.briefHash !== "string") throw new Error("Invalid stored asset ownership evidence");
+      return { status: "existing", duplicate: prior.briefHash !== briefHash };
+    }
+  } catch (error) {
+    return { status: "unavailable", duplicate: false, reason: String(error?.message || error).slice(0, 200) };
+  }
+}
