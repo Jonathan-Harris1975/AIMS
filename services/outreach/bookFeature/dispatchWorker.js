@@ -76,7 +76,13 @@ export class BookFeatureDispatchWorker {
       handoffStarted = true;
       const sent = await this.context.emailService.send({ conversationId: conversation.conversationId,
         bodyText: archived.pitch.body, subject: archived.pitch.subject, recipients: [email],
-        idempotencyKey: context.idempotency_key, scheduledDelivery: true });
+        idempotencyKey: context.idempotency_key, scheduledDelivery: true, beforeProviderHandoff: async () => {
+          const latest = await this.repository.mode();
+          return latest.effective === "controlled_test" && !latest.killSwitch && latest.testRecipients.includes(email) &&
+            !(await this.shared.isSuppressed(email, context.official_domain)) &&
+            !(context.intended_email && await this.shared.isSuppressed(context.intended_email, context.official_domain)) &&
+            Date.parse(lease.lease_expires_at) > this.now().getTime();
+        } });
       const providerMessageId = sent?.providerMessageId || sent?.response?.messageId || sent?.messageId || null;
       const acceptedAt = this.now().toISOString();
       await this.repository.finishOutboxLease(lease, { status: "accepted", providerMessageId, acceptedAt });
