@@ -30,11 +30,12 @@ export class BookFeatureDispatchWorker {
         return { processed: true, status: "cancelled" };
       }
       if (!context || context.validation_result !== "valid" || context.eligibility_status !== "eligible" ||
-          Date.parse(context.validation_expires_at || "") <= this.now().getTime()) {
+          !(Date.parse(context.validation_expires_at || "") > this.now().getTime())) {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "contact_eligibility_expired" });
         return { processed: true, status: "cancelled" };
       }
-      if (await this.shared.isSuppressed(email, context.official_domain)) {
+      if ((await this.shared.isSuppressed(email, context.official_domain) ||
+          (context.intended_email && await this.shared.isSuppressed(context.intended_email, context.official_domain)))) {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "suppressed_before_handoff" });
         return { processed: true, status: "cancelled" };
       }
@@ -55,6 +56,11 @@ export class BookFeatureDispatchWorker {
           (finalConfig.effective === "controlled_test" && !finalConfig.testRecipients.includes(email)) ||
           await this.shared.isSuppressed(email, context.official_domain)) {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "final_handoff_gate_failed" });
+        return { processed: true, status: "cancelled" };
+      }
+      if (!(Date.parse(context.validation_expires_at || "") > this.now().getTime()) ||
+          !(Date.parse(lease.lease_expires_at || "") > this.now().getTime())) {
+        await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "handoff_expired" });
         return { processed: true, status: "cancelled" };
       }
       const sent = await this.context.emailService.send({ conversationId: conversation.conversationId,

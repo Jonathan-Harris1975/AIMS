@@ -31,8 +31,9 @@ export class BookFeatureRepository {
     const row = first(await this.d1.query(`SELECT mode,kill_switch,test_recipients_json,per_run_cap,daily_cap,
       approval_actor,approval_reason,approved_at,version,updated_at FROM book_feature_configuration WHERE singleton=1`));
     if (!row) throw new Error("Book Feature configuration migration has not been applied.");
-    return { persisted: row.mode, effective: effectiveMode(env.BOOK_FEATURE_OUTREACH_MODE, row.mode),
-      killSwitch: Boolean(row.kill_switch), testRecipients: JSON.parse(row.test_recipients_json || "[]"),
+    const globalStop = ["1", "true", "yes", "on"].includes(String(env.OUTREACH_GLOBAL_KILL_SWITCH || "").trim().toLowerCase());
+    return { persisted: row.mode, effective: globalStop ? "suspended" : effectiveMode(env.BOOK_FEATURE_OUTREACH_MODE, row.mode),
+      killSwitch: globalStop || Boolean(row.kill_switch), testRecipients: JSON.parse(row.test_recipients_json || "[]"),
       perRunCap: Number(row.per_run_cap), dailyCap: Number(row.daily_cap), approvalActor: row.approval_actor,
       approvalReason: row.approval_reason, approvedAt: row.approved_at, version: row.version, updatedAt: row.updated_at };
   }
@@ -127,6 +128,7 @@ export class BookFeatureRepository {
   async persistEligibleContacts(opportunityId, organisationId, contacts = []) {
     const at = this.now().toISOString();
     let persisted = 0;
+    const accepted = [];
     for (const contact of contacts) {
       const email = normalisedEmail(contact?.email);
       if (!emailPattern.test(email) || contact.eligibilityStatus !== "eligible" || contact.validationResult !== "valid" ||
@@ -161,12 +163,14 @@ export class BookFeatureRepository {
             validatedAt: contact.validatedAt, sourceUrl: contact.sourceUrl, assessmentKey: contact.assessmentKey }),at] },
       ]);
       persisted++;
+      accepted.push(contact);
+      break;
     }
-    return { persisted };
+    return { persisted, contacts: accepted };
   }
 
   async reserveTarget({ opportunityId, campaignType = "book_feature", email, domain, ttlMs = 7 * 24 * 60 * 60_000 }) {
-    const key = normalisedEmail(email) || String(domain || "").trim().toLowerCase();
+    const key = String(domain || "").trim().toLowerCase().replace(/^www\./, "") || normalisedEmail(email);
     if (!key || !["guest_article","book_feature"].includes(campaignType)) throw new Error("A valid reservation target is required.");
     const now = this.now();
     const at = now.toISOString();
@@ -249,31 +253,36 @@ export class BookFeatureRepository {
     const sends = first(await this.d1.query(`SELECT COUNT(*) AS total FROM book_feature_outbox
       WHERE created_at>=? AND status IN ('queued','leased','accepted','delivered','unknown')`, [dayStart.toISOString()]));
     if (Number(sends?.total || 0) >= config.dailyCap) throw Object.assign(new Error("Controlled-test daily cap reached."), { code: "BOOK_FEATURE_DAILY_CAP" });
-    const row = first(await this.d1.query(`SELECT o.id,o.contact_id,o.gate_json,c.email,c.validation_result,c.validation_expires_at,
+    const row = first(await this.d1.query(`SELECT o.id,o.contact_id,o.gate_json,c.email,c.validation_result,c.validation_expires_at,g.official_domain,
       c.eligibility_status,p.id AS pitch_id,p.subject,p.body_key,q.rubric_version
       FROM book_feature_opportunities o JOIN book_feature_contacts c ON c.id=o.contact_id
+      JOIN book_feature_organisations g ON g.id=o.organisation_id
       JOIN book_feature_pitch_versions p ON p.opportunity_id=o.id
       JOIN book_feature_qa_reviews q ON q.pitch_version_id=p.id AND q.passed=1
       WHERE o.id=? AND o.state='qa_passed' ORDER BY p.version DESC LIMIT 1`, [opportunityId]));
     if (!row || row.validation_result !== "valid" ||
-        row.eligibility_status !== "eligible" || Date.parse(row.validation_expires_at) <= now.getTime()) {
+        row.eligibility_status !== "eligible" || !(Date.parse(row.validation_expires_at) > now.getTime())) {
       throw Object.assign(new Error("Contact or QA eligibility changed before queueing."), { code: "BOOK_FEATURE_ELIGIBILITY_EXPIRED" });
     }
     const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression WHERE lower(email)=? OR
       (domain<>'' AND lower(domain)=?) LIMIT 1`, [email,email.split("@")[1]]));
     if (suppressed) throw Object.assign(new Error("Recipient is suppressed."), { code: "BOOK_FEATURE_SUPPRESSED" });
-    const reservation = await this.reserveTarget({ opportunityId, email });
+    const reservation = await this.reserveTarget({ opportunityId, email, domain: row.official_domain });
     if (!reservation.acquired) throw Object.assign(new Error("Target is reserved by another campaign."), { code: "OUTREACH_TARGET_RESERVED" });
     const outboxId = createHash("sha256").update(`book-feature-outbox\u001f${idempotencyKey}`).digest("hex");
     const result = await this.d1.batch([
       { sql: `INSERT OR IGNORE INTO book_feature_outbox
         (id,opportunity_id,contact_id,idempotency_key,status,not_before,expires_at,qa_version,created_at,updated_at,
          next_attempt_at,subject,body_key,campaign_type,delivery_recipient,run_key)
-        VALUES (?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?)`,
+        SELECT ?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?
+        WHERE EXISTS (SELECT 1 FROM book_feature_configuration WHERE singleton=1 AND version=? AND mode='controlled_test' AND kill_switch=0)
+        AND (SELECT COUNT(*) FROM book_feature_outbox WHERE run_key=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?
+        AND (SELECT COUNT(*) FROM book_feature_outbox WHERE created_at>=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?`,
         params: [outboxId,opportunityId,row.contact_id,idempotencyKey,notBefore.toISOString(),expiry.toISOString(),
-          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey] },
+          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey,
+          config.version,runKey,config.perRunCap,dayStart.toISOString(),config.dailyCap] },
       { sql: `UPDATE book_feature_opportunities SET state='queued',gate_json=json_set(gate_json,'$.authorisation',json('true'),
-          '$.duplicate',json('true')),reason='controlled_test_queued',updated_at=? WHERE id=? AND state='qa_passed'`, params: [at,opportunityId] },
+          '$.duplicate',json('true')),reason='controlled_test_queued',updated_at=? WHERE id=? AND state='qa_passed' AND changes()=1`, params: [at,opportunityId] },
       { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
         SELECT ?,'outbox',?,'controlled_test_queued',?,?,? WHERE changes()=1`,
         params: [this.leaseId(),outboxId,config.approvalActor || "operator",JSON.stringify({ recipient: email,
@@ -281,6 +290,7 @@ export class BookFeatureRepository {
     ]);
     if (changes(result[0]) !== 1) {
       const existing = first(await this.d1.query("SELECT * FROM book_feature_outbox WHERE idempotency_key=?", [idempotencyKey]));
+      if (!existing) throw Object.assign(new Error("Queue admission changed."), { code: "BOOK_FEATURE_QUEUE_ADMISSION" });
       return { duplicate: true, outbox: existing };
     }
     return { duplicate: false, outbox: first(await this.d1.query("SELECT * FROM book_feature_outbox WHERE id=?", [outboxId])) };
