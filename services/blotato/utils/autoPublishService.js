@@ -1594,7 +1594,8 @@ export function resumableReplacementHistory(job = {}) {
 }
 
 export function canReuseRenderedReview(qa) {
-  return Boolean(qa && qa.skipped !== true && qa.audioQa?.version === AUDIO_QA_VERSION && qa.audioQa?.available === true);
+  return Boolean(qa && qa.skipped !== true && qa.technical?.pass !== false && !qa.hardDefects?.length
+    && qa.audioQa?.version === AUDIO_QA_VERSION && qa.audioQa?.available === true && qa.audioQa?.pass === true);
 }
 
 export function isReplaceableRenderedQualityFailure(job = {}) {
