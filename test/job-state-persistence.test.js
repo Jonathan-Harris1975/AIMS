@@ -157,3 +157,12 @@ test('terminal rows with missing timestamps retire safely without poisoning futu
     assert.equal(second.retired.length,1);
   }
 });
+
+test('completed Blotato visual evidence survives monthly review window without extending failed jobs', () => {
+  const now = Date.parse('2026-11-27T12:00:00Z');
+  const record = job('video', { type: 'blotato-news-insight-publish', status: 'completed',
+    updatedAt: '2026-11-01T12:00:00Z', result: { renderedVideoQa: { pass: true } } });
+  const failed = { ...record, sessionId: 'failed', status: 'failed' };
+  const expired = { ...record, sessionId: 'expired', updatedAt: '2026-10-01T12:00:00Z' };
+  assert.deepEqual(mergeJobSnapshots({ jobs: [record, failed, expired] }, { jobs: [] }, { now }).jobs, [record]);
+});
