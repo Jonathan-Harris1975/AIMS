@@ -395,28 +395,38 @@ export class BookFeatureRepository {
     return { duplicate: changes(result) !== 1, id };
   }
 
-  async reconcileOutbox({ outboxId, outcome, providerEventId, providerMessageId = null, actor, evidence = {} }) {
-    if (!["delivered","bounced","failed","unknown"].includes(outcome) || !actor || !providerEventId) {
-      throw new Error("A supported reconciliation outcome, actor and provider event are required.");
+  async reconcileOutbox({ outboxId, outcome, providerEventId, providerMessageId = null, actor, evidence = {}, authenticatedProvider = false }) {
+    if (!["delivered","bounced","failed","unknown"].includes(outcome) || !actor || !providerEventId ||
+        (outcome !== "unknown" && (!authenticatedProvider || !providerMessageId))) {
+      throw new Error("Authenticated provider evidence is required for a definitive delivery outcome.");
     }
     const status = outcome === "failed" ? "quarantined" : outcome;
     const at = this.now().toISOString();
-    const current = first(await this.d1.query("SELECT status FROM book_feature_outbox WHERE id=?", [outboxId]));
-    if (!current || !["accepted","unknown",status].includes(current.status)) throw new Error("Outbox item is not awaiting reconciliation.");
-    const event = await this.recordDeliveryEvent({ outboxId, providerEventId, eventType: outcome === "failed" ? "failed" : outcome,
-      providerMessageId, occurredAt: at, evidence });
-    if (!event.duplicate) await this.d1.batch([
+    const current = first(await this.d1.query("SELECT status,provider_message_id FROM book_feature_outbox WHERE id=?", [outboxId]));
+    if (!current || !["accepted","unknown",status].includes(current.status) ||
+        (current.provider_message_id && providerMessageId && current.provider_message_id !== providerMessageId)) {
+      throw new Error("Outbox item is not awaiting matching delivery reconciliation.");
+    }
+    const id = createHash("sha256").update(`delivery-event\u001f${providerEventId}`).digest("hex");
+    const pending = "NOT EXISTS (SELECT 1 FROM outreach_delivery_events WHERE provider_event_id=?)";
+    const result = await this.d1.batch([
       { sql: `UPDATE book_feature_outbox SET status=?,provider_message_id=COALESCE(?,provider_message_id),
-          delivered_at=CASE WHEN ?='delivered' THEN ? ELSE delivered_at END,updated_at=? WHERE id=?`,
-        params: [status,providerMessageId,status,at,at,outboxId] },
+          delivered_at=CASE WHEN ?='delivered' THEN ? ELSE delivered_at END,updated_at=?
+          WHERE id=? AND status IN ('accepted','unknown') AND ${pending}`,
+        params: [status,providerMessageId,status,at,at,outboxId,providerEventId] },
       { sql: `UPDATE book_feature_opportunities SET state=CASE WHEN ?='delivered' THEN 'awaiting_reply'
-          WHEN ?='bounced' THEN 'blocked' ELSE state END,reason=?,updated_at=? WHERE id=(SELECT opportunity_id FROM book_feature_outbox WHERE id=?)`,
+          WHEN ?='bounced' THEN 'blocked' ELSE state END,reason=?,updated_at=?
+          WHERE id=(SELECT opportunity_id FROM book_feature_outbox WHERE id=?) AND state NOT IN ('suppressed','declined','outcome_verified') AND changes()=1`,
         params: [status,status,`delivery_${status}`,at,outboxId] },
       { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
-          VALUES (?,'outbox',?,'delivery_reconciled',?,?,?)`, params: [this.leaseId(),outboxId,actor,
-          JSON.stringify({ outcome: status, providerEventId, providerMessageId }),at] },
+          SELECT ?,'outbox',?,'delivery_reconciled',?,?,? WHERE ${pending}`,
+        params: [this.leaseId(),outboxId,actor,JSON.stringify({ outcome: status, providerEventId, providerMessageId }),at,providerEventId] },
+      { sql: `INSERT OR IGNORE INTO outreach_delivery_events
+          (id,outbox_id,provider_event_id,event_type,provider_message_id,occurred_at,evidence_json,created_at)
+          SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM book_feature_outbox WHERE id=? AND status=?)`,
+        params: [id,outboxId,providerEventId,outcome,providerMessageId,at,JSON.stringify(evidence),at,outboxId,status] },
     ]);
-    return { duplicate: event.duplicate, status };
+    return { duplicate: changes(result[3]) !== 1, status };
   }
 
   async processInboundEvent({ providerEventId, providerMessageId = null, opportunityId = null, contactId = null,
