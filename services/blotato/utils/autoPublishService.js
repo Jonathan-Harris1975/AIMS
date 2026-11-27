@@ -1621,6 +1621,7 @@ export function isRetryableRenderedPublishFailure(job = {}) {
   if (!["rendered-quality-review", "rendered-quality-failed", "pre-publish", "publishing", "publish-failed"].includes(phase)) return false;
   if (!job.videoId && !job.mediaUrl && !job.result?.visualId && !job.result?.mediaUrl) return false;
   const qa = job.renderedVideoQa || job.result?.renderedVideoQa || {};
+  if (!prePublicationQaPhase && (qa.technical?.pass === false || qa.hardDefects?.length || qa.skipped === true)) return false;
   if (!prePublicationQaPhase
     && !(qa.pass === true || qa.acceptedAfterSoftFailure === true || (qa.acceptedForScheduling === true && qa.skipped !== true))) return false;
   if (prePublicationQaPhase && jobHasPublicationEvidence(job)) return false;
