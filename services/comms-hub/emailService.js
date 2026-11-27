@@ -194,12 +194,10 @@ export class CommsHubEmailService {
           eventId: parsed.messageId, sender, text: parsed.text });
       } else if (outreachWorkflow === 'outreach_book_feature') {
         const { BookFeatureRepository } = await import('../outreach/bookFeature/repository.js');
-        const { classifyBookFeatureInbound } = await import('../outreach/bookFeature/inboundLifecycle.js');
+        const { handleBookFeatureMailboxInbound } = await import('../outreach/bookFeature/inboundLifecycle.js');
         const repository = new BookFeatureRepository(this.context.d1);
-        const matched = await repository.findOpportunityByProviderMessage(parsed.inReplyTo);
-        if (matched) await repository.processInboundEvent({ providerEventId: parsed.messageId,
-          providerMessageId: parsed.inReplyTo, opportunityId: matched.opportunity_id, contactId: matched.contact_id,
-          authenticated: true, category: classifyBookFeatureInbound(parsed.text), occurredAt: now });
+        await handleBookFeatureMailboxInbound({ providerMessageId: parsed.inReplyTo, eventId: parsed.messageId,
+          sender, text: parsed.text, occurredAt: now }, { repository });
       } else if (!persistence.duplicate) {
         await this.context.outreachAutomationService?.scheduleReplyProcessing(conversationId, messageId);
       }
