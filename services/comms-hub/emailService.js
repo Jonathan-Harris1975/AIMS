@@ -130,12 +130,13 @@ export class CommsHubEmailService {
     const conversationId = existing?.conversation_id || stableId('cnv', 'email', account.key, threadKey);
     const messageId = stableId('msg', 'email', parsed.messageId);
     const now = new Date().toISOString();
-    const outreachReply = existingConversation?.workflow === 'outreach_guest_article';
+    const outreachWorkflow = String(existingConversation?.workflow || '');
+    const outreachReply = outreachWorkflow.startsWith('outreach_');
     const attachmentRows = parsed.attachments.map((item, index) => ({ id: stableId('att', messageId, index, item.filename, item.sha256), filename: item.filename, contentType:
        item.contentType, status: 'pending', metadata: { size: item.size } }));
     const persistence = await this.context.operationsRepository.persistChannelMessage({
       contact: { id: contactId, primaryEmail: sender, displayName: parsed.from?.name || sender, phone: '' },
-      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', status: 'open', contactId,
+      conversation: { id: conversationId, channel: 'email', provider: 'one.com', workflow: outreachReply ? outreachWorkflow : 'email_inbox', status: 'open', contactId,
          subject: parsed.subject, sourceReference: parsed.messageId, metadata: outreachReply ? { ...(existingConversation?.metadata || {}), accountKey: account.key, mailbox,
             threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, outreachReply: true } : {
                accountKey: account.key, mailbox, threadKey, managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true } },
@@ -186,8 +187,22 @@ export class CommsHubEmailService {
       updatedAt: now,
     });
     const attachmentReviewRequired = attachmentResults.some((item) => item.status !== 'stored');
-    if (outreachReply && !persistence.duplicate) {
-      await this.context.outreachAutomationService?.scheduleReplyProcessing(conversationId, messageId);
+    if (outreachReply) {
+      if (outreachWorkflow === 'outreach_guest_article_test') {
+        const { ControlledGuestOutbox } = await import('../outreach/services/controlledGuestOutbox.js');
+        await new ControlledGuestOutbox(this.context.d1).inbound({ providerMessageId: parsed.inReplyTo,
+          eventId: parsed.messageId, sender, text: parsed.text });
+      } else if (outreachWorkflow === 'outreach_book_feature') {
+        const { BookFeatureRepository } = await import('../outreach/bookFeature/repository.js');
+        const { classifyBookFeatureInbound } = await import('../outreach/bookFeature/inboundLifecycle.js');
+        const repository = new BookFeatureRepository(this.context.d1);
+        const matched = await repository.findOpportunityByProviderMessage(parsed.inReplyTo);
+        if (matched) await repository.processInboundEvent({ providerEventId: parsed.messageId,
+          providerMessageId: parsed.inReplyTo, opportunityId: matched.opportunity_id, contactId: matched.contact_id,
+          authenticated: true, category: classifyBookFeatureInbound(parsed.text), occurredAt: now });
+      } else if (!persistence.duplicate) {
+        await this.context.outreachAutomationService?.scheduleReplyProcessing(conversationId, messageId);
+      }
     } else {
       if (evaluateWorkflow) {
         await this.context.workflowEngineService.evaluate({ conversationId, event: { type: 'message_received', channel: 'email', sender, text: parsed.text, occurredAt: now } });
@@ -215,16 +230,19 @@ export class CommsHubEmailService {
         }
       }
     }
-    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: outreachReply ? 'outreach_guest_article' : 'email_inbox', accountKey: account.key,
+    return { duplicate: persistence.duplicate, conversationId, messageId, workflow: outreachReply ? outreachWorkflow : 'email_inbox', accountKey: account.key,
        managedAddress: effectiveManagedAddress, mailboxRole: effectiveMailboxRole, manualOnly: account.manualOnly === true, attachments: attachmentResults };
   }
 
   async send({ conversationId, bodyText, bodyHtml = null, subject = '', recipients = [], cc = [], attachments = [], attachmentIds = [], idempotencyKey, scheduledDelivery =
-     false, manualReply = false }) {
+     false, manualReply = false, beforeProviderHandoff = null }) {
     if (!this.context.config.emailEnabled) throw new CommsHubError(409, 'email_channel_disabled', 'Email channel is disabled.');
     if (!idempotencyKey) throw new CommsHubError(400, 'idempotency_key_required', 'Idempotency-Key is required.');
     const conversation = await this.context.repository.getConversation(conversationId);
     if (!conversation || conversation.channel !== 'email') throw new CommsHubError(404, 'email_conversation_not_found', 'Email conversation was not found.');
+    if (String(conversation.workflow || '').startsWith('outreach_') && typeof beforeProviderHandoff !== 'function') {
+      throw new CommsHubError(409, 'outreach_handoff_required', 'Outreach delivery requires authorised controlled dispatch.');
+    }
     validateReplyBody(this.context, bodyText, bodyHtml);
     const workspace = await this.context.operationsRepository.getConversationWorkspace(conversationId);
     assertConversationReplyAllowed({ conversation, operations: workspace.operations });
@@ -272,6 +290,9 @@ export class CommsHubEmailService {
     }
     try {
       const references = JSON.parse(thread?.references_json || '[]');
+      if (beforeProviderHandoff && !await beforeProviderHandoff()) {
+        throw new CommsHubError(409, 'outreach_handoff_denied', 'Controlled dispatch admission was denied.', { failureClass: 'permanent' });
+      }
       const sent = await mailClient.sendMessage({ to, cc: safeCc, subject: request.subject, bodyText, bodyHtml, inReplyTo: thread?.internet_message_id || '', references,
          attachments: allAttachments });
       const at = new Date().toISOString();
