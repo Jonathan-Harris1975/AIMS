@@ -115,3 +115,18 @@ test("creative brief and video theme registry agree on content and recent histor
   assert.equal(selectBlotatoTheme({ topic, recentThemes }).theme, expected.key);
   assert.equal(buildCreativeBrief({ topic, recentThemes }).version, expected.version);
 });
+
+test("image QA rejects malformed or inflated dimension evidence", () => {
+  const good = { relevance: 100, visualQuality: 100, composition: 100, brand: 100, originality: 100, platform: 100, technical: 100 };
+  for (const relevance of [101, -1, NaN, Infinity, "100"]) {
+    assert.equal(imageQualityScore({ ...good, relevance }).pass, false);
+  }
+  assert.equal(imageQualityScore({ ...good, criticalDefects: null }).pass, false);
+});
+
+test("visual request preserves factual constraints with a separate directive", async () => {
+  const { buildVisualCreationRequest } = await import("../services/blotato/utils/visualRequest.js");
+  const request = buildVisualCreationRequest({ candidateTemplateId: "template", visualPrompt: "Story", manualInputsConfigured: false, creativeBrief: { theme: "modern", factualConstraints: "Source only", subjectPlacement: "Centre" } });
+  assert.ok(request.prompt.startsWith("Story\n\nCREATIVE BRIEF:"));
+  assert.match(request.prompt, /factual-constraints=Source only/);
+});
