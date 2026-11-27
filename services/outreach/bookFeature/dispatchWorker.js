@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { getObjectAsText } from "../../shared/utils/r2-client.js";
 import { OutreachRepository } from "../services/outreachRepository.js";
+import { checkCurrentContactAssessment } from "./contactEligibility.js";
 
 function backoff(attempt, now) {
   const minutes = Math.min(60, Math.max(1, 2 ** Math.max(0, attempt - 1)));
@@ -9,11 +10,12 @@ function backoff(attempt, now) {
 }
 
 export class BookFeatureDispatchWorker {
-  constructor({ repository, context, readPrivate = getObjectAsText, now = () => new Date() }) {
+  constructor({ repository, context, readPrivate = getObjectAsText, now = () => new Date(), checkAssessment = checkCurrentContactAssessment }) {
     this.repository = repository;
     this.context = context;
     this.readPrivate = readPrivate;
     this.now = now;
+    this.checkAssessment = checkAssessment;
     this.shared = new OutreachRepository(context.d1);
   }
 
@@ -48,7 +50,7 @@ export class BookFeatureDispatchWorker {
           code: "PITCH_ARCHIVE_INVALID", failureClass: "permanent",
         });
       }
-      const conversation = await this.shared.createOutboundConversation({ email, displayName: context.display_name || email,
+      const conversation = await this.shared.createOutboundConversation({ email, displayName: email,
         domain: context.official_domain, keyword: "book feature", subject: context.subject,
         sourceUrl: `https://${context.official_domain}`, sourceTitle: context.canonical_name,
         workflow: "outreach_book_feature", campaignType: "book_feature", opportunityId: context.opportunity_id });
@@ -67,6 +69,11 @@ export class BookFeatureDispatchWorker {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "handoff_expired" });
         return { processed: true, status: "cancelled" };
       }
+      if (!await this.checkAssessment({ domain: context.official_domain, email: context.intended_email,
+        recipientType: context.recipient_type, campaign: "book_feature", assessmentKey: context.assessment_key, now: this.now() })) {
+        await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "current_assessment_invalid" });
+        return { processed: true, status: "cancelled" };
+      }
       const contentHash = createHash("sha256").update(`${archived.pitch.subject}\n${archived.pitch.body}`).digest("hex");
       if (!await this.repository.admitHandoff(lease, contentHash)) {
         await this.repository.finishOutboxLease(lease, { status: "cancelled", failureClass: "policy", errorCode: "atomic_admission_denied" });
@@ -81,9 +88,15 @@ export class BookFeatureDispatchWorker {
           return latest.effective === "controlled_test" && !latest.killSwitch && latest.testRecipients.includes(email) &&
             !(await this.shared.isSuppressed(email, context.official_domain)) &&
             !(context.intended_email && await this.shared.isSuppressed(context.intended_email, context.official_domain)) &&
-            Date.parse(lease.lease_expires_at) > this.now().getTime();
+            Date.parse(lease.lease_expires_at) > this.now().getTime() &&
+            await this.checkAssessment({ domain: context.official_domain, email: context.intended_email,
+              recipientType: context.recipient_type, campaign: "book_feature", assessmentKey: context.assessment_key, now: this.now() });
         } });
       const providerMessageId = sent?.providerMessageId || sent?.response?.messageId || sent?.messageId || null;
+      if (!providerMessageId) {
+        await this.repository.finishOutboxLease(lease, { status: "unknown", failureClass: "uncertain", errorCode: "provider_receipt_missing" });
+        return { processed: true, status: "unknown", reconciliationRequired: true };
+      }
       const acceptedAt = this.now().toISOString();
       await this.repository.finishOutboxLease(lease, { status: "accepted", providerMessageId, acceptedAt });
       handoffRecorded = true;
