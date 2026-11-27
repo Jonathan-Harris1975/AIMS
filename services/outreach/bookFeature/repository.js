@@ -193,7 +193,7 @@ export class BookFeatureRepository {
     const id = createHash("sha256").update(`outreach-reservation\u001f${key}`).digest("hex");
     await this.d1.batch([
       { sql: `UPDATE outreach_target_reservations SET campaign_type=?,opportunity_id=?,status='active',reserved_at=?,expires_at=?,
-          released_at=NULL,reason=NULL WHERE target_key=? AND (status IN ('released','expired') OR expires_at<=?)`,
+          released_at=NULL,reason=NULL WHERE target_key=? AND (status IN ('released','expired') OR (status='active' AND expires_at<=?))`,
         params: [campaignType,opportunityId,at,expiresAt,key,at] },
       { sql: `INSERT OR IGNORE INTO outreach_target_reservations
           (id,target_key,campaign_type,opportunity_id,status,reserved_at,expires_at) VALUES (?,?,?,?, 'active',?,?)`,
