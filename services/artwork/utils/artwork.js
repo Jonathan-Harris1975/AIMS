@@ -697,3 +697,39 @@ export async function generateSocialArtwork(prompt, options = {}) {
 export async function generateQuizArtwork(prompt, options = {}) {
   return generateArtworkBase64(prompt, { ...options, mode: "quiz" });
 }
+
+/** Explicit, bounded benchmark. Never invoked by scheduled production or publication. */
+export async function benchmarkArtworkModels({ briefs, confirmPaid = false, signal } = {}) {
+  if (confirmPaid !== true) throw new Error("Explicit paid benchmark confirmation is required");
+  if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 3) throw new Error("Provide one to three representative creative briefs");
+  const approved = [...new Map(imageProviderPlan().providers.map((provider) => [provider.model, provider])).values()].slice(0, 2);
+  if (approved.length < 2) throw new Error("Benchmark requires two distinct approved centrally routed image models");
+  const results = [];
+  for (const brief of briefs) {
+    const prompt = String(brief?.prompt || "").trim();
+    const mode = String(brief?.mode || "social").trim();
+    if (!prompt || prompt.length > 2500 || !["social", "socialBlog", "newsletter", "blog", "podcast", "quiz"].includes(mode)) {
+      throw new Error("Invalid benchmark brief");
+    }
+  }
+  for (const brief of briefs) {
+    for (const provider of approved) {
+      if (signal?.aborted) throw signal.reason || new Error("Benchmark cancelled");
+      const mode = brief.mode || "social";
+      const evidence = createVisualEvidenceTracker({ mode, prompt: brief.prompt, benchmark: true });
+      let image;
+      try {
+        image = await requestArtworkFromProvider(provider, brief.prompt, mode, brief.date, {
+          signal, evidence, forceQa: true, maxQaRegenerations: 0, providerAttempts: 1, variation: "controlled-benchmark",
+          generationKey: "benchmark:" + evidence.record.briefHash,
+        });
+      } catch (error) {
+        evidence.record.failure = String(error?.message || error).slice(0, 200);
+      }
+      const record = evidence.finish(image);
+      const persistence = await persistVisualEvidence(record);
+      results.push({ ...record, persistence: persistence.status });
+    }
+  }
+  return { models: approved.map((provider) => provider.model), maxImageRequests: briefs.length * approved.length, results };
+}
