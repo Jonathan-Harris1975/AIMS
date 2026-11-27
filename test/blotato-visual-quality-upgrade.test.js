@@ -141,3 +141,23 @@ test("historical acceptance cannot replay a render with hard QA defects", async 
     assert.equal(isRetryableRenderedPublishFailure({ ...job, renderedVideoQa: { acceptedForScheduling: true, ...qa } }), false);
   }
 });
+
+test("storyboard retains supplied source and weights planned duration by narration", () => {
+  const storyboard = buildStoryboard({
+    article: { url: "https://example.com/source" }, durationSeconds: 40,
+    scenes: [{ script: "One", onScreenText: "Title" }, { script: "Two three four" }],
+  });
+  assert.deepEqual(storyboard[0].factualSources, ["https://example.com/source"]);
+  assert.equal(storyboard[0].onScreenText, "Title");
+  assert.equal(storyboard[0].endSeconds, 10);
+  assert.equal(storyboard[1].endSeconds, 40);
+});
+
+test("audio signal QA rejects inaudibility, excessive silence and missing evidence", async () => {
+  const { evaluateAudioSignal } = await import("../services/blotato/utils/renderedVideoQa.js");
+  const audible = "mean_volume: -20.0 dB\nmax_volume: -3.0 dB";
+  assert.equal(evaluateAudioSignal(audible, 40).pass, true);
+  assert.equal(evaluateAudioSignal(audible + "\nsilence_duration: 30", 40).pass, false);
+  assert.equal(evaluateAudioSignal("mean_volume: -91.0 dB\nmax_volume: -91.0 dB", 40).pass, false);
+  assert.equal(evaluateAudioSignal("", 40).pass, false);
+});
