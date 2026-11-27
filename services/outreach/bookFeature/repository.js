@@ -52,9 +52,10 @@ export class BookFeatureRepository {
       { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
               SELECT ?,'configuration','1','mode_transition',?,?,? WHERE changes()=1`,
         params: [id, actor, JSON.stringify({ next, expectedVersion, reason: String(reason).slice(0, 500) }), at] },
-      { sql: `UPDATE book_feature_outbox SET status='cancelled',failure_class='policy',
+      { sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+              failure_class=CASE WHEN status='leased' THEN 'uncertain' ELSE 'policy' END,
               last_error_code='kill_switch_enabled',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
-              WHERE status IN ('queued','leased')`, params: [at] },
+              WHERE status IN ('queued','leased') AND changes()=1`, params: [at] },
     ]);
     if (changes(result[0]) !== 1) throw new Error("Configuration version changed; mode transition rejected.");
     return this.mode();
@@ -131,13 +132,13 @@ export class BookFeatureRepository {
     const accepted = [];
     for (const contact of contacts) {
       const email = normalisedEmail(contact?.email);
-      if (!emailPattern.test(email) || contact.eligibilityStatus !== "eligible" || contact.validationResult !== "valid" ||
+      if (!validEmail(email) || contact.eligibilityStatus !== "eligible" || contact.validationResult !== "valid" ||
           !contact.sourceUrl || !contact.assessmentKey) continue;
       const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression
         WHERE lower(email)=? OR (domain<>'' AND lower(domain)=?) LIMIT 1`, [email, email.split("@")[1]]));
       if (suppressed) continue;
       const contactId = createHash("sha256").update(`book-feature-contact\u001f${email}`).digest("hex");
-      await this.d1.batch([
+      const stored = await this.d1.batch([
         { sql: `INSERT INTO book_feature_contacts
           (id,organisation_id,email,normalised_email,display_name,role,recipient_type,source_url,source_title,
            validation_provider,validation_result,validated_at,validation_expires_at,jurisdiction,lawful_basis,assessment_key,
@@ -158,10 +159,11 @@ export class BookFeatureRepository {
           reason='draft_and_qa_pending',updated_at=? WHERE id=? AND organisation_id=? AND state='validated'`,
           params: [contactId,at,opportunityId,organisationId] },
         { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
-          VALUES (?,'contact',?,'contact_eligible','book-feature-assessment',?,?)`,
+          SELECT ?,'contact',?,'contact_eligible','book-feature-assessment',?,? WHERE changes()=1`,
           params: [this.leaseId(),contactId,JSON.stringify({ opportunityId, validationProvider: contact.validationProvider,
             validatedAt: contact.validatedAt, sourceUrl: contact.sourceUrl, assessmentKey: contact.assessmentKey }),at] },
       ]);
+      if (changes(stored[1]) !== 1) continue;
       persisted++;
       accepted.push(contact);
       break;
@@ -265,7 +267,8 @@ export class BookFeatureRepository {
       throw Object.assign(new Error("Contact or QA eligibility changed before queueing."), { code: "BOOK_FEATURE_ELIGIBILITY_EXPIRED" });
     }
     const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression WHERE lower(email)=? OR
-      (domain<>'' AND lower(domain)=?) LIMIT 1`, [email,email.split("@")[1]]));
+      (domain<>'' AND lower(domain)=?) OR lower(email)=? OR
+      (domain<>'' AND lower(domain)=?) LIMIT 1`, [email,email.split("@")[1],normalisedEmail(row.email),row.official_domain]));
     if (suppressed) throw Object.assign(new Error("Recipient is suppressed."), { code: "BOOK_FEATURE_SUPPRESSED" });
     const reservation = await this.reserveTarget({ opportunityId, email, domain: row.official_domain });
     if (!reservation.acquired) throw Object.assign(new Error("Target is reserved by another campaign."), { code: "OUTREACH_TARGET_RESERVED" });
@@ -297,17 +300,24 @@ export class BookFeatureRepository {
   }
 
   async claimOutbox({ owner = this.leaseId(), leaseMs = 2 * 60_000 } = {}) {
-    const config = await this.mode();
-    if (!(["controlled_test","pilot"].includes(config.effective)) || config.killSwitch) return null;
     const now = this.now();
     const at = now.toISOString();
+    // A crashed worker may have handed off its message before losing its lease.
+    // Never make such a message sendable again without delivery reconciliation.
+    await this.d1.query(`UPDATE book_feature_outbox SET status='unknown',failure_class='uncertain',
+      last_error_code='dispatch_lease_expired',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+      WHERE status='leased' AND (lease_expires_at IS NULL OR lease_expires_at<=?)`, [at,at]);
+    const config = await this.mode();
+    if (!(["controlled_test","pilot"].includes(config.effective)) || config.killSwitch) return null;
     const expires = new Date(now.getTime() + leaseMs).toISOString();
     const candidate = first(await this.d1.query(`SELECT id FROM book_feature_outbox WHERE status='queued'
       AND not_before<=? AND expires_at>? AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       AND attempt_count<max_attempts ORDER BY created_at LIMIT 1`, [at,at,at]));
     if (!candidate) return null;
     const claimed = await this.d1.query(`UPDATE book_feature_outbox SET status='leased',lease_owner=?,lease_expires_at=?,
-      attempt_count=attempt_count+1,updated_at=? WHERE id=? AND status='queued' RETURNING *`, [owner,expires,at,candidate.id]);
+      attempt_count=attempt_count+1,updated_at=? WHERE id=? AND status='queued' AND not_before<=? AND expires_at>?
+      AND (next_attempt_at IS NULL OR next_attempt_at<=?) AND attempt_count<max_attempts RETURNING *`,
+      [owner,expires,at,candidate.id,at,at,at]);
     return first(claimed);
   }
 
@@ -334,7 +344,8 @@ export class BookFeatureRepository {
 
   async cancelPendingForKillSwitch(actor = "environment_or_operator") {
     const at = this.now().toISOString();
-    const result = await this.d1.query(`UPDATE book_feature_outbox SET status='cancelled',failure_class='policy',
+    const result = await this.d1.query(`UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+      failure_class=CASE WHEN status='leased' THEN 'uncertain' ELSE 'policy' END,
       last_error_code='kill_switch',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
       WHERE status IN ('queued','leased')`, [at]);
     await this.d1.query(`INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
