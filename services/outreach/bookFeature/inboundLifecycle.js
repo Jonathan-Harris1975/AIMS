@@ -44,7 +44,7 @@ export async function handleBookFeatureInbound({ rawBody, signature, timestamp, 
   }
   const event = JSON.parse(rawBody);
   if (event.providerEventId !== providerEventId || event.text !== text ||
-      (event.providerMessageId && event.providerMessageId !== providerMessageId)) {
+      (event.providerMessageId || null) !== providerMessageId || (event.occurredAt || null) !== occurredAt) {
     throw Object.assign(new Error("Signed inbound payload does not match supplied event."), { code: "BOOK_FEATURE_INBOUND_AUTH_FAILED" });
   }
   const match = providerMessageId ? await repository.findOpportunityByProviderMessage(providerMessageId) : null;
@@ -54,6 +54,19 @@ export async function handleBookFeatureInbound({ rawBody, signature, timestamp, 
   await persist("kdp", bodyEvidenceKey, { providerEventId, providerMessageId, text, occurredAt, receivedAt: now().toISOString() });
   return repository.processInboundEvent({ providerEventId, providerMessageId, opportunityId: match?.opportunity_id || null,
     contactId: match?.contact_id || null, category, authenticated: true, bodyEvidenceKey, occurredAt });
+}
+
+export async function handleBookFeatureMailboxInbound({ providerMessageId, eventId, sender, text, occurredAt }, { repository } = {}) {
+  const match = providerMessageId ? await repository.findOpportunityByProviderMessage(providerMessageId) : null;
+  if (!match || !eventId || !match.delivery_recipient ||
+      String(sender || "").trim().toLowerCase() !== match.delivery_recipient.toLowerCase()) return { matched: false };
+  const category = classifyBookFeatureInbound(text);
+  if (category !== "malformed" && category !== "bounce" && ["accepted","unknown"].includes(match.status)) {
+    await repository.reconcileOutbox({ outboxId: match.id, outcome: "delivered", providerEventId: `mailbox-reply:${eventId}`,
+      providerMessageId, actor: "authenticated_mailbox", authenticatedProvider: true, evidence: { matchingReply: true } });
+  }
+  return repository.processInboundEvent({ providerEventId: eventId, providerMessageId,
+    opportunityId: match.opportunity_id, contactId: match.contact_id, category, authenticated: true, occurredAt });
 }
 
 export const bookFeatureInboundPolicy = Object.freeze({ maximumEventAgeMs: MAX_EVENT_AGE_MS });
