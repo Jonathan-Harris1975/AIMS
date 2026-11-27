@@ -131,16 +131,16 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_HUMAN_VISUAL_MIN_SCENES` | Yes | services/blotato/utils/newsShortsService.js:57 |
 | `BLOTATO_IMAGE_PROMPT_PROFILE` | Yes | services/blotato/utils/newsShortsService.js:34 |
 | `BLOTATO_IMAGE_TO_VIDEO_MODEL` | Yes | services/blotato/utils/autoPublishService.js:489 |
-| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2811 |
+| `BLOTATO_INLINE_PUBLISH_JOBS` | No | services/blotato/utils/autoPublishService.js:2812 |
 | `BLOTATO_INSTAGRAM_SHARE_TO_FEED` | Yes | services/blotato/utils/autoPublishService.js:1015 |
-| `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1782 |
+| `BLOTATO_KEEPALIVE_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1783 |
 | `BLOTATO_LOW_COST_IMAGE_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:488<br>services/blotato/utils/newsShortsService.js:32 |
 | `BLOTATO_LOW_COST_VIDEO_MODEL_LABEL` | Yes | services/blotato/utils/autoPublishService.js:489<br>services/blotato/utils/newsShortsService.js:33 |
 | `BLOTATO_MAX_EXPECTED_CREDITS` | Yes | scripts/contentDeliveryDiagnostics.js:34 |
 | `BLOTATO_MONTHLY_ESTIMATED_CREDIT_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:236<br>scripts/contentDeliveryDiagnostics.js:239 |
-| `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1827 |
-| `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1832 |
-| `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1825 |
+| `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1828 |
+| `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1833 |
+| `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1826 |
 | `BLOTATO_NEWS_JSON_RESPONSE_FORMAT` | Yes | services/blotato/utils/newsShortsService.js:1331 |
 | `BLOTATO_NEWS_MAX_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:15 |
 | `BLOTATO_NEWS_MIN_SCENE_WORDS` | Yes | services/blotato/utils/newsShortsService.js:16 |
@@ -151,7 +151,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_NEWS_TARGET_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:14 |
 | `BLOTATO_NEWS_TEMPLATE_ID` | Yes | services/blotato/utils/autoPublishService.js:1437<br>services/blotato/utils/autoPublishService.js:1438 |
 | `BLOTATO_NEWS_TEMPLATE_SEARCH` | Yes | services/blotato/utils/autoPublishService.js:365<br>services/blotato/utils/autoPublishService.js:1442 |
-| `BLOTATO_NEWS_THEME` | No | services/blotato/utils/autoPublishService.js:1823 |
+| `BLOTATO_NEWS_THEME` | No | services/blotato/utils/autoPublishService.js:1824 |
 | `BLOTATO_PREFLIGHT_REQUIRE_LISTED_ACCOUNTS` | Yes | services/blotato/utils/autoPublishService.js:863 |
 | `BLOTATO_PREFLIGHT_REQUIRE_LISTED_SUBACCOUNTS` | Yes | services/blotato/utils/autoPublishService.js:911<br>services/blotato/utils/autoPublishService.js:939 |
 | `BLOTATO_PUBLISH_SEQUENTIAL` | Yes | services/blotato/utils/autoPublishService.js:1384 |
@@ -164,7 +164,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_RENDERED_QA_JSON_ATTEMPTS` | Yes | services/blotato/utils/renderedVideoQa.js:400 |
 | `BLOTATO_RENDERED_QA_MAX_BYTES` | Yes | services/blotato/utils/renderedVideoQa.js:16 |
 | `BLOTATO_RENDERED_QA_THRESHOLD` | Yes | services/blotato/utils/renderedVideoQa.js:14 |
-| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2360 |
+| `BLOTATO_REQUIRE_ALL_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:2361 |
 | `BLOTATO_REQUIRE_SCHEDULE_CONFIRMATION` | Yes | services/blotato/utils/autoPublishService.js:1240 |
 | `BLOTATO_RSS_BUCKET_ALIAS` | Yes | services/blotato/utils/rssArticlePicker.js:94<br>services/blotato/utils/rssArticleSource.js:143 |
 | `BLOTATO_RSS_FEED_URL` | No | services/blotato/utils/rssArticlePicker.js:78<br>services/blotato/utils/rssArticleSource.js:130 |
@@ -172,7 +172,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_RSS_JSON_KEY` | Yes | services/blotato/utils/rssArticlePicker.js:95<br>services/blotato/utils/rssArticleSource.js:144 |
 | `BLOTATO_RSS_PICK_MODE` | Yes | services/blotato/utils/autoPublishService.js:1443<br>services/blotato/utils/rssArticlePicker.js:67<br>services/blotato/utils/rssArticleSource.js:226 |
 | `BLOTATO_RSS_PREFER_R2` | Yes | services/blotato/utils/rssArticlePicker.js:117<br>services/blotato/utils/rssArticleSource.js:142 |
-| `BLOTATO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1745 |
+| `BLOTATO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1746 |
 | `BLOTATO_SCRIPT_TIMEOUT_MS` | Yes | services/blotato/utils/newsShortsService.js:1356 |
 | `BLOTATO_STEP0_PREFLIGHT_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:955 |
 | `BLOTATO_TEMPLATE_AUTO_DISCOVERY` | Yes | services/blotato/utils/autoPublishService.js:363<br>services/blotato/utils/autoPublishService.js:1441 |
@@ -216,7 +216,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `COMMS_HUB_AUTONOMOUS_REPLIES_ENABLED` | Yes | services/comms-hub/routes/index.js:145 |
 | `COMMS_HUB_BACKUP_ENABLED` | Yes | services/comms-hub/routes/index.js:125 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BLOG_ENABLED` | Yes | services/comms-hub/routes/index.js:140 |
-| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2699 |
+| `COMMS_HUB_CONTENT_AUTOMATION_BLOTATO_VIDEO_BRIEF_LIMIT` | Yes | services/blotato/utils/autoPublishService.js:2700 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LEASE_MS` | Yes | services/comms-hub/contentAutomationQueueCore.js:325 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_LIMIT` | Yes | services/blog/social/buildDailySocialBlogPost.js:670<br>services/blog/weekly/buildWeeklyBlogPost.js:501<br>services/podcast/runPodcastPipeline.js:141 |
 | `COMMS_HUB_CONTENT_AUTOMATION_BRIEF_MAX_AGE_HOURS` | Yes | services/comms-hub/contentAutomationQueueCore.js:328 |
