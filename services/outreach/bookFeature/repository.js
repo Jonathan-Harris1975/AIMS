@@ -344,6 +344,8 @@ export class BookFeatureRepository {
       AND f.mode='controlled_test' AND f.kill_switch=0 AND f.version=? AND f.approval_actor IS NOT NULL
       AND EXISTS (SELECT 1 FROM json_each(f.test_recipients_json) WHERE value=b.delivery_recipient)
       AND o.state='queued' AND o.contact_id=c.id AND c.organisation_id=g.id
+      AND EXISTS (SELECT 1 FROM outreach_target_reservations t WHERE t.target_key=g.official_domain AND t.opportunity_id=o.id
+        AND t.status='active' AND t.expires_at>?)
       AND c.validation_result='valid' AND c.eligibility_status='eligible' AND c.validation_expires_at>?
       AND g.identity_status='verified' AND g.identity_expires_at>?
       AND NOT EXISTS (SELECT 1 FROM comms_hub_outreach_suppression s WHERE lower(s.email) IN (lower(c.email),lower(b.delivery_recipient))
@@ -353,7 +355,7 @@ export class BookFeatureRepository {
         AND p.body_key=b.body_key AND p.subject=b.subject AND p.content_sha256=? AND q.passed=1 AND q.rubric_version=b.qa_version)
       AND (SELECT COUNT(*) FROM book_feature_audit a WHERE a.action='handoff_admitted' AND substr(a.created_at,1,10)=?)<f.daily_cap
       AND (SELECT COUNT(*) FROM book_feature_audit a WHERE a.action='handoff_admitted' AND json_extract(a.evidence_json,'$.runKey')=b.run_key)<f.per_run_cap`,
-      [id,at,lease.id,lease.lease_owner,at,at,config.version,at,at,contentHash,day]);
+      [id,at,lease.id,lease.lease_owner,at,at,config.version,at,at,at,contentHash,day]);
     return changes(result) === 1;
   }
 
