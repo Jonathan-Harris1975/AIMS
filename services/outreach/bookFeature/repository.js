@@ -260,7 +260,7 @@ export class BookFeatureRepository {
       JOIN book_feature_qa_reviews q ON q.pitch_version_id=p.id AND q.passed=1
       WHERE o.id=? AND o.state='qa_passed' ORDER BY p.version DESC LIMIT 1`, [opportunityId]));
     if (!row || row.validation_result !== "valid" ||
-        row.eligibility_status !== "eligible" || Date.parse(row.validation_expires_at) <= now.getTime()) {
+        row.eligibility_status !== "eligible" || !(Date.parse(row.validation_expires_at) > now.getTime())) {
       throw Object.assign(new Error("Contact or QA eligibility changed before queueing."), { code: "BOOK_FEATURE_ELIGIBILITY_EXPIRED" });
     }
     const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression WHERE lower(email)=? OR
@@ -273,11 +273,15 @@ export class BookFeatureRepository {
       { sql: `INSERT OR IGNORE INTO book_feature_outbox
         (id,opportunity_id,contact_id,idempotency_key,status,not_before,expires_at,qa_version,created_at,updated_at,
          next_attempt_at,subject,body_key,campaign_type,delivery_recipient,run_key)
-        VALUES (?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?)`,
+        SELECT ?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?
+        WHERE EXISTS (SELECT 1 FROM book_feature_configuration WHERE singleton=1 AND version=? AND mode='controlled_test' AND kill_switch=0)
+        AND (SELECT COUNT(*) FROM book_feature_outbox WHERE run_key=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?
+        AND (SELECT COUNT(*) FROM book_feature_outbox WHERE created_at>=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?`,
         params: [outboxId,opportunityId,row.contact_id,idempotencyKey,notBefore.toISOString(),expiry.toISOString(),
-          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey] },
+          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey,
+          config.version,runKey,config.perRunCap,dayStart.toISOString(),config.dailyCap] },
       { sql: `UPDATE book_feature_opportunities SET state='queued',gate_json=json_set(gate_json,'$.authorisation',json('true'),
-          '$.duplicate',json('true')),reason='controlled_test_queued',updated_at=? WHERE id=? AND state='qa_passed'`, params: [at,opportunityId] },
+          '$.duplicate',json('true')),reason='controlled_test_queued',updated_at=? WHERE id=? AND state='qa_passed' AND changes()=1`, params: [at,opportunityId] },
       { sql: `INSERT INTO book_feature_audit (id,entity_type,entity_id,action,actor,evidence_json,created_at)
         SELECT ?,'outbox',?,'controlled_test_queued',?,?,? WHERE changes()=1`,
         params: [this.leaseId(),outboxId,config.approvalActor || "operator",JSON.stringify({ recipient: email,
@@ -285,6 +289,7 @@ export class BookFeatureRepository {
     ]);
     if (changes(result[0]) !== 1) {
       const existing = first(await this.d1.query("SELECT * FROM book_feature_outbox WHERE idempotency_key=?", [idempotencyKey]));
+      if (!existing) throw Object.assign(new Error("Queue admission changed."), { code: "BOOK_FEATURE_QUEUE_ADMISSION" });
       return { duplicate: true, outbox: existing };
     }
     return { duplicate: false, outbox: first(await this.d1.query("SELECT * FROM book_feature_outbox WHERE id=?", [outboxId])) };
