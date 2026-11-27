@@ -14,7 +14,7 @@ test("dispatch rechecks effective mode and allowlist immediately before provider
   const outcomes = [];
   let modeCalls = 0;
   let sends = 0;
-  const repository = { claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
+  const repository = { admitHandoff: async () => true, claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
     mode: async () => (++modeCalls === 1
       ? { effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }
       : { effective: "suspended", killSwitch: true, testRecipients: ["test@example.com"] }),
@@ -32,7 +32,7 @@ test("dispatch rechecks effective mode and allowlist immediately before provider
 
 test("provider acceptance remains accepted pending delivery reconciliation and uncertain outcomes are never blindly retried", async () => {
   const accepted = [];
-  const repository = { claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
+  const repository = { admitHandoff: async () => true, claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
     mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
     finishOutboxLease: async (_lease, outcome) => accepted.push(outcome), recordDeliveryEvent: async () => {} };
   const context = { d1: {}, emailService: { send: async () => ({ providerMessageId: "provider-1" }) } };
@@ -112,7 +112,7 @@ test("late suppression of intended contact blocks controlled-test handoff", asyn
   const outcomes = [];
   let sends = 0;
   let checks = 0;
-  const repository = { claimOutbox: async () => lease(),
+  const repository = { admitHandoff: async () => true, claimOutbox: async () => lease(),
     outboxDispatchContext: async () => ({ ...dispatchContext(), intended_email: "editor@example.com" }),
     mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
     finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
@@ -129,7 +129,7 @@ test("late suppression of intended contact blocks controlled-test handoff", asyn
 
 test("unclassified provider exceptions after handoff are reconciliation pending, never retryable", async () => {
   const outcomes = [];
-  const repository = { claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
+  const repository = { admitHandoff: async () => true, claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
     mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
     finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
   const worker = new BookFeatureDispatchWorker({ repository, context: { d1: {}, emailService: {
@@ -144,7 +144,7 @@ test("unclassified provider exceptions after handoff are reconciliation pending,
 
 test("a failed delivery event write after persisted acceptance does not re-finish or retry the lease", async () => {
   const outcomes = [];
-  const repository = { claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
+  const repository = { admitHandoff: async () => true, claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
     mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
     finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome),
     recordDeliveryEvent: async () => { throw new Error("event store unavailable"); } };
@@ -158,4 +158,20 @@ test("a failed delivery event write after persisted acceptance does not re-finis
   assert.equal(result.reconciliationRequired, true);
   assert.equal(outcomes.length, 1);
   assert.equal(outcomes[0].status, "accepted");
+});
+
+test("atomic dispatch admission denial prevents provider handoff", async () => {
+  const outcomes = [];
+  let sends = 0;
+  const repository = { claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
+    mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
+    admitHandoff: async () => false, finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
+  const worker = new BookFeatureDispatchWorker({ repository, context: { d1: {}, emailService: {
+    send: async () => { sends++; },
+  } }, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    now: () => new Date("2026-11-27T08:00:00.000Z") });
+  worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
+  assert.equal((await worker.runOnce()).status, "cancelled");
+  assert.equal(sends, 0);
+  assert.equal(outcomes[0].errorCode, "atomic_admission_denied");
 });
