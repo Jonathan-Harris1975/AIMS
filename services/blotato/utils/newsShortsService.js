@@ -1089,7 +1089,19 @@ function enhancePackForBlotatoDuration(pack = {}, options = {}, laneConfig = {})
     500
   );
 
-  return applyBritishEnglishPack(reinforceSourceGrounding(output, options.article));
+  const finalPack = applyBritishEnglishPack(reinforceSourceGrounding(output, options.article));
+  const creativeBrief = buildCreativeBrief({
+    topic: options.article?.title || finalPack.internalTitle, angle: finalPack.angle,
+    audience: options.audience, lane: laneConfig.slug, coreMessage: finalPack.script,
+    recentThemes: [...(Array.isArray(options.visualHistory) ? options.visualHistory : [])].reverse().map((item) => item?.theme || item),
+  });
+  finalPack.storyboard = buildStoryboard({
+    script: finalPack.script, hook: finalPack.hook, scenes: finalPack.scenes,
+    durationSeconds: options.durationSeconds || 45, creativeBrief, article: options.article,
+  });
+  finalPack.creativeDirection = creativeBrief;
+  finalPack.editorialHooks = [...new Set([finalPack.hook, ...(finalPack.editorialHooks || [])].filter(Boolean))].slice(0, 3);
+  return finalPack;
 }
 
 const KNOWN_AI_ANCHORS = Object.freeze([
@@ -1502,7 +1514,7 @@ export async function buildOrCreateShortLane(options = {}) {
     lane: laneConfig.slug,
     recentThemes: options.recentThemes || [],
   });
-  const storyboard = buildStoryboard({ script: pack.script, hook: pack.hook, scenes: pack.scenes, durationSeconds: options.durationSeconds || 45, creativeBrief });
+  const storyboard = buildStoryboard({ script: pack.script, hook: pack.hook, scenes: pack.scenes, durationSeconds: options.durationSeconds || 45, creativeBrief, article: options.article });
   const finalHooks = [...new Set([pack.hook, ...(pack.editorialHooks || [])].filter(Boolean))].slice(0, 3);
   const hookCandidates = finalHooks.length === 3
     ? finalHooks.map((hook, index) => ({
