@@ -161,3 +161,20 @@ test("audio signal QA rejects inaudibility, excessive silence and missing eviden
   assert.equal(evaluateAudioSignal("mean_volume: -91.0 dB\nmax_volume: -91.0 dB", 40).pass, false);
   assert.equal(evaluateAudioSignal("", 40).pass, false);
 });
+
+test("rendered narration and sampled captions require real complete evidence", async () => {
+  const { normaliseRenderedAudioQa } = await import("../services/blotato/utils/renderedAudioQa.js");
+  const expectedNarration = "The model processes the documents and returns the result.";
+  const sampleTimes = [1, 2, 3, 4, 5, 6];
+  const observations = sampleTimes.slice(0, 4).map((time, i) => ({
+    frameIndex: i + 1, caption: "the model", spokenText: "the model", aligned: true,
+  }));
+  const good = { transcript: expectedNarration, pronunciationScore: 90, voiceQualityScore: 90, captionObservations: observations, hardDefects: [] };
+  const context = { expectedNarration, sampleTimes };
+  assert.equal(normaliseRenderedAudioQa(good, context).pass, true);
+  assert.equal(normaliseRenderedAudioQa({ ...good, transcript: "Unrelated words" }, context).pass, false);
+  assert.equal(normaliseRenderedAudioQa({ ...good, pronunciationScore: 20 }, context).pass, false);
+  assert.equal(normaliseRenderedAudioQa({ ...good, captionObservations: observations.slice(0, 1) }, context).available, false);
+  const wrong = observations.map((item) => ({ ...item, spokenText: "different words" }));
+  assert.equal(normaliseRenderedAudioQa({ ...good, captionObservations: wrong }, context).pass, false);
+});
