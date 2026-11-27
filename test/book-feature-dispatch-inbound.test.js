@@ -54,18 +54,19 @@ test("provider acceptance remains accepted pending delivery reconciliation and u
 test("inbound signatures reject replay windows and ambiguous content does not auto-reply", async () => {
   const secret = "test-secret";
   const timestamp = "2026-11-27T08:00:00.000Z";
-  const rawBody = JSON.stringify({ providerEventId: "event-1", text: "Can you explain the proposal?" });
+  const rawBody = JSON.stringify({ providerEventId: "event-1", text: "Can you explain the proposal? Interested?" });
   const signature = `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`;
   assert.equal(verifyInboundSignature(rawBody, { signature, timestamp, secret,
     now: new Date("2026-11-27T08:04:59.000Z") }), true);
   assert.equal(verifyInboundSignature(rawBody, { signature, timestamp, secret,
     now: new Date("2026-11-27T08:05:01.000Z") }), false);
-  assert.equal(classifyBookFeatureInbound("Interested, but do not contact me again"), "uncertain");
+  assert.equal(classifyBookFeatureInbound("Interested, but do not contact me again"), "opt_out");
+  assert.equal(classifyBookFeatureInbound("Interested, could you explain?"), "uncertain");
   const calls = [];
   const repository = { findOpportunityByProviderMessage: async () => ({ opportunity_id: "opp", contact_id: "contact" }),
     processInboundEvent: async (event) => { calls.push(event); return { duplicate: false, action: "operator_review" }; } };
   const result = await handleBookFeatureInbound({ rawBody, signature, timestamp, secret, providerEventId: "event-1",
-    providerMessageId: "provider-1", text: "Interested, but do not contact me again" }, { repository,
+    providerMessageId: "provider-1", text: "Can you explain the proposal? Interested?" }, { repository,
     now: () => new Date("2026-11-27T08:01:00.000Z"), persist: async () => {} });
   assert.equal(result.action, "operator_review");
   assert.equal(calls[0].category, "uncertain");
@@ -89,4 +90,72 @@ test("expired dispatch lease prevents provider handoff", async () => {
   assert.equal((await worker.runOnce()).status, "cancelled");
   assert.equal(sends, 0);
   assert.equal(outcomes[0].errorCode, "handoff_expired");
+});
+
+test("explicit opt-outs take precedence over apparent engagement", async () => {
+  const secret = "test-secret";
+  const timestamp = "2026-11-27T08:00:00.000Z";
+  const text = "Interested, but do not contact me again";
+  const rawBody = JSON.stringify({ providerEventId: "event-opt-out", text });
+  const signature = `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`;
+  const calls = [];
+  const repository = { findOpportunityByProviderMessage: async () => ({ opportunity_id: "opp", contact_id: "contact" }),
+    processInboundEvent: async (event) => { calls.push(event); return { duplicate: false, action: "suppressed_and_cancelled" }; } };
+  const result = await handleBookFeatureInbound({ rawBody, signature, timestamp, secret, providerEventId: "event-opt-out",
+    providerMessageId: "provider-1", text }, { repository,
+    now: () => new Date("2026-11-27T08:01:00.000Z"), persist: async () => {} });
+  assert.equal(result.action, "suppressed_and_cancelled");
+  assert.equal(calls[0].category, "opt_out");
+});
+
+test("late suppression of intended contact blocks controlled-test handoff", async () => {
+  const outcomes = [];
+  let sends = 0;
+  let checks = 0;
+  const repository = { claimOutbox: async () => lease(),
+    outboxDispatchContext: async () => ({ ...dispatchContext(), intended_email: "editor@example.com" }),
+    mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
+    finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
+  const worker = new BookFeatureDispatchWorker({ repository,
+    context: { d1: {}, emailService: { send: async () => { sends++; } } },
+    readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    now: () => new Date("2026-11-27T08:00:00.000Z") });
+  worker.shared = { isSuppressed: async (email) => email === "editor@example.com" && ++checks > 1,
+    createOutboundConversation: async () => ({ conversationId: "conversation" }) };
+  assert.equal((await worker.runOnce()).status, "cancelled");
+  assert.equal(sends, 0);
+  assert.equal(outcomes[0].errorCode, "final_handoff_gate_failed");
+});
+
+test("unclassified provider exceptions after handoff are reconciliation pending, never retryable", async () => {
+  const outcomes = [];
+  const repository = { claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
+    mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
+    finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome) };
+  const worker = new BookFeatureDispatchWorker({ repository, context: { d1: {}, emailService: {
+    send: async () => { throw Object.assign(new Error("provider timeout"), { retryable: true }); },
+  } }, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    now: () => new Date("2026-11-27T08:00:00.000Z") });
+  worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
+  assert.equal((await worker.runOnce()).status, "unknown");
+  assert.equal(outcomes[0].status, "unknown");
+  assert.equal(outcomes[0].nextAttemptAt, undefined);
+});
+
+test("a failed delivery event write after persisted acceptance does not re-finish or retry the lease", async () => {
+  const outcomes = [];
+  const repository = { claimOutbox: async () => lease(), outboxDispatchContext: async () => dispatchContext(),
+    mode: async () => ({ effective: "controlled_test", killSwitch: false, testRecipients: ["test@example.com"] }),
+    finishOutboxLease: async (_lease, outcome) => outcomes.push(outcome),
+    recordDeliveryEvent: async () => { throw new Error("event store unavailable"); } };
+  const worker = new BookFeatureDispatchWorker({ repository, context: { d1: {}, emailService: {
+    send: async () => ({ providerMessageId: "provider-1" }),
+  } }, readPrivate: async () => JSON.stringify({ pitch: { subject: "A useful feature", body: "A complete safe body." } }),
+    now: () => new Date("2026-11-27T08:00:00.000Z") });
+  worker.shared = { isSuppressed: async () => null, createOutboundConversation: async () => ({ conversationId: "conversation" }) };
+  const result = await worker.runOnce();
+  assert.equal(result.status, "accepted");
+  assert.equal(result.reconciliationRequired, true);
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].status, "accepted");
 });
