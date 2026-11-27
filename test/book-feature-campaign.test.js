@@ -11,6 +11,7 @@ function fixture() {
   const db = new DatabaseSync(":memory:");
   db.exec(readFileSync(new URL("../services/comms-hub/migrations/0028_book_feature_outreach.sql", import.meta.url), "utf8"));
   db.exec(readFileSync(new URL("../services/comms-hub/migrations/0030_outreach_production_controls.sql", import.meta.url), "utf8"));
+  db.exec(readFileSync(new URL("../services/comms-hub/migrations/0031_guest_article_controlled_outbox.sql", import.meta.url), "utf8"));
   db.exec(`CREATE TABLE IF NOT EXISTS comms_hub_outreach_suppression (
     id TEXT PRIMARY KEY,email TEXT NOT NULL DEFAULT '',domain TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL,
     source TEXT NOT NULL,created_at TEXT NOT NULL,metadata_json TEXT NOT NULL DEFAULT '{}')`);
