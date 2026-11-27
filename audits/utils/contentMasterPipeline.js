@@ -6,6 +6,7 @@ import { runNewsletterAudit } from "./newsletterAudit.js";
 import { collectMonthlyGrowthEvidence, renderMonthlyGrowthAppendix } from "../../services/podcast-growth/monthlyEvidence.js";
 import { dispatchContentAuditToRams } from "./ramsContentDispatch.js";
 import { info } from "../../logger.js";
+import { collectVisualQualityEvidence, renderVisualQualityAppendix } from "../../services/blotato/utils/visualQualityEvidence.js";
 
 const AUDIT_TYPE = "content-master";
 
@@ -90,7 +91,8 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
   // or editorial-quality gate and never initiates provider or KDP write operations.
   const podcastGrowth = await collectMonthlyGrowthEvidence();
   const sourceHtml = buildContentMasterHtml({ sessionId, generatedAt, council });
-  const appendix = renderMonthlyGrowthAppendix(podcastGrowth);
+  const visualQuality = await collectVisualQualityEvidence();
+  const appendix = renderMonthlyGrowthAppendix(podcastGrowth) + renderVisualQualityAppendix(visualQuality);
   const html = sourceHtml.includes("</body>")
     ? sourceHtml.replace("</body>", appendix + "</body>")
     : sourceHtml + appendix;
@@ -123,6 +125,7 @@ export async function runContentMasterAudit({ sessionId = `content-master-${Date
     sourceRefresh,
     council,
     podcastGrowth,
+    visualQuality,
     reportSet: {
       pdf: { key: pdf.key, url: pdf.url },
       html: { key: htmlReport.key, url: htmlReport.url },
