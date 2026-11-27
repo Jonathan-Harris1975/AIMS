@@ -55,7 +55,10 @@ export class BookFeatureRepository {
       { sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
               failure_class=CASE WHEN status='leased' THEN 'uncertain' ELSE 'policy' END,
               last_error_code='kill_switch_enabled',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
-              WHERE status IN ('queued','leased') AND changes()=1`, params: [at] },
+              WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,id] },
+      { sql: `UPDATE guest_article_controlled_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+        last_error_code='kill_switch_enabled',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+        WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,id] },
     ]);
     if (changes(result[0]) !== 1) throw new Error("Configuration version changed; mode transition rejected.");
     return this.mode();
@@ -82,6 +85,12 @@ export class BookFeatureRepository {
           SELECT ?,'configuration','1','controlled_test_enabled',?,?,? WHERE changes()=1`,
         params: [auditId,actor,JSON.stringify({ recipients: allowlist, perRunCap, dailyCap, expectedVersion,
           reason: String(reason).slice(0,500) }),at] },
+      { sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+        last_error_code='approval_changed',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+        WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,auditId] },
+      { sql: `UPDATE guest_article_controlled_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+        last_error_code='approval_changed',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+        WHERE status IN ('queued','leased') AND EXISTS (SELECT 1 FROM book_feature_audit WHERE id=?)`, params: [at,auditId] },
     ]);
     if (changes(result[0]) !== 1) throw new Error("Configuration version changed; controlled test rejected.");
     return this.mode();
@@ -282,13 +291,13 @@ export class BookFeatureRepository {
     const result = await this.d1.batch([
       { sql: `INSERT OR IGNORE INTO book_feature_outbox
         (id,opportunity_id,contact_id,idempotency_key,status,not_before,expires_at,qa_version,created_at,updated_at,
-         next_attempt_at,subject,body_key,campaign_type,delivery_recipient,run_key)
-        SELECT ?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?
+         next_attempt_at,subject,body_key,campaign_type,delivery_recipient,run_key,configuration_version)
+        SELECT ?,?,?,?,'queued',?,?,?,?,?,?,?,?, 'book_feature',?,?,?
         WHERE EXISTS (SELECT 1 FROM book_feature_configuration WHERE singleton=1 AND version=? AND mode='controlled_test' AND kill_switch=0)
         AND (SELECT COUNT(*) FROM book_feature_outbox WHERE run_key=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?
         AND (SELECT COUNT(*) FROM book_feature_outbox WHERE created_at>=? AND status IN ('queued','leased','accepted','delivered','unknown')) < ?`,
         params: [outboxId,opportunityId,row.contact_id,idempotencyKey,notBefore.toISOString(),expiry.toISOString(),
-          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey,
+          row.rubric_version,at,at,notBefore.toISOString(),row.subject,row.body_key,email,runKey,config.version,
           config.version,runKey,config.perRunCap,dayStart.toISOString(),config.dailyCap] },
       { sql: `UPDATE book_feature_opportunities SET state='queued',gate_json=json_set(gate_json,'$.authorisation',json('true'),
           '$.duplicate',json('true')),reason='controlled_test_queued',updated_at=? WHERE id=? AND state='qa_passed' AND changes()=1`, params: [at,opportunityId] },
@@ -314,7 +323,9 @@ export class BookFeatureRepository {
       last_error_code='dispatch_lease_expired',lease_owner=NULL,lease_expires_at=NULL,updated_at=?
       WHERE status='leased' AND (lease_expires_at IS NULL OR lease_expires_at<=?)`, [at,at]);
     const config = await this.mode();
-    if (!(["controlled_test","pilot"].includes(config.effective)) || config.killSwitch) return null;
+    if (config.effective !== "controlled_test" || config.killSwitch) return null;
+    await this.d1.query(`UPDATE book_feature_outbox SET status='cancelled',last_error_code='approval_changed_or_expired',updated_at=?
+      WHERE status='queued' AND (configuration_version IS NULL OR configuration_version<>? OR expires_at<=?)`, [at,config.version,at]);
     const expires = new Date(now.getTime() + leaseMs).toISOString();
     const candidate = first(await this.d1.query(`SELECT id FROM book_feature_outbox WHERE status='queued'
       AND not_before<=? AND expires_at>? AND (next_attempt_at IS NULL OR next_attempt_at<=?)
@@ -341,7 +352,7 @@ export class BookFeatureRepository {
       JOIN book_feature_organisations g ON g.id=o.organisation_id
       JOIN book_feature_configuration f ON f.singleton=1
       WHERE b.id=? AND b.status='leased' AND b.lease_owner=? AND b.lease_expires_at>? AND b.expires_at>?
-      AND f.mode='controlled_test' AND f.kill_switch=0 AND f.version=? AND f.approval_actor IS NOT NULL
+      AND f.mode='controlled_test' AND f.kill_switch=0 AND f.version=? AND f.version=b.configuration_version AND f.approval_actor IS NOT NULL
       AND EXISTS (SELECT 1 FROM json_each(f.test_recipients_json) WHERE value=b.delivery_recipient)
       AND o.state='queued' AND o.contact_id=c.id AND c.organisation_id=g.id
       AND EXISTS (SELECT 1 FROM outreach_target_reservations t WHERE t.target_key=g.official_domain AND t.opportunity_id=o.id
@@ -373,7 +384,7 @@ export class BookFeatureRepository {
 
   async outboxDispatchContext(outboxId) {
     return first(await this.d1.query(`SELECT b.*,COALESCE(b.delivery_recipient,c.email) AS email,c.email AS intended_email,
-      c.validation_result,c.validation_expires_at,c.eligibility_status,
+      c.validation_result,c.validation_expires_at,c.eligibility_status,c.assessment_key,c.recipient_type,
       c.display_name,c.role,o.state AS opportunity_state,o.campaign_id,g.official_domain,g.canonical_name
       FROM book_feature_outbox b JOIN book_feature_contacts c ON c.id=b.contact_id
       JOIN book_feature_opportunities o ON o.id=b.opportunity_id
