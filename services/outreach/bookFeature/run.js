@@ -136,14 +136,16 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
     const contactResults = [];
     const pitchResults = [];
     const queueResults = [];
-    for (const qualification of qualifications.filter((item) => item.identity.status === "verified")) {
+    for (const qualification of qualifications.filter((item) => item.identity.status === "verified" && item.gates?.evidence === true &&
+      item.gates?.campaign === true && (item.score >= 70 || (item.score >= 55 && item.gates?.enhancedValidation === true)))) {
       const organisationId = createHash("sha256").update(`book-feature-org\u001f${qualification.identity.officialDomain}`).digest("hex");
       const opportunityId = createHash("sha256").update(`${campaign.id}\u001f${organisationId}`).digest("hex");
+      await assertLease();
       const result = await discoverContacts(qualification.identity);
       const stored = await repository.persistEligibleContacts(opportunityId, organisationId, result.contacts || []);
       contactResults.push({ candidateId: qualification.candidateId, status: result.status, reason: result.reason || null,
         eligibleContacts: stored.persisted });
-      const contact = result.contacts?.[0];
+      const contact = stored.contacts?.[0];
       if (stored.persisted && contact) {
         const pitch = await draftAndReview({ opportunityId, campaignId: campaign.id,
           facts: { organisation: { name: qualification.name, legalName: qualification.identity.legalName,
@@ -162,6 +164,11 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
         }
       }
     }
+    const qaPassed = pitchResults.filter((item) => item.status === "qa_passed").length;
+    const contactEligible = contactResults.filter((item) => item.eligibleContacts > 0).length;
+    const reportStatus = queueResults.length ? "controlled_test_queued" : qaPassed ? "assessment_qa_passed" :
+      pitchResults.length ? "assessment_qa_not_passed" : contactEligible ? "assessment_pending_draft_and_qa" :
+      identityAnalysis.verified ? "assessment_no_eligible_contacts" : "assessment_identity_unverified";
     const reportKey = `outreach/book-feature/campaigns/${occurrence.week}/${occurrence.localDate}.json`;
     await assertLease();
     await persist("kdp", reportKey, { campaignId: campaign.id, occurrenceId: occurrence.id, ebookId: book.ebookId,
@@ -171,12 +178,11 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
       qualifications: qualifications.map(({ identity, entity, ...item }) => ({ ...item,
         identity: { status: identity.status, officialDomain: identity.officialDomain || null, reason: identity.reason || null },
         entityId: entity?.id || null })),
-      evidenceStatus: identityAnalysis.verified ? "identity_verified_contact_qualification_pending" : "identity_unverified",
-      verifiedOrganisations: identityAnalysis.verified, qualifiedOpportunities: qualificationPersistence.persisted,
+      evidenceStatus: identityAnalysis.verified ? "identity_verified" : "identity_unverified",
+      verifiedOrganisations: identityAnalysis.verified, scoredOpportunities: qualificationPersistence.persisted, qualifiedOpportunities: contactEligible,
       contactResults, pitchResults, queueResults,
-      contactEligibleOpportunities: contactResults.reduce((sum, item) => sum + item.eligibleContacts, 0), dispatched: 0,
-      status: contactResults.some((item) => item.eligibleContacts) ? "assessment_pending_draft_and_qa" :
-        identityAnalysis.verified ? "assessment_pending_contact_validation" : "assessment_identity_unverified",
+      contactEligibleOpportunities: contactEligible, dispatched: 0,
+      status: reportStatus,
       observedAt: now.toISOString() });
     await assertLease();
     await repository.finishOccurrence(lease, "completed_zero", { reportKey });
@@ -184,8 +190,8 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
       pagesAnalysed: analysis.pagesAnalysed, totalPages: analysis.totalPages, candidatePhrases: analysis.candidates.length,
       candidateEvidenceRecorded: referenceEvidence.recorded,
       contextClassifiedCandidates: entityAnalysis.entities.length,
-      verifiedOrganisations: identityAnalysis.verified, qualifiedOpportunities: qualificationPersistence.persisted,
-      contactEligibleOpportunities: contactResults.reduce((sum, item) => sum + item.eligibleContacts, 0),
+      verifiedOrganisations: identityAnalysis.verified, scoredOpportunities: qualificationPersistence.persisted, qualifiedOpportunities: contactEligible,
+      contactEligibleOpportunities: contactEligible,
       qaPassed: pitchResults.filter((item) => item.status === "qa_passed").length,
       queued: queueResults.length, dispatched: 0 };
   } catch (error) {
