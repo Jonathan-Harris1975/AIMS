@@ -4,9 +4,9 @@
 
 This inventory makes the runtime configuration contract auditable without duplicating secret values. `.env.example` and `env.template` remain the curated operator templates; this file records every production `process.env` dependency and its source locations.
 
-- Runtime variables referenced in production code: **547**
+- Runtime variables referenced in production code: **548**
 - Present in curated templates: **413**
-- Not present in curated templates: **134**
+- Not present in curated templates: **135**
 
 | Variable | Curated template | Production references |
 | --- | --- | --- |
@@ -458,6 +458,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `STARTUP_CHECK_SCRIPT` | No | scripts/bootstrap.js:107 |
 | `STATE_BACKEND` | Yes | scripts/startupCheck.js:35<br>services/blotato/utils/creditGuard.js:9<br>services/shared/utils/durableLease.js:17<br>services/shared/utils/stateFile.js:27 |
 | `STATE_REMOTE_PREFIX` | Yes | services/shared/utils/stateFile.js:13 |
+| `TAVILY_SEARCH_API` | No | services/outreach/bookFeature/organizationResearch.js:51 |
 | `TRUST_PROXY` | Yes | server.js:113 |
 | `URLENCODED_BODY_LIMIT` | Yes | server.js:388 |
 | `URLSCAN_API_KEY` | Yes | services/outreach/services/outreachCore.js:26 |

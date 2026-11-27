@@ -5,6 +5,7 @@ import { getObjectAsBuffer, getObjectAsText, putPrivateJson } from "../../shared
 import { BookFeatureRepository } from "./repository.js";
 import { candidateReferences, extractManuscript, validateExtraction } from "./assessment.js";
 import { analyseCandidateContext } from "./entityAnalysis.js";
+import { researchCandidateSources } from "./organizationResearch.js";
 import { scheduledLondonOccurrence, verifyBook } from "./core.js";
 
 const EXTRACTION_CONFIG_VERSION = "book-feature-pdf-v1";
@@ -68,6 +69,7 @@ export async function analysePublishedBook(book, {
 export async function runBookFeatureAssessment({ now = new Date(), d1, repository = d1 ? new BookFeatureRepository(d1) : null,
   resolveBook = resolveWeeklyBook, analyse = analysePublishedBook, persist = putPrivateJson,
   analyseEntities = analyseCandidateContext,
+  researchOrganizations = researchCandidateSources,
   heartbeatIntervalMs = 5 * 60_000 } = {}) {
   const occurrence = scheduledLondonOccurrence(now);
   if (!occurrence) return { ok: false, status: "blocked", reason: "Outside Tuesday/Thursday 09:00–11:00 Europe/London assessment window." };
@@ -112,6 +114,7 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
     await renewLease();
     const analysis = await analyse(book);
     const entityAnalysis = await analyseEntities(analysis.candidates);
+    const organizationResearch = await researchOrganizations(entityAnalysis.entities);
     await assertLease();
     const referenceEvidence = await repository.recordCandidateEvidence(campaign.id, analysis.sha256,
       analysis.candidates, analysis.sourcePages);
@@ -120,7 +123,8 @@ export async function runBookFeatureAssessment({ now = new Date(), d1, repositor
     await persist("kdp", reportKey, { campaignId: campaign.id, occurrenceId: occurrence.id, ebookId: book.ebookId,
       title: book.title, manuscriptSha256: analysis.sha256, totalPages: analysis.totalPages,
       pagesAnalysed: analysis.pagesAnalysed, candidates: analysis.candidates, extractionCacheKey: analysis.cacheKey,
-      referenceEvidence, entityAnalysis, evidenceStatus: "candidate_only_identity_and_qualification_pending",
+      referenceEvidence, entityAnalysis, organizationResearch,
+      evidenceStatus: "candidate_only_identity_and_qualification_pending",
       verifiedOrganisations: 0, qualifiedOpportunities: 0, contactEligibleOpportunities: 0,
       dispatched: 0, status: "assessment_pending_entity_validation", observedAt: now.toISOString() });
     await assertLease();
