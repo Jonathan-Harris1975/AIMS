@@ -54,7 +54,7 @@ test("provider acceptance remains accepted pending delivery reconciliation and u
 test("inbound signatures reject replay windows and ambiguous content does not auto-reply", async () => {
   const secret = "test-secret";
   const timestamp = "2026-11-27T08:00:00.000Z";
-  const rawBody = JSON.stringify({ providerEventId: "event-1", text: "Can you explain the proposal? Interested?" });
+  const rawBody = JSON.stringify({ providerEventId: "event-1", providerMessageId: "provider-1", text: "Can you explain the proposal? Interested?" });
   const signature = `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`;
   assert.equal(verifyInboundSignature(rawBody, { signature, timestamp, secret,
     now: new Date("2026-11-27T08:04:59.000Z") }), true);
@@ -96,7 +96,7 @@ test("explicit opt-outs take precedence over apparent engagement", async () => {
   const secret = "test-secret";
   const timestamp = "2026-11-27T08:00:00.000Z";
   const text = "Interested, but do not contact me again";
-  const rawBody = JSON.stringify({ providerEventId: "event-opt-out", text });
+  const rawBody = JSON.stringify({ providerEventId: "event-opt-out", providerMessageId: "provider-1", text });
   const signature = `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`;
   const calls = [];
   const repository = { findOpportunityByProviderMessage: async () => ({ opportunity_id: "opp", contact_id: "contact" }),
