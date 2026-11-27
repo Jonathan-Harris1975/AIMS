@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const MODES = Object.freeze(["disabled", "assessment", "shadow", "controlled_production", "production", "suspended"]);
+export const MODES = Object.freeze(["disabled", "assessment", "controlled_test", "pilot", "suspended"]);
 export const RUBRIC_VERSION = "book-feature-v1";
 const WEIGHTS = Object.freeze({ depth: 25, positiveContext: 20, mutualBenefit: 20, currentRelevance: 15, audienceAlignment: 10, relationshipPotential: 10 });
 
@@ -8,7 +8,6 @@ export function effectiveMode(configured, persisted) {
   // Environment kill switch always takes precedence over durable configuration.
   if (configured === "disabled" || configured === "suspended") return configured;
   if (!MODES.includes(persisted)) return "assessment";
-  if (["controlled_production", "production"].includes(persisted)) return "shadow";
   return persisted;
 }
 

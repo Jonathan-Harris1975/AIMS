@@ -215,6 +215,7 @@ test("upgrade from migration 0020 preserves communication state and backfills pe
     "0027_restore_missing_autonomy_policies",
     "0028_book_feature_outreach",
     "0029_guest_article_run_ledger",
+    "0030_outreach_production_controls",
   ]);
 
   const message = adapter.db.prepare(
@@ -277,6 +278,7 @@ test("attested legacy 0013 checksum does not block forward production migrations
     "0027_restore_missing_autonomy_policies",
     "0028_book_feature_outreach",
     "0029_guest_article_run_ledger",
+    "0030_outreach_production_controls",
   ]);
   assert.equal(
     adapter.db.prepare("SELECT checksum FROM comms_hub_schema_migrations WHERE version = ?")
@@ -339,6 +341,7 @@ test("a failed migration is not recorded and a retry resumes from the last commi
     "0027_restore_missing_autonomy_policies",
     "0028_book_feature_outreach",
     "0029_guest_article_run_ledger",
+    "0030_outreach_production_controls",
   ]);
 
   const finalPass = await runCommsHubMigrations({ env: migrationEnv(), d1: adapter });
@@ -351,7 +354,8 @@ test("production migration runner restores the missing default autonomy policies
   applyHistoricalSnapshot(adapter, "0026_newsletter_delivery_evidence");
   adapter.db.exec("DELETE FROM comms_hub_autonomous_reply_policies");
   const result = await runCommsHubMigrations({ env: migrationEnv(), d1: adapter });
-  assert.deepEqual(result.appliedVersions, ["0027_restore_missing_autonomy_policies", "0028_book_feature_outreach", "0029_guest_article_run_ledger"]);
+  assert.deepEqual(result.appliedVersions, ["0027_restore_missing_autonomy_policies", "0028_book_feature_outreach",
+    "0029_guest_article_run_ledger", "0030_outreach_production_controls"]);
   const rows = adapter.db.prepare("SELECT policy_key, status FROM comms_hub_autonomous_reply_policies ORDER BY policy_key").all();
   assert.equal(rows.length, 4);
   assert.equal(rows.every((row) => row.status === "active"), true);

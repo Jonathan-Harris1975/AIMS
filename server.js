@@ -250,6 +250,7 @@ function commsHubIntakePath(req) {
     "/comms-hub/intake/zernio/video",
     "/comms-hub/intake/chat",
     "/comms-hub/intake/chat/sync",
+    "/outreach/book-feature/inbound",
   ].includes(path) ? path : "";
 }
 
@@ -267,7 +268,8 @@ function recordCommsHubParsedBodyBytes(req, _res, buffer) {
     throw error;
   }
   req.aimsParsedBodyBytes = bytes;
-  if (path.startsWith("/comms-hub/intake/zernio/") || path.startsWith("/comms-hub/intake/chat")) req.aimsRawBody = Buffer.from(buffer);
+  if (path.startsWith("/comms-hub/intake/zernio/") || path.startsWith("/comms-hub/intake/chat") ||
+      path === "/outreach/book-feature/inbound") req.aimsRawBody = Buffer.from(buffer);
 }
 
 app.use(
