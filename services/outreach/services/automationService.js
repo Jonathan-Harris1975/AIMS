@@ -337,7 +337,7 @@ guidelines. Return JSON only: {"subject":"...","proposedTitle":"...","body":"...
             { pitch, qualification: lead.qualification, source: lead.editorialEvidence, validationExpiresAt });
           results.push({ status: "qa_passed_assessment" }); continue;
         }
-        const queued = await outbox.queue({ lead: { ...lead, domain }, pitch, keyword, validationExpiresAt });
+        const queued = await outbox.queue({ lead: { ...lead, domain }, pitch, keyword, validationExpiresAt, assessmentKey, recipientType: type });
         results.push(queued ? { status: "queued", outboxId: queued.id } : { status: "skipped", reason: "queue_admission_denied" });
       } catch (error) {
         warn("outreach.automation.assessment.failed", { code: error?.code || "assessment_failed" });
