@@ -144,11 +144,17 @@ export class ControlledGuestOutbox {
     const category = classifyBookFeatureInbound(text);
     const at = this.now().toISOString();
     const statements = [];
+    if (!["malformed","bounce"].includes(category)) statements.push({ sql: `UPDATE guest_article_controlled_outbox SET status='delivered',
+      delivered_at=COALESCE(delivered_at,?),updated_at=? WHERE id=? AND status IN ('accepted','unknown')
+      AND NOT EXISTS (SELECT 1 FROM guest_article_controlled_events WHERE id=?)`, params: [at,at,row.id,eventId] });
     if (["opt_out","decline","bounce"].includes(category)) {
       statements.push({ sql: `INSERT OR IGNORE INTO comms_hub_outreach_suppression (id,email,domain,reason,source,created_at,metadata_json)
         SELECT ?,?,'',?,'guest_article_controlled_inbound',?,'{}' WHERE NOT EXISTS (SELECT 1 FROM guest_article_controlled_events WHERE id=?)`,
         params: [hash(`guest-test-suppression:${row.delivery_recipient}`),row.delivery_recipient,category,at,eventId] });
       statements.push({ sql: `UPDATE guest_article_controlled_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
+        lease_owner=NULL,lease_expires_at=NULL,last_error_code=?,updated_at=? WHERE delivery_recipient=? AND status IN ('queued','leased')
+        AND NOT EXISTS (SELECT 1 FROM guest_article_controlled_events WHERE id=?)`, params: [category,at,row.delivery_recipient,eventId] });
+      statements.push({ sql: `UPDATE book_feature_outbox SET status=CASE WHEN status='leased' THEN 'unknown' ELSE 'cancelled' END,
         lease_owner=NULL,lease_expires_at=NULL,last_error_code=?,updated_at=? WHERE delivery_recipient=? AND status IN ('queued','leased')
         AND NOT EXISTS (SELECT 1 FROM guest_article_controlled_events WHERE id=?)`, params: [category,at,row.delivery_recipient,eventId] });
     }
