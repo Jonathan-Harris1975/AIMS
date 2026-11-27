@@ -110,8 +110,8 @@ test("quality-first routing never falls back when fallback is disabled", () => {
 test("creative brief and video theme registry agree on content and recent history", async () => {
   const { selectBlotatoVisualTheme } = await import("../services/blotato/utils/blotatoVisualThemes.js");
   const topic = "AI inference infrastructure news";
-  const recentThemes = ["futuristic", "futuristic", "futuristic"];
-  const expected = selectBlotatoVisualTheme({ topic, history: recentThemes });
+  const recentThemes = ["futuristic", "futuristic", "futuristic", "modern"];
+  const expected = selectBlotatoVisualTheme({ topic, history: [...recentThemes].reverse() });
   assert.equal(selectBlotatoTheme({ topic, recentThemes }).theme, expected.key);
   assert.equal(buildCreativeBrief({ topic, recentThemes }).version, expected.version);
 });
