@@ -32,7 +32,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `AI_STICKY_PROVIDER_ROUTING` | Yes | services/shared/utils/ai-service.js:80 |
 | `AI_SUITE_API_KEY` | Yes | scripts/collectCommsWorkerHealth.js:1<br>server.js:200<br>server.js:201<br>services/shared/middleware/suiteAuth.js:60 |
 | `AI_SUITE_AUDIT_CALLBACK_TOKEN` | Yes | audits/utils/callbackAuth.js:9<br>audits/utils/orchestrator.js:147<br>services/shared/middleware/suiteAuth.js:64 |
-| `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1351<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
+| `AI_TIMEOUT` | Yes | services/artwork/createPodcastArtwork.js:14<br>services/artwork/createQuizArtwork.js:11<br>services/blotato/utils/newsShortsService.js:1356<br>services/script/utils/getSponsor.js:38<br>services/tts/utils/mergeProcessor.js:26 |
 | `AI_USAGE_LOG_ENABLED` | Yes | services/shared/utils/ai-service.js:269 |
 | `ALLOW_EPHEMERAL_STATE` | Yes | scripts/performanceGate.js:10<br>scripts/startupCheck.js:40<br>server.js:186<br>services/outreach/services/batchService.js:47<br>services/shared/utils/stateFile.js:76 |
 | `API_HUNTER_KEY` | Yes | services/outreach/bookFeature/contactEligibility.js:15<br>services/outreach/services/outreachCore.js:27 |
@@ -121,7 +121,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_BRAND_VOICE_NAME` | Yes | services/blotato/utils/newsShortsService.js:19 |
 | `BLOTATO_DAILY_PAID_RENDER_CAP` | Yes | scripts/contentDeliveryDiagnostics.js:235<br>scripts/contentDeliveryDiagnostics.js:238 |
 | `BLOTATO_DEFAULT_CHANNELS` | Yes | services/blotato/utils/autoPublishService.js:1424 |
-| `BLOTATO_DEFAULT_FOLLOW_CTA` | Yes | services/blotato/utils/newsShortsService.js:240 |
+| `BLOTATO_DEFAULT_FOLLOW_CTA` | Yes | services/blotato/utils/newsShortsService.js:242 |
 | `BLOTATO_FACEBOOK_MEDIA_TYPE` | Yes | services/blotato/utils/autoPublishService.js:1048 |
 | `BLOTATO_FACEBOOK_PAGE_ID` | Yes | services/blotato/utils/autoPublishService.js:903<br>services/blotato/utils/autoPublishService.js:1045 |
 | `BLOTATO_FACEBOOK_SUBACCOUNT_ID` | No | services/blotato/utils/autoPublishService.js:903<br>services/blotato/utils/autoPublishService.js:1045 |
@@ -141,11 +141,11 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_NEWS_AUDIENCE` | No | services/blotato/utils/autoPublishService.js:1827 |
 | `BLOTATO_NEWS_CTA` | Yes | services/blotato/utils/autoPublishService.js:1832 |
 | `BLOTATO_NEWS_DURATION_SECONDS` | Yes | services/blotato/utils/autoPublishService.js:1825 |
-| `BLOTATO_NEWS_JSON_RESPONSE_FORMAT` | Yes | services/blotato/utils/newsShortsService.js:1326 |
+| `BLOTATO_NEWS_JSON_RESPONSE_FORMAT` | Yes | services/blotato/utils/newsShortsService.js:1331 |
 | `BLOTATO_NEWS_MAX_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:15 |
 | `BLOTATO_NEWS_MIN_SCENE_WORDS` | Yes | services/blotato/utils/newsShortsService.js:16 |
 | `BLOTATO_NEWS_MIN_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:13 |
-| `BLOTATO_NEWS_RESPONSE_FORMAT_MODE` | Yes | services/blotato/utils/newsShortsService.js:1329 |
+| `BLOTATO_NEWS_RESPONSE_FORMAT_MODE` | Yes | services/blotato/utils/newsShortsService.js:1334 |
 | `BLOTATO_NEWS_RSS_URL` | Yes | services/blotato/utils/rssArticlePicker.js:77<br>services/blotato/utils/rssArticleSource.js:129 |
 | `BLOTATO_NEWS_SHORT_MAX_TOKENS` | Yes | services/blotato/utils/newsShortsService.js:12 |
 | `BLOTATO_NEWS_TARGET_SCRIPT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:14 |
@@ -173,7 +173,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_RSS_PICK_MODE` | Yes | services/blotato/utils/autoPublishService.js:1443<br>services/blotato/utils/rssArticlePicker.js:67<br>services/blotato/utils/rssArticleSource.js:226 |
 | `BLOTATO_RSS_PREFER_R2` | Yes | services/blotato/utils/rssArticlePicker.js:117<br>services/blotato/utils/rssArticleSource.js:142 |
 | `BLOTATO_SCHEDULE_RECOVERY_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:1745 |
-| `BLOTATO_SCRIPT_TIMEOUT_MS` | Yes | services/blotato/utils/newsShortsService.js:1351 |
+| `BLOTATO_SCRIPT_TIMEOUT_MS` | Yes | services/blotato/utils/newsShortsService.js:1356 |
 | `BLOTATO_STEP0_PREFLIGHT_ENABLED` | Yes | services/blotato/utils/autoPublishService.js:955 |
 | `BLOTATO_TEMPLATE_AUTO_DISCOVERY` | Yes | services/blotato/utils/autoPublishService.js:363<br>services/blotato/utils/autoPublishService.js:1441 |
 | `BLOTATO_TEMPLATE_ID_MODE` | Yes | services/blotato/utils/autoPublishService.js:184<br>services/blotato/utils/autoPublishService.js:1439 |
@@ -181,7 +181,7 @@ This inventory makes the runtime configuration contract auditable without duplic
 | `BLOTATO_TEMPLATE_VERIFY` | Yes | services/blotato/utils/autoPublishService.js:361<br>services/blotato/utils/autoPublishService.js:1440 |
 | `BLOTATO_TEXT_TO_IMAGE_MODEL` | Yes | services/blotato/utils/autoPublishService.js:488<br>services/blotato/utils/newsShortsService.js:48 |
 | `BLOTATO_THUMBNAIL_TEXT_WORDS` | Yes | services/blotato/utils/newsShortsService.js:58 |
-| `BLOTATO_THURSDAY_PODCAST_PLUG` | Yes | services/blotato/utils/newsShortsService.js:236 |
+| `BLOTATO_THURSDAY_PODCAST_PLUG` | Yes | services/blotato/utils/newsShortsService.js:238 |
 | `BLOTATO_TIKTOK_DISABLED_COMMENTS` | Yes | services/blotato/utils/autoPublishService.js:1035 |
 | `BLOTATO_TIKTOK_DISABLED_DUET` | Yes | services/blotato/utils/autoPublishService.js:1036 |
 | `BLOTATO_TIKTOK_DISABLED_STITCH` | Yes | services/blotato/utils/autoPublishService.js:1037 |
