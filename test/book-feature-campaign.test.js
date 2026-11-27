@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import { BookFeatureRepository } from "../services/outreach/bookFeature/repository.js";
+import { ControlledGuestOutbox } from "../services/outreach/services/controlledGuestOutbox.js";
 import { scheduledLondonOccurrence } from "../services/outreach/bookFeature/core.js";
 import { runBookFeatureAssessment, resolveWeeklyBook, analysePublishedBook } from "../services/outreach/bookFeature/run.js";
 
@@ -18,6 +19,10 @@ function fixture() {
   const query = async (sql, values = []) => {
     const statement = db.prepare(sql);
     if (/^\s*(?:SELECT|PRAGMA)/i.test(sql)) return { results: statement.all(...values), meta: { changes: 0 } };
+    if (/\bRETURNING\b/i.test(sql)) {
+      const results = statement.all(...values);
+      return { results, meta: { changes: results.length } };
+    }
     const result = statement.run(...values);
     return { results: [], meta: { changes: result.changes } };
   };
@@ -273,4 +278,45 @@ test("controlled-test queue enforces backend allowlist, suppression, reservation
   assert.equal((await repository.processInboundEvent(event)).duplicate, true);
   assert.equal(db.prepare("SELECT state FROM book_feature_opportunities WHERE id='opp'").get().state, "suppressed");
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM comms_hub_outreach_suppression").get().n, 1);
+});
+
+test("guest article controlled outbox enforces shared approval, provider boundary, evidence and opt-out", async (t) => {
+  const { db, d1 } = fixture(); t.after(() => db.close());
+  const now = () => new Date("2026-11-27T09:00:00.000Z");
+  const controls = new BookFeatureRepository(d1, { now });
+  const archives = new Map();
+  let validAssessment = true;
+  const guest = new ControlledGuestOutbox(d1, { now,
+    persist: async (_bucket,key,value) => archives.set(key,JSON.stringify(value)),
+    read: async (_bucket,key) => archives.get(key),
+    checkAssessment: async () => validAssessment });
+  const lead = { email: "editor@example.org", domain: "example.org",
+    sourceUrl: "https://example.org/contribute", qualification: { qualified: true } };
+  const request = { lead, pitch: { subject: "Article idea", body: "A safe controlled draft", qa: { passed: true, score: 9.5 } },
+    keyword: "AI", validationExpiresAt: "2026-11-28T09:00:00.000Z", assessmentKey: "private/test.json", recipientType: "role_address" };
+  assert.equal(await guest.queue(request), null);
+  await controls.configureControlledTest({ recipients: ["test@example.com"], perRunCap: 1, dailyCap: 1,
+    actor: "operator", reason: "controlled inbox", expectedVersion: 2 });
+  validAssessment = false;
+  assert.equal(await guest.queue(request), null);
+  validAssessment = true;
+  const queued = await guest.queue(request);
+  assert.equal(queued.status, "queued");
+  assert.equal(await guest.queue(request), null);
+  guest.shared.createOutboundConversation = async () => ({ conversationId: "test-thread" });
+  let sent = 0;
+  const result = await guest.runOnce({ emailService: { send: async ({ recipients,beforeProviderHandoff }) => {
+    assert.deepEqual(recipients, ["test@example.com"]);
+    assert.equal(await beforeProviderHandoff(), true);
+    sent++;
+    return { providerMessageId: "guest-message-1" };
+  } } });
+  assert.equal(sent, 1);
+  assert.equal(result.status, "accepted");
+  assert.equal(db.prepare("SELECT status FROM guest_article_controlled_outbox").get().status, "accepted");
+  assert.equal(await guest.controls.reserveTarget({ opportunityId: "different", email: "editor@example.org", domain: "example.org" }).then(x=>x.acquired), false);
+  assert.equal((await guest.inbound({ providerMessageId: "guest-message-1", eventId: "unmatched", sender: "other@example.com", text: "No thanks" })).matched, false);
+  assert.equal((await guest.inbound({ providerMessageId: "guest-message-1", eventId: "test-opt-out", sender: "test@example.com", text: "No thanks" })).category, "decline");
+  assert.equal((await guest.inbound({ providerMessageId: "guest-message-1", eventId: "test-opt-out", sender: "test@example.com", text: "No thanks" })).duplicate, true);
+  assert.equal(db.prepare("SELECT email FROM comms_hub_outreach_suppression").get().email, "test@example.com");
 });
