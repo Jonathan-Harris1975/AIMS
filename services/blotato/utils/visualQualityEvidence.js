@@ -34,9 +34,16 @@ export async function collectVisualQualityEvidence(options = {}) {
 let cached;
 export async function getCachedVisualQualityEvidence() {
   if (cached && cached.expiresAt > Date.now()) return cached.promise;
-  const promise = collectVisualQualityEvidence();
-  cached = { expiresAt: Date.now() + 300000, promise };
-  return promise;
+  const entry = { expiresAt: Infinity, promise: null };
+  entry.promise = collectVisualQualityEvidence().then((result) => {
+    entry.expiresAt = Date.now() + 300000;
+    return result;
+  }, (error) => {
+    if (cached === entry) cached = undefined;
+    throw error;
+  });
+  cached = entry;
+  return entry.promise;
 }
 
 export function renderVisualQualityAppendix(evidence = {}) {
