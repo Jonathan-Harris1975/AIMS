@@ -175,3 +175,13 @@ test("atomic dispatch admission denial prevents provider handoff", async () => {
   assert.equal(sends, 0);
   assert.equal(outcomes[0].errorCode, "atomic_admission_denied");
 });
+
+test("signed inbound content cannot be substituted", async () => {
+  const secret = "test-secret";
+  const timestamp = "2026-11-27T08:00:00.000Z";
+  const rawBody = JSON.stringify({ providerEventId: "event-1", text: "No thanks" });
+  const signature = `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`;
+  await assert.rejects(handleBookFeatureInbound({ rawBody, signature, timestamp, secret,
+    providerEventId: "event-1", text: "Interested" }, { repository: {},
+    now: () => new Date("2026-11-27T08:01:00.000Z") }), /does not match/);
+});
