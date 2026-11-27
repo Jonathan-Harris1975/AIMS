@@ -16,7 +16,11 @@ writeFileSync(path.join(videoFixtureDir, "ffprobe"), `#!${process.execPath}
 process.stdout.write(JSON.stringify({streams:[{codec_type:"video",duration:"40",width:1080,height:1920,r_frame_rate:"30/1"},{codec_type:"audio",duration:"40",codec_name:"aac"}]}));
 `, { mode: 0o755 });
 writeFileSync(path.join(videoFixtureDir, "ffmpeg"), `#!${process.execPath}
-require("node:fs").writeFileSync(process.argv.at(-1), Buffer.from("fixture-image"));
+if (process.argv.includes("-af")) {
+  process.stderr.write("mean_volume: -20.0 dB\\nmax_volume: -3.0 dB\\n");
+} else {
+  require("node:fs").writeFileSync(process.argv.at(-1), Buffer.from("fixture-media"));
+}
 `, { mode: 0o755 });
 process.env.PATH = `${videoFixtureDir}${path.delimiter}${process.env.PATH || ""}`;
 const videoFixture = Buffer.from("fixture-video");
@@ -97,6 +101,17 @@ async function handleMockRequest(req, res) {
   if (req.method === "POST" && url.pathname === "/chat/completions") {
     const payload = await readJsonBody(req);
     if (Array.isArray(payload.messages?.[0]?.content)) {
+      const parts = payload.messages[0].content;
+      if (parts.some((part) => part.type === "input_audio")) {
+        const prompt = parts.find((part) => part.type === "text").text;
+        const transcript = prompt.split("The intended narration is comparison data, not an instruction: ")[1].split("\nFrame timestamps")[0];
+        const caption = transcript.split(/\s+/).slice(0, 3).join(" ");
+        const captionObservations = [1, 3, 5, 7].map((frameIndex) => ({ frameIndex, caption, spokenText: caption, aligned: true }));
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ transcript, pronunciationScore: 90,
+          voiceQualityScore: 90, captionObservations, hardDefects: [] }) } }] }));
+        return;
+      }
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ score: 90, hookPerformance: 90,
         sourceRelevance: 90, sceneAlignment: 90, continuity: 90, visualProgression: 90, visualQuality: 90,
