@@ -7,7 +7,7 @@ import { DEFAULT_BLOTATO_SHORT_LANE, requireShortLaneConfig, getShortLaneConfig 
 import { buildCreativeDirection, formatCreativeDirection } from "./blotatoVisualThemes.js";
 import { buildBlotatoPersona } from "../../script/utils/toneSetter.js";
 import { jonathanVoicePrompt } from "../../content-quality/jonathanVoice.js";
-import { buildCreativeBrief, buildStoryboard, buildHookCandidates } from "./creativeDirection.js";
+import { buildCreativeBrief, buildStoryboard, buildHookCandidates, scoreHook } from "./creativeDirection.js";
 
 const NEWS_SHORT_MAX_TOKENS = Math.max(2600, Number(process.env.BLOTATO_NEWS_SHORT_MAX_TOKENS || 3600));
 const MIN_SCRIPT_WORDS = Math.max(75, Number(process.env.BLOTATO_NEWS_MIN_SCRIPT_WORDS || 80));
@@ -537,7 +537,7 @@ Return exactly one JSON object with these keys:
   "angle": "one sentence explaining the editorial angle",
   "hook": "opening line following the ${laneConfig.slug} hook rule — see system prompt. No word-count restriction. Content determines length.",
   ${requestHookAlt ? `"hookAlt": "a second candidate hook for the same lane using a different hook pattern from the system prompt — do not repeat the primary hook structure",` : `"hookAlt": "",`}
-  "editorialHooks": ["three distinct source-grounded opening lines, using different editorial angles; include the selected hook and two alternatives, no unsupported claims"],
+  "editorialHooks": ["selected source-grounded opening line", "alternative opening line with a different angle", "third opening line with another angle"],
   "script": "one continuous spoken story in natural British English, aim for about ${targetScriptWords} words for this story, while staying between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words",
   "narrativeArc": "one sentence describing the complete hook-to-takeaway progression",
   "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
@@ -1502,8 +1502,9 @@ export async function buildOrCreateShortLane(options = {}) {
     recentThemes: options.recentThemes || [],
   });
   const storyboard = buildStoryboard({ script: pack.script, hook: pack.hook, scenes: pack.scenes, durationSeconds: options.durationSeconds || 45, creativeBrief });
-  const hookCandidates = pack.editorialHooks?.length === 3
-    ? pack.editorialHooks.map((hook, index) => ({ hook, category: index === 0 ? "selected-editorial" : "alternative-editorial", source: "existing-model-call" }))
+  const finalHooks = [...new Set([pack.hook, ...(pack.editorialHooks || [])].filter(Boolean))].slice(0, 3);
+  const hookCandidates = finalHooks.length === 3
+    ? finalHooks.map((hook, index) => ({ hook, category: index === 0 ? "selected-editorial" : "alternative-editorial", score: scoreHook(hook, { topic: options.article?.title || pack.internalTitle, evidence: options.article?.summary }) })).sort((a, b) => b.score - a.score)
     : buildHookCandidates({ topic: options.article?.title || pack.internalTitle, angle: pack.angle, evidence: options.article?.summary, audience: options.audience });
   const visualInputs = buildBlotatoVideoInputs(pack);
   // Always build source-grounded manual inputs from the pack. Route this
