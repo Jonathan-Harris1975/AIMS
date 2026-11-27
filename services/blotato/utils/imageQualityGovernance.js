@@ -117,7 +117,7 @@ export function resolveImageProviderPlan({
       error.statusCode = 503;
       throw error;
     }
-    sequence = [qualityModel, primaryModel];
+    sequence = allowFallback ? [qualityModel, primaryModel] : [qualityModel];
   } else {
     sequence = [primaryModel];
     if (allowEscalation && escalationLimit > 0 && qualityModel) sequence.push(qualityModel);
