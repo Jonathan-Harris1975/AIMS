@@ -99,3 +99,10 @@ test("image-provider plans stay inside the central route and bound fallback atte
 test("image score weights are calibrated to the requested 100-point framework", () => {
   assert.equal(imageQualityScore({ relevance: 100, visualQuality: 100, composition: 100, brand: 100, originality: 100, platform: 100, technical: 100 }).score, 100);
 });
+
+test("quality-first routing never falls back when fallback is disabled", () => {
+  const providers = [{ model: "route/primary" }, { model: "route/quality" }, { model: "route/backup" }];
+  const plan = resolveImageProviderPlan({ providers, qualityTier: "route/quality", strategy: "quality-first", fallbackEnabled: false });
+  assert.deepEqual(plan.models, ["route/quality"]);
+  assert.equal(plan.fallbackEnabled, false);
+});
