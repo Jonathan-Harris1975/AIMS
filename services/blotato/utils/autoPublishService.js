@@ -675,6 +675,7 @@ async function createAndWaitForVideo({ templateId, templateIdCandidates = [], pa
         visualPrompt,
         manualInputsConfigured: true,
         useBrandKit,
+        creativeBrief: pack.creativeDirection,
       }), apiKey);
       usedTemplateId = candidateTemplateId;
       if (candidateTemplateId !== templateId) {
