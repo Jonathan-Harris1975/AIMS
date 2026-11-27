@@ -117,3 +117,11 @@ test("cache read failure is recorded while bounded research continues", async ()
   assert.equal(result.sources[0].status, "no_source_leads_found");
   assert.deepEqual(result.sources[0].cache, { read: "failed", write: "written" });
 });
+
+test("malformed entity input fails closed without aborting the assessment", async () => {
+  const result = await researchCandidateSources(null, { apiKey: "test-key" });
+  assert.equal(result.status, "invalid_entity_input");
+  assert.deepEqual(result.sources, []);
+  assert.equal(result.verifiedOrganisations, 0);
+  assert.equal(result.contactEligibleOpportunities, 0);
+});
