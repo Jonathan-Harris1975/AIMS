@@ -178,7 +178,9 @@ export function imageQualityScore({
   technical = 0,
   criticalDefects = [],
 } = {}) {
-  const score = Math.round(
+  const dimensions = [relevance, visualQuality, composition, brand, originality, platform, technical];
+  const valid = dimensions.every((value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100);
+  const score = valid ? Math.round(
     relevance * 0.25
     + visualQuality * 0.2
     + composition * 0.15
@@ -186,8 +188,9 @@ export function imageQualityScore({
     + originality * 0.1
     + platform * 0.1
     + technical * 0.05,
-  );
-  const defects = Array.isArray(criticalDefects) ? criticalDefects : [];
+  ) : 0;
+  const defects = Array.isArray(criticalDefects) ? [...criticalDefects] : ["Invalid critical-defect evidence"];
+  if (!valid) defects.push("Invalid image QA dimension score");
   return {
     score: Math.max(0, Math.min(100, score)),
     criticalDefects: defects,
