@@ -170,7 +170,7 @@ export class BookFeatureRepository {
   }
 
   async reserveTarget({ opportunityId, campaignType = "book_feature", email, domain, ttlMs = 7 * 24 * 60 * 60_000 }) {
-    const key = normalisedEmail(email) || String(domain || "").trim().toLowerCase();
+    const key = String(domain || "").trim().toLowerCase().replace(/^www\./, "") || normalisedEmail(email);
     if (!key || !["guest_article","book_feature"].includes(campaignType)) throw new Error("A valid reservation target is required.");
     const now = this.now();
     const at = now.toISOString();
@@ -253,9 +253,10 @@ export class BookFeatureRepository {
     const sends = first(await this.d1.query(`SELECT COUNT(*) AS total FROM book_feature_outbox
       WHERE created_at>=? AND status IN ('queued','leased','accepted','delivered','unknown')`, [dayStart.toISOString()]));
     if (Number(sends?.total || 0) >= config.dailyCap) throw Object.assign(new Error("Controlled-test daily cap reached."), { code: "BOOK_FEATURE_DAILY_CAP" });
-    const row = first(await this.d1.query(`SELECT o.id,o.contact_id,o.gate_json,c.email,c.validation_result,c.validation_expires_at,
+    const row = first(await this.d1.query(`SELECT o.id,o.contact_id,o.gate_json,c.email,c.validation_result,c.validation_expires_at,g.official_domain,
       c.eligibility_status,p.id AS pitch_id,p.subject,p.body_key,q.rubric_version
       FROM book_feature_opportunities o JOIN book_feature_contacts c ON c.id=o.contact_id
+      JOIN book_feature_organisations g ON g.id=o.organisation_id
       JOIN book_feature_pitch_versions p ON p.opportunity_id=o.id
       JOIN book_feature_qa_reviews q ON q.pitch_version_id=p.id AND q.passed=1
       WHERE o.id=? AND o.state='qa_passed' ORDER BY p.version DESC LIMIT 1`, [opportunityId]));
@@ -266,7 +267,7 @@ export class BookFeatureRepository {
     const suppressed = first(await this.d1.query(`SELECT id FROM comms_hub_outreach_suppression WHERE lower(email)=? OR
       (domain<>'' AND lower(domain)=?) LIMIT 1`, [email,email.split("@")[1]]));
     if (suppressed) throw Object.assign(new Error("Recipient is suppressed."), { code: "BOOK_FEATURE_SUPPRESSED" });
-    const reservation = await this.reserveTarget({ opportunityId, email });
+    const reservation = await this.reserveTarget({ opportunityId, email, domain: row.official_domain });
     if (!reservation.acquired) throw Object.assign(new Error("Target is reserved by another campaign."), { code: "OUTREACH_TARGET_RESERVED" });
     const outboxId = createHash("sha256").update(`book-feature-outbox\u001f${idempotencyKey}`).digest("hex");
     const result = await this.d1.batch([
