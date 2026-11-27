@@ -5,7 +5,7 @@ import { scheduledLondonOccurrence } from "../bookFeature/core.js";
 import { runBookFeatureAssessment } from "../bookFeature/run.js";
 import { BookFeatureRepository } from "../bookFeature/repository.js";
 import { BookFeatureDispatchWorker } from "../bookFeature/dispatchWorker.js";
-import { handleBookFeatureInbound } from "../bookFeature/inboundLifecycle.js";
+import { handleBookFeatureInbound, verifyInboundSignature } from "../bookFeature/inboundLifecycle.js";
 import { runKeyword } from "../services/outreachService.js";
 import { runNextBatch, resetProgress } from "../services/batchService.js";
 import { getRequestIdempotencyKey, requestDedupe } from "../../shared/utils/requestDedupe.js";
@@ -105,10 +105,29 @@ router.post("/book-feature/delivery/:outboxId/reconcile", asyncRoute(async (req,
   res.json({ ok: true, ...result });
 }));
 
+router.post("/book-feature/delivery/event", asyncRoute(async (req, res) => {
+  const rawBody = req.aimsRawBody?.toString("utf8");
+  if (!rawBody || !verifyInboundSignature(rawBody, { signature: req.get("x-aims-outreach-signature"),
+    timestamp: req.get("x-aims-outreach-timestamp"), secret: process.env.BOOK_FEATURE_INBOUND_WEBHOOK_SECRET })) {
+    return res.status(401).json({ ok: false, error: "Provider event authentication failed." });
+  }
+  const event = JSON.parse(rawBody);
+  if (!event.providerEventId || !event.providerMessageId || !event.outboxId || !["delivered","bounced","failed"].includes(event.outcome)) {
+    return res.status(400).json({ ok: false, error: "Matching provider delivery evidence is required." });
+  }
+  const repository = await bookFeatureRepository(res);
+  if (!repository) return;
+  const result = await repository.reconcileOutbox({ outboxId: event.outboxId, outcome: event.outcome,
+    providerEventId: event.providerEventId, providerMessageId: event.providerMessageId,
+    evidence: { authenticatedRelay: true }, actor: "authenticated_provider_relay", authenticatedProvider: true });
+  res.status(202).json({ ok: true, ...result });
+}));
+
 router.post("/book-feature/inbound", asyncRoute(async (req, res) => {
   const repository = await bookFeatureRepository(res);
   if (!repository) return;
-  const rawBody = req.aimsRawBody?.toString("utf8") || JSON.stringify(req.body || {});
+  const rawBody = req.aimsRawBody?.toString("utf8");
+  if (!rawBody) return res.status(400).json({ ok: false, error: "Original signed payload is required." });
   const result = await handleBookFeatureInbound({ rawBody,
     signature: req.get("x-aims-outreach-signature"), timestamp: req.get("x-aims-outreach-timestamp"),
     secret: process.env.BOOK_FEATURE_INBOUND_WEBHOOK_SECRET,
