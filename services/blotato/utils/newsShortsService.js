@@ -178,6 +178,7 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       script: { type: "string" },
       narrativeArc: { type: "string" },
       visualContinuity: { type: "string" },
+      editorialHooks: { type: "array", items: { type: "string" } },
       scenes: {
         type: "array",
         // Keep the OpenRouter schema broadly provider-compatible. Some providers
@@ -211,6 +212,7 @@ const BLOTATO_NEWS_SHORT_JSON_SCHEMA = Object.freeze({
       "angle",
       "hook",
       "hookAlt",
+      "editorialHooks",
       "script",
       "narrativeArc",
       "visualContinuity",
@@ -535,6 +537,7 @@ Return exactly one JSON object with these keys:
   "angle": "one sentence explaining the editorial angle",
   "hook": "opening line following the ${laneConfig.slug} hook rule — see system prompt. No word-count restriction. Content determines length.",
   ${requestHookAlt ? `"hookAlt": "a second candidate hook for the same lane using a different hook pattern from the system prompt — do not repeat the primary hook structure",` : `"hookAlt": "",`}
+  "editorialHooks": ["three distinct source-grounded opening lines, using different editorial angles; include the selected hook and two alternatives, no unsupported claims"],
   "script": "one continuous spoken story in natural British English, aim for about ${targetScriptWords} words for this story, while staying between ${MIN_SCRIPT_WORDS} and ${MAX_SCRIPT_WORDS} words",
   "narrativeArc": "one sentence describing the complete hook-to-takeaway progression",
   "visualContinuity": "one sentence defining the recurring protagonist type, setting, palette, lighting and camera language shared across scenes",
@@ -832,6 +835,7 @@ function normalisePack(pack = {}) {
   for (const key of required) {
     output[key] = cleanText(pack[key] || "", key === "script" ? 4000 : 1400);
   }
+  output.editorialHooks = [...new Set([output.hook, ...(Array.isArray(pack.editorialHooks) ? pack.editorialHooks : []), pack.hookAlt].map((value) => cleanText(typeof value === "string" ? value : "", 320)).filter(Boolean))].slice(0, 3);
   output.theme = ["futuristic", "modern"].includes(output.theme.toLowerCase()) ? output.theme.toLowerCase() : "modern";
   output.creativeBrief = output.creativeBrief || `Source-specific ${output.theme} treatment for ${output.internalTitle || "the supplied story"}.`;
 
@@ -1498,7 +1502,9 @@ export async function buildOrCreateShortLane(options = {}) {
     recentThemes: options.recentThemes || [],
   });
   const storyboard = buildStoryboard({ script: pack.script, hook: pack.hook, scenes: pack.scenes, durationSeconds: options.durationSeconds || 45, creativeBrief });
-  const hookCandidates = buildHookCandidates({ topic: options.article?.title || pack.internalTitle, angle: pack.angle, evidence: options.article?.summary, audience: options.audience });
+  const hookCandidates = pack.editorialHooks?.length === 3
+    ? pack.editorialHooks.map((hook, index) => ({ hook, category: index === 0 ? "selected-editorial" : "alternative-editorial", source: "existing-model-call" }))
+    : buildHookCandidates({ topic: options.article?.title || pack.internalTitle, angle: pack.angle, evidence: options.article?.summary, audience: options.audience });
   const visualInputs = buildBlotatoVideoInputs(pack);
   // Always build source-grounded manual inputs from the pack. Route this
   // lower-level create endpoint through the same documented template contract
