@@ -65,7 +65,7 @@ export function createRateLimitMiddleware(options = {}) {
   return (req, res, next) => {
     if (shouldSkip(req)) return next();
 
-    const key = `${getRateLimitClientId(req)}:${req.method}`;
+    const key = `${options.scope ? `${options.scope}:` : ""}${getRateLimitClientId(req)}:${req.method}`;
     const now = Date.now();
     const current = buckets.get(key);
 
