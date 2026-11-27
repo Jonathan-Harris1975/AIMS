@@ -708,14 +708,14 @@ export async function benchmarkArtworkModels({ briefs, confirmPaid = false, sign
   for (const brief of briefs) {
     const prompt = String(brief?.prompt || "").trim();
     const mode = String(brief?.mode || "social").trim();
-    if (!prompt || prompt.length > 2500 || !["social", "socialBlog", "newsletter", "blog", "podcast", "quiz"].includes(mode)) {
+    if (!prompt || prompt.length > 2500 || !["social", "social-blog", "newsletter", "blog", "podcast", "quiz"].includes(mode)) {
       throw new Error("Invalid benchmark brief");
     }
   }
   for (const brief of briefs) {
     for (const provider of approved) {
       if (signal?.aborted) throw signal.reason || new Error("Benchmark cancelled");
-      const mode = brief.mode || "social";
+      const mode = String(brief.mode || "social").trim();
       const evidence = createVisualEvidenceTracker({ mode, prompt: brief.prompt, benchmark: true });
       let image;
       try {
