@@ -101,16 +101,18 @@ export function buildCreativeBrief({ topic = "", angle = "", audience = "", core
   };
 }
 
-export function buildStoryboard({ script = "", hook = "", scenes = [], durationSeconds = 45, creativeBrief = {} } = {}) {
+export function buildStoryboard({ script = "", hook = "", scenes = [], durationSeconds = 45, creativeBrief = {}, article = {} } = {}) {
   assertApprovedBlotatoTheme(creativeBrief.theme || "modern");
   const sourceScenes = Array.isArray(scenes) && scenes.length ? scenes : [{ script, mediaSource: creativeBrief.coreMessage }];
   const total = Math.max(1, Number(durationSeconds) || 45);
-  const slice = total / sourceScenes.length;
+  const weights = sourceScenes.map((scene) => Math.max(1, String(scene?.script || "").trim().split(/\s+/).length));
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+  const source = text(article.url || article.link || article.title || "", 500);
   return sourceScenes.map((scene, index) => ({
     id: `scene-${index + 1}`,
-    startSeconds: Number((index * slice).toFixed(2)),
-    endSeconds: Number(((index + 1) * slice).toFixed(2)),
-    durationSeconds: Number(slice.toFixed(2)),
+    startSeconds: Number((total * weights.slice(0, index).reduce((sum, value) => sum + value, 0) / weightTotal).toFixed(2)),
+    endSeconds: Number((total * weights.slice(0, index + 1).reduce((sum, value) => sum + value, 0) / weightTotal).toFixed(2)),
+    durationSeconds: Number((total * weights[index] / weightTotal).toFixed(2)),
     purpose: index === 0 ? "hook" : index === sourceScenes.length - 1 ? "conclusion" : "evidence-and-analysis",
     narration: text(scene?.script || (index === 0 ? hook : script), 900),
     visualConcept: text(scene?.mediaSource || creativeBrief.coreMessage, 700),
@@ -123,10 +125,10 @@ export function buildStoryboard({ script = "", hook = "", scenes = [], durationS
     camera: index === 0 ? "Immediate medium close-up or decisive subject-led opening." : "Purposeful variation with clear subject and readable depth.",
     motion: index === 0 ? "Subtle push-in or controlled reveal; establish movement immediately." : "One restrained motion cue that supports the narration.",
     captions: "High-contrast captions in the bottom safe area; never cover the primary subject.",
-    onScreenText: "",
+    onScreenText: text(scene?.onScreenText || "", 120),
     transition: index === 0 ? "cut" : "purposeful editorial cut",
     theme: creativeBrief.theme,
-    factualSources: [],
+    factualSources: source ? [source] : [],
     acceptance: [
       "topic-specific",
       "mobile-readable",
