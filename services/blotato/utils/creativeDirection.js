@@ -68,7 +68,7 @@ export function buildHookCandidates({ topic = "", angle = "", evidence = "", aud
   }).sort((a, b) => b.score - a.score);
 }
 
-function scoreHook(hook, { topic = "", evidence = "" } = {}) {
+export function scoreHook(hook, { topic = "", evidence = "" } = {}) {
   const value = String(hook);
   const specific = [...tokens(topic), ...tokens(evidence)].some((token) => value.toLowerCase().includes(token));
   return Math.max(0, Math.min(100, 55 + (specific ? 20 : 0) + (/[0-9%£$]/.test(value) ? 10 : 0) + (value.length >= 55 && value.length <= 220 ? 10 : 0)));
