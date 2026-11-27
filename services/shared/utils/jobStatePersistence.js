@@ -5,7 +5,9 @@ export function retainJob(job, now = Date.now(), ttlMs = 86400000) {
       (['queued','running'].includes(job.status) || job.result?.remediationPending || job.evidenceRetentionRequired ||
        ['awaiting-remediation','remediation-blocked'].includes(job.phase))) return true;
   const updated = Date.parse(job.updatedAt || '');
-  return Number.isFinite(updated) && now - updated <= ttlMs;
+  const visualEvidence = /^blotato-[a-z-]+-publish$/.test(String(job.type || '')) && job.status === 'completed' && job.result?.renderedVideoQa;
+  const retentionMs = visualEvidence ? Math.max(ttlMs, 35 * 86400000) : ttlMs;
+  return Number.isFinite(updated) && now - updated <= retentionMs;
 }
 
 export function mergeJobSnapshots(remote, incoming, {now = Date.now(), ttlMs = 86400000} = {}) {
