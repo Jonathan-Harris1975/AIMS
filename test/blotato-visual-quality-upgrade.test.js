@@ -126,7 +126,7 @@ test("image QA rejects malformed or inflated dimension evidence", () => {
 
 test("visual request preserves factual constraints with a separate directive", async () => {
   const { buildVisualCreationRequest } = await import("../services/blotato/utils/visualRequest.js");
-  const request = buildVisualCreationRequest({ 
+  const request = buildVisualCreationRequest({
     candidateTemplateId: "template", visualPrompt: "Story", manualInputsConfigured: false,
     creativeBrief: { theme: "modern", factualConstraints: "Source only", subjectPlacement: "Centre" },
    });
