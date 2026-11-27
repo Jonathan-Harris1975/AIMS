@@ -30,6 +30,25 @@ async function hunterContacts(domain, { apiKey = process.env.API_HUNTER_KEY || p
   }
 }
 
+export async function checkCurrentContactAssessment({ domain, email, recipientType, campaign, assessmentKey, now = new Date() },
+  { readAssessment = async (key) => JSON.parse(await getObjectAsText("kdp", key)) } = {}) {
+  if (!domain || !email || !assessmentKey || !["role_address","named_person"].includes(recipientType)) return false;
+  try {
+    const record = await readAssessment(assessmentKey);
+    const scoped = record?.organisations?.[domain];
+    const approval = scoped?.[campaign] || scoped || record;
+    return approval?.officialDomain === domain && approval.campaign === campaign &&
+      approval.channel === "email" && approval.jurisdiction === "GB" && approval.subscriberType === "corporate" &&
+      approval.lawfulBasis === "legitimate_interests_documented" && approval.approved === true &&
+      typeof approval.approvedBy === "string" && Boolean(approval.approvedBy.trim()) &&
+      Date.parse(approval.assessedAt || "") <= now.getTime() && Date.parse(approval.expiresAt || "") > now.getTime() &&
+      ["confirmed","not_required"].includes(approval.consentStatus) &&
+      Array.isArray(approval.allowedRecipientTypes) && approval.allowedRecipientTypes.includes(recipientType) &&
+      (recipientType === "role_address" || (approval.consentStatus === "confirmed" && Array.isArray(approval.consentedEmails) &&
+        approval.consentedEmails.includes(email)));
+  } catch { return false; }
+}
+
 export async function discoverEligibleContacts(identity, {
   searchContacts = hunterContacts,
   validateEmails = batchValidateEmails,
@@ -46,7 +65,8 @@ export async function discoverEligibleContacts(identity, {
   try { assessment = await readAssessment(assessmentKey); }
   catch { return { status: "blocked", reason: "lawful_basis_assessment_unavailable", contacts: [] }; }
   const observed = now().getTime();
-  const approval = assessment?.organisations?.[identity.officialDomain] || assessment;
+  const scoped = assessment?.organisations?.[identity.officialDomain];
+  const approval = scoped?.book_feature || scoped || assessment;
   const validAssessment = approval?.officialDomain === identity.officialDomain && approval?.campaign === "book_feature" &&
     approval?.channel === "email" && approval?.jurisdiction === "GB" && approval?.subscriberType === "corporate" &&
     approval?.lawfulBasis === "legitimate_interests_documented" && approval?.approved === true &&
