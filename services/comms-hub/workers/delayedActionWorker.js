@@ -123,6 +123,7 @@ export class CommsHubDelayedActionWorker {
         bodyText: `Conversation ${item.conversation_id} ${item.action_type === 'sla_breach' ? 'is overdue' : 'is approaching its response deadline'}.`,
         severity: item.action_type === 'sla_breach' ? 'critical' : 'warning',
         emailRequested: item.action_type === 'sla_breach',
+        metadata: { requires_action: true },
         idempotencySeed: item.id,
       });
     }
