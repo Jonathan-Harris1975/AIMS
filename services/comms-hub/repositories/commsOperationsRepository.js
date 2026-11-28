@@ -10,6 +10,13 @@ const OPERATIONAL_STATUSES = new Set([
   "open", "pending", "snoozed", "resolved", "blocked", "quarantined", "archived", "escalated",
 ]);
 
+// Restrict the delegated owner alias to the reserved system alert types.
+// Private assignments/mentions, other actors, and notification IDs are unchanged.
+function ownerNotificationScope(actor, includeOwnerSystem) {
+  if (actor !== "hive-owner" || includeOwnerSystem !== true) return "actor = ?";
+  return "(actor = ? OR (actor = 'admin' AND type IN ('system','failure','human_handoff_requested','human_callback','content_quality_review','sla_warning','sla_breach','escalation')))";
+}
+
 export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
   constructor(d1) {
     super(d1);
@@ -1444,21 +1451,23 @@ export class CommsOperationsRepository extends CommsIdentityArchiveRepository {
     return this.markNotificationEmailState({ id, status: 'retry_pending', failureClass: 'manual', error: `Retry authorised by ${actor}`, at });
   }
 
-  async listNotifications({ actor, status = "unread", limit = 100 }) {
+  async listNotifications({ actor, includeOwnerSystem = false, status = "unread", limit = 100 }) {
+    const recipientScope = ownerNotificationScope(actor, includeOwnerSystem);
     const result = await this.d1.query(
       `SELECT * FROM comms_hub_notifications
-        WHERE actor = ? AND (? = '' OR status = ?)
+        WHERE ${recipientScope} AND (? = '' OR status = ?)
         ORDER BY created_at DESC LIMIT ?`,
       [actor, status, status, Math.min(Math.max(Number(limit) || 100, 1), 200)]
     );
     return rows(result).map((row) => ({ ...row, metadata: parseJson(row.metadata_json, {}) }));
   }
 
-  async markNotification({ id, actor, status, at = nowIso() }) {
+  async markNotification({ id, actor, includeOwnerSystem = false, status, at = nowIso() }) {
+    const recipientScope = ownerNotificationScope(actor, includeOwnerSystem);
     const result = await this.d1.query(
       `UPDATE comms_hub_notifications
           SET status = ?, read_at = CASE WHEN ? = 'read' THEN ? ELSE read_at END
-        WHERE id = ? AND actor = ? RETURNING *`,
+        WHERE id = ? AND ${recipientScope} RETURNING *`,
       [status, status, at, id, actor]
     );
     return rows(result)[0] || null;
