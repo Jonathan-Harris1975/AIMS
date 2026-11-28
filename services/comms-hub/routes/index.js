@@ -1389,13 +1389,28 @@ export function createCommsHubRouter({
   });
 
   router.get("/notifications", permit("read_notifications"), async (req, res, next) => {
-    try { return res.json({ ok: true, notifications: await contextProvider().notificationService.list({ actor: req.commsIdentity.actor, includeOwnerSystem: canReadOwnerSystemNotifications(req.commsIdentity), status: String(req.query.status ||
-       "unread"), limit: Number(req.query.limit || 100) }) }); }
+    try {
+      const notifications = await contextProvider().notificationService.list({
+        actor: req.commsIdentity.actor,
+        includeOwnerSystem: canReadOwnerSystemNotifications(req.commsIdentity),
+        status: String(req.query.status || "unread"),
+        limit: Number(req.query.limit || 100),
+      });
+      return res.json({ ok: true, notifications });
+    }
     catch (error) { next(error); }
   });
 
   router.patch("/notifications/:id", permit("read_notifications"), async (req, res, next) => {
-    try { return res.json({ ok: true, notification: await contextProvider().notificationService.mark({ id: req.params.id, actor: req.commsIdentity.actor, includeOwnerSystem: canReadOwnerSystemNotifications(req.commsIdentity), status: req.body?.status || "read" }) }); }
+    try {
+      const notification = await contextProvider().notificationService.mark({
+        id: req.params.id,
+        actor: req.commsIdentity.actor,
+        includeOwnerSystem: canReadOwnerSystemNotifications(req.commsIdentity),
+        status: req.body?.status || "read",
+      });
+      return res.json({ ok: true, notification });
+    }
     catch (error) { next(error); }
   });
 
@@ -1435,9 +1450,25 @@ export function createCommsHubRouter({
   });
 
   router.get("/ui/bootstrap", permit("read_queue"), async (req, res, next) => {
-    try { const [queue, notifications] = await Promise.all([contextProvider().operationsService.queue({ limit: 50 }, req), contextProvider().notificationService.list({ actor:
-       req.commsIdentity.actor, includeOwnerSystem: canReadOwnerSystemNotifications(req.commsIdentity), status: "unread", limit: 20 })]); return res.json({ ok: true, apiVersion: 1, responsiveContract: { minimumWidth: 320, pagination: "cursor",
-          actions: ["assign", "status", "tag", "note", "reply", "social-reply", "social-moderation", "takeover"] }, identity: req.commsIdentity, queue, notifications }); }
+    try {
+      const [queue, notifications] = await Promise.all([
+        contextProvider().operationsService.queue({ limit: 50 }, req),
+        contextProvider().notificationService.list({
+          actor: req.commsIdentity.actor,
+          includeOwnerSystem: canReadOwnerSystemNotifications(req.commsIdentity),
+          status: "unread",
+          limit: 20,
+        }),
+      ]);
+      return res.json({
+        ok: true, apiVersion: 1,
+        responsiveContract: {
+          minimumWidth: 320, pagination: "cursor",
+          actions: ["assign", "status", "tag", "note", "reply", "social-reply", "social-moderation", "takeover"],
+        },
+        identity: req.commsIdentity, queue, notifications,
+      });
+    }
     catch (error) { next(error); }
   });
 
