@@ -118,6 +118,7 @@ async function notifyEmailApprovalRequired(context, { conversation, conversation
     bodyText: "An automated email reply draft requires human approval before it can be sent.",
     severity: "warning",
     emailRequested: false,
+    metadata: { requires_action: true },
     idempotencySeed: `email-approval-required:${draftId || conversationId}`,
   }).catch((error) => {
     log.warn("commsHub.inboundAutomation.approvalNotificationFailed", {
