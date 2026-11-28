@@ -102,6 +102,13 @@ export function resolveCommsIdentity(req, config, { now = Date.now() } = {}) {
   return Object.freeze({ actor: fallbackActor, role: fallbackRole, strategy: req?.aimsAuth?.strategy || "suite" });
 }
 
+// The legacy admin notification recipient is a system inbox, not a second
+// login identity. Only the verified HIVE owner may access its system alerts.
+export function canReadOwnerSystemNotifications(identity) {
+  return identity?.strategy === "delegated-hmac"
+    && identity.actor === "hive-owner" && identity.role === "admin";
+}
+
 export function roleAllows(role, permission) {
   return Boolean(PERMISSIONS[permission]?.includes(role));
 }
