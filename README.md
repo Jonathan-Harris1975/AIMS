@@ -38,6 +38,8 @@ middleware; legacy per-stage route modules are not part of the runtime.
 | `/ops` | Governed weekday operation windows and readiness |
 | `/newsletter` | AI Edge generation, QA and Brevo delivery |
 | `/comms-hub` | Email, forms, social conversations, website chat and operator workflows |
+| `/kdp` | KDP publishing, catalogue research, metadata/royalty audits and governed updates |
+| `/storage/housekeeping` | Governed storage maintenance, dry-run and asynchronous execution |
 
 `services/api/` contains an internal aggregate router but is not mounted by the production route registry.
 
@@ -47,8 +49,8 @@ AIMS owns task order inside six MAST-triggered operation windows:
 
 - **Monday to Friday AM:** RSS first, then the day's content lanes and dependent publishing steps.
 - **Monday AM:** also runs the weekly blog, weekly quiz and scheduled eBook lane.
-- **Friday AM:** prepares Friday plus weekend Zernio content and the Friday `ai-playbook` Blotato lane.
-- **Friday PM:** podcast readiness followed by the podcast pipeline only.
+- **Friday AM:** prepares Friday plus weekend Zernio content, the Friday `ai-playbook` lane and four distinct weekend Blotato videos.
+- **Friday podcast window (`friday-pm`):** podcast readiness followed by the podcast pipeline only; MAST currently starts it at 07:00 Europe/London. The identifier is retained for compatibility.
 
 The operation runner waits for accepted asynchronous Blotato and podcast jobs to become terminal. `202 Accepted` is not treated as completion. Failed or partially failed child work keeps the operation unsuccessful.
 
@@ -62,7 +64,7 @@ The Zernio service has seven daily lanes plus the weekly quiz pair, weekly mini-
 
 ### Blotato
 
-Five weekday PM-style lanes are implemented: `news-insight`, `model-verdict`, `ai-at-work`, `reality-check` and `ai-playbook`. AutoShorts uses a 48-style rotation. Finished media is checked before publishing, and production defaults require confirmation for every required configured channel.
+Five weekday PM-style lanes are implemented: `news-insight`, `model-verdict`, `ai-at-work`, `reality-check` and `ai-playbook`. AutoShorts uses a 48-style rotation. Finished media is checked before publishing, and production defaults require confirmation for every required configured channel. The versioned Modern/Futuristic themes, creative briefs, hook selection, scene continuity, mobile safe zones and downloaded-video QA are documented in [ContentSkills adoption](docs/blotato-contentskills-adoption.md). Friday prepares Saturday and Sunday videos for provider scheduling; the monthly credit cap and durable reservations remain enforced.
 
 ### Weekly and daily blog
 
@@ -75,6 +77,16 @@ The Friday pipeline covers script, editorial review, artwork, TTS/audio processi
 ### Newsletter
 
 AI Edge generation and sending are implemented. The weekday operation windows call `/newsletter/generate` and then `/newsletter/send`; the send route performs provider/list/sender checks itself. `/newsletter/readiness` remains available as an explicit diagnostic endpoint. Production defaults currently enable the newsletter operation, while Brevo list creation is disabled and an existing configured audience list is expected.
+
+## KDP and storage housekeeping
+
+The mounted KDP service exposes `GET /kdp/status` and `/kdp/readiness`, session connection/status, public and authenticated catalogue audits, weekly research and update jobs, print preflight/rollout, publishing and royalty analysis. `services/kdp/index.js` and `services/kdp/operations.js` are the authoritative route definitions. Poll `/kdp/jobs/:lane/:sessionId` for terminal results. Keep OTP payloads private; an accepted request is not proof that a browser challenge was satisfied or a title was updated. The website imports its public catalogue from KDP D1; private reports and publishing evidence remain in governed storage. Audit mode is read-only; live changes require the relevant publishing controls and verified provider results. Do not treat repository implementation as proof of live KDP acceptance.
+
+Storage maintenance exposes `GET /storage/housekeeping/status`, `POST /storage/housekeeping/run` and `GET /storage/housekeeping/jobs/weekly/:sessionId`. Runs default to dry-run; destructive execution requires explicit confirmation. Inspect the plan and terminal evidence before considering maintenance complete.
+
+## Outreach operating boundary
+
+Guest Article and Book Feature Outreach are separate campaigns sharing suppression, delivery and inbound controls. Guest Article is scheduled by MAST for Monday/Wednesday/Friday 09:00 London; Book Feature assessment for Tuesday/Thursday 09:00. Both schedules default to manual until controlled live-test acceptance and operator activation. Book Feature assessment must dispatch zero outbound messages. Controlled tests use explicitly authorised inboxes and caps, with kill switches, suppression checks, independent QA, durable outbox evidence and explicit reconciliation of uncertain delivery. No prospect delivery is authorised by assessment or controlled-test mode. See [Outreach](services/outreach/README.md).
 
 ## Comms Hub
 
@@ -89,7 +101,8 @@ Comms Hub is part of the AIMS process and is mounted at `/comms-hub`. The curren
 - attachment quarantine, malware scanning and private R2 promotion;
 - delayed substantive email/Jotform replies, 2-3 calendar days later and only Monday-Friday 09:00-17:00 Europe/London;
 - podcast/case-study contribution state and editorial-brief queues;
-- provider health, follow-up and backup/restore support.
+- provider health, follow-up and backup/restore support;
+- explicit human-action alerts and a verified HIVE owner-scoped system inbox, preserving notification IDs and delivery state.
 - daily and monthly Comms Hub housekeeping with safe Info-mail archival, quarantine review, private-R2 reconciliation and checksummed audit retention.
 
 Accepted podcast contributions are advanced automatically only after RSS publication and the website rebuild both confirm success. The hand-off is idempotent, records the canonical episode URL, and leaves the contribution queued for retry if publication or Comms Hub advancement fails. See `services/comms-hub/README.md`.
@@ -180,3 +193,7 @@ AIMS uses suite bearer authentication for protected routes plus narrower webhook
 - [TTS](services/tts/README.md)
 - [Zernio](services/zernio/README.md)
 - [Comms Hub D1 data plane](workers/comms-hub-data-plane/README.md)
+
+## Ecosystem integration and evidence
+
+The eight governed repositories are [HIVE](https://github.com/Jonathan-Harris1975/HIVE), [HIVE-UI](https://github.com/Jonathan-Harris1975/HIVE-UI), [AIMS](https://github.com/Jonathan-Harris1975/AIMS), [AIMS-UI](https://github.com/Jonathan-Harris1975/AIMS-UI), [MAST](https://github.com/Jonathan-Harris1975/MAST), [RAMS](https://github.com/Jonathan-Harris1975/RAMS), [IRS](https://github.com/Jonathan-Harris1975/IRS) and the [public website](https://github.com/Jonathan-Harris1975/jonathan-harris-website). MAST owns schedules; AIMS owns content and communications execution; HIVE and HIVE-UI provide governed intelligence and operator visibility; RAMS performs bounded remediation; IRS and the website own public delivery boundaries. Keep this README aligned with changes to those contracts. A merged change, a healthy HTTP process and verified live functional acceptance are separate evidence; preserve exact-SHA CI and deployment receipts and never report unverified provider delivery as success.
