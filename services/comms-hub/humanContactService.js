@@ -104,7 +104,7 @@ export async function recordCallbackEmail({ context, conversationId, contactId, 
     actor: 'admin', conversationId, type: 'human_callback', title: 'Callback email supplied',
     bodyText: 'A visitor supplied an email address and explicitly asked for Jonathan to get back to them. Review the contact aliases on this conversation.',
     severity: 'info', idempotencySeed: `callback-email:${conversationId}:${fingerprint}`,
-    metadata: { contactId, emailFingerprint: fingerprint, ownershipVerified: false },
+    metadata: { contactId, emailFingerprint: fingerprint, ownershipVerified: false, requires_action: true },
   });
   return alias;
 }
